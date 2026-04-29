@@ -39,12 +39,14 @@ export type AtlasState = {
   taskHistory: TaskHistoryEntry[];
   startDate: string | null;
   pendingGoalType: GoalType | null;
+  pendingCustomGoalTitle: string | null;
   behavioral: BehavioralSnapshot;
   currentWeek: number;
 };
 
 type AtlasContextValue = AtlasState & {
   setPendingGoalType: (g: GoalType | null) => Promise<void>;
+  setPendingCustomGoalTitle: (t: string | null) => Promise<void>;
   setOnboardingHistory: (h: ChatMessage[]) => Promise<void>;
   setProfile: (p: UserProfile | null) => Promise<void>;
   setRoadmap: (r: Roadmap | null) => Promise<void>;
@@ -115,10 +117,13 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
   const [taskHistory, setTaskHistoryState] = useState<TaskHistoryEntry[]>([]);
   const [startDate, setStartDateState] = useState<string | null>(null);
   const [pendingGoalType, setPendingGoalTypeState] = useState<GoalType | null>(null);
+  const [pendingCustomGoalTitle, setPendingCustomGoalTitleState] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     (async () => {
-      const [p, r, dp, oh, ch, th, sd, pg] = await Promise.all([
+      const [p, r, dp, oh, ch, th, sd, pg, pct] = await Promise.all([
         loadJson<UserProfile>(STORAGE_KEYS.profile),
         loadJson<Roadmap>(STORAGE_KEYS.roadmap),
         loadJson<StoredDailyPlan>(STORAGE_KEYS.dailyPlan),
@@ -127,6 +132,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
         loadJson<TaskHistoryEntry[]>(STORAGE_KEYS.taskHistory),
         loadJson<string>(STORAGE_KEYS.startDate),
         loadJson<GoalType>(STORAGE_KEYS.pendingGoalType),
+        loadJson<string>(STORAGE_KEYS.pendingCustomGoalTitle),
       ]);
       setProfileState(p);
       setRoadmapState(r);
@@ -136,6 +142,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       setTaskHistoryState(th ?? []);
       setStartDateState(sd);
       setPendingGoalTypeState(pg);
+      setPendingCustomGoalTitleState(pct);
       setLoaded(true);
     })();
   }, []);
@@ -209,6 +216,12 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     else await removeKey(STORAGE_KEYS.pendingGoalType);
   }, []);
 
+  const setPendingCustomGoalTitle = useCallback(async (t: string | null) => {
+    setPendingCustomGoalTitleState(t);
+    if (t) await saveJson(STORAGE_KEYS.pendingCustomGoalTitle, t);
+    else await removeKey(STORAGE_KEYS.pendingCustomGoalTitle);
+  }, []);
+
   const resetAll = useCallback(async () => {
     await clearAllAtlas();
     setProfileState(null);
@@ -219,6 +232,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     setTaskHistoryState([]);
     setStartDateState(null);
     setPendingGoalTypeState(null);
+    setPendingCustomGoalTitleState(null);
   }, []);
 
   const value: AtlasContextValue = {
@@ -231,9 +245,11 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     taskHistory,
     startDate,
     pendingGoalType,
+    pendingCustomGoalTitle,
     behavioral,
     currentWeek,
     setPendingGoalType,
+    setPendingCustomGoalTitle,
     setOnboardingHistory,
     setProfile,
     setRoadmap,

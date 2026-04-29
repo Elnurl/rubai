@@ -17,7 +17,7 @@ import { AtlasLogo } from "@/components/AtlasLogo";
 import { EmptyState } from "@/components/EmptyState";
 import { SectionHeader } from "@/components/SectionHeader";
 import { TaskCard } from "@/components/TaskCard";
-import { GOAL_META } from "@/constants/atlas";
+import { GOAL_META, profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { todayISO } from "@/lib/storage";
 import { useAtlas } from "@/providers/AtlasProvider";
@@ -106,7 +106,7 @@ export default function TodayScreen() {
 
   const totalCount = dailyPlan?.plan.tasks.length ?? 0;
   const progressPct = totalCount > 0 ? completedCount / totalCount : 0;
-  const goalLabel = profile ? GOAL_META[profile.goalType].label : "";
+  const goalLabel = profile ? profileGoalLabel(profile) : "";
 
   const heroDate = new Date().toLocaleDateString(undefined, {
     weekday: "long",

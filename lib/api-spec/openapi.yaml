@@ -140,6 +140,7 @@ components:
         - programming
         - fitness
         - finance
+        - custom
 
     ChatMessage:
       type: object
@@ -156,6 +157,9 @@ components:
       properties:
         goalType:
           $ref: "#/components/schemas/GoalType"
+        customGoalTitle:
+          type: string
+          description: User-supplied goal title; only set when goalType is "custom".
         goalStatement:
           type: string
         currentLevel:
@@ -193,6 +197,9 @@ components:
       properties:
         goalType:
           $ref: "#/components/schemas/GoalType"
+        customGoalTitle:
+          type: string
+          description: User-supplied goal title; required when goalType is "custom".
         history:
           type: array
           items:

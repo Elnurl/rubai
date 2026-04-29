@@ -20,10 +20,19 @@ const goalLabels: Record<string, string> = {
   finance: "Financial Improvement",
 };
 
-const onboardingPersona = (goalType: string) => {
-  const label = goalLabels[goalType] ?? goalType;
+function resolveGoalLabel(goalType: string, customGoalTitle?: string | null): string {
+  if (goalType === "custom") {
+    const trimmed = customGoalTitle?.trim();
+    return trimmed && trimmed.length > 0 ? trimmed : "Custom Goal";
+  }
+  return goalLabels[goalType] ?? "Custom Goal";
+}
+
+const onboardingPersona = (goalType: string, customGoalTitle?: string | null) => {
+  const label = resolveGoalLabel(goalType, customGoalTitle);
+  const isCustom = goalType === "custom";
   return `You are Atlas — a strategic, no-fluff AI execution coach inside a mobile app.
-The user has selected the goal model: ${label}.
+The user has selected the goal: ${label}.${isCustom ? " This is a user-defined goal, so you must figure out the right shape of the plan from the conversation itself — do not assume any specific domain." : ""}
 
 Your job in this onboarding conversation is to deeply understand the user so the system can build a realistic, personalized roadmap. Ask ONE focused question at a time. Be warm but precise. Avoid generic chit-chat. Avoid emojis.
 
@@ -91,11 +100,11 @@ router.post("/onboarding-chat", async (req, res) => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { goalType, history } = parsed.data;
+  const { goalType, customGoalTitle, history } = parsed.data;
 
   try {
     const messages = [
-      { role: "system" as const, content: onboardingPersona(goalType) },
+      { role: "system" as const, content: onboardingPersona(goalType, customGoalTitle) },
       ...history.map((m: { role: string; content: string }) => ({
         role: m.role as "user" | "assistant",
         content: m.content,
@@ -133,7 +142,7 @@ router.post("/onboarding-chat", async (req, res) => {
       messages: [
         {
           role: "system",
-          content: `You analyze an onboarding chat and decide if enough has been gathered to build a realistic roadmap for the goal: ${goalLabels[goalType] ?? goalType}.
+          content: `You analyze an onboarding chat and decide if enough has been gathered to build a realistic roadmap for the goal: ${resolveGoalLabel(goalType, customGoalTitle)}.
 
 If sufficient data is present (concrete goal, timeline, current level, daily time, productivity window, constraints), set isComplete=true and produce a structured profile. Otherwise isComplete=false and profile=null.
 
@@ -171,7 +180,13 @@ When isComplete=false, set nextMessage to: ${JSON.stringify(nextMessage)}`,
       message: parsedExtraction.nextMessage || nextMessage,
       isComplete: parsedExtraction.isComplete,
       profile: parsedExtraction.profile
-        ? { goalType, ...parsedExtraction.profile }
+        ? {
+            goalType,
+            ...(goalType === "custom" && customGoalTitle
+              ? { customGoalTitle }
+              : {}),
+            ...parsedExtraction.profile,
+          }
         : null,
     });
   } catch (err) {
@@ -245,14 +260,14 @@ router.post("/roadmap", async (req, res) => {
       messages: [
         {
           role: "system",
-          content: `You are Atlas — an AI strategic execution coach. Build a personalized, realistic roadmap.
+          content: `You are Atlas — an AI strategic execution coach. Build a personalized, realistic roadmap for whatever goal the user has set, in any domain (fitness, study, career, life-design, creative work, finance, relationships, side-projects — anything).
 
 Constraints:
 - 3 to 5 phases. Each phase 2-6 weeks, with 2-4 milestones.
 - Total duration must respect targetTimelineWeeks.
-- Tasks/milestones must be CONCRETE and real-world (e.g. "Take a full IELTS mock listening test", "List your current car on Bama or Divar with three photos"), never abstract.
+- Tasks/milestones must be CONCRETE and real-world (e.g. "Take a full IELTS mock listening test", "Submit your portfolio to 5 design studios", "Cook 3 different sourdough loaves this week"), never abstract.
 - Phase ids: phase-1, phase-2, ... Milestone ids: m-1-1, m-1-2, ...
-- Headline: 6-9 words, motivating and specific.
+- Headline: 6-9 words, motivating and specific to this exact goal.
 - Strategy: 1 short paragraph (under 70 words) explaining the approach.
 - riskAnalysis: 2-4 short bullet strings identifying realistic obstacles for THIS user.
 - Adapt difficulty to the stated current level, available time, and consistency.
@@ -260,7 +275,7 @@ Constraints:
         },
         {
           role: "user",
-          content: `Build a roadmap for this user profile (goal type: ${goalLabels[profile.goalType] ?? profile.goalType}):\n${JSON.stringify(profile, null, 2)}`,
+          content: `Build a roadmap for this user profile (goal: ${resolveGoalLabel(profile.goalType, profile.customGoalTitle)}):\n${JSON.stringify(profile, null, 2)}`,
         },
       ],
     });

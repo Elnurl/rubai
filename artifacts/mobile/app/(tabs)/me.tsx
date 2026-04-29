@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AtlasButton } from "@/components/AtlasButton";
 import { EmptyState } from "@/components/EmptyState";
 import { SectionHeader } from "@/components/SectionHeader";
-import { GOAL_META } from "@/constants/atlas";
+import { GOAL_META, profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import {
@@ -96,7 +96,7 @@ export default function MeScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <SectionHeader eyebrow="PROFILE" title="You" subtitle={meta.label} />
+        <SectionHeader eyebrow="PROFILE" title="You" subtitle={profileGoalLabel(profile)} />
 
         <View
           style={[

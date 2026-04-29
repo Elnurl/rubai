@@ -3,7 +3,7 @@ import React, { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 
 import { AtlasLogo } from "@/components/AtlasLogo";
-import { GOAL_META } from "@/constants/atlas";
+import { GOAL_META, profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { useAtlasGenerateRoadmap } from "@workspace/api-client-react";
@@ -73,6 +73,7 @@ export default function GeneratingScreen() {
   }, [profile]);
 
   const meta = profile ? GOAL_META[profile.goalType] : null;
+  const displayLabel = profile ? profileGoalLabel(profile) : "";
   const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.18] });
   const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] });
 
@@ -98,7 +99,7 @@ export default function GeneratingScreen() {
               { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
             ]}
           >
-            {meta.label.toUpperCase()}
+            {displayLabel.toUpperCase()}
           </Text>
         )}
         <Text

@@ -14,4 +14,5 @@ export const GoalType = {
   programming: "programming",
   fitness: "fitness",
   finance: "finance",
+  custom: "custom",
 } as const;

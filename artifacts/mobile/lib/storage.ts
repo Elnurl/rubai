@@ -49,6 +49,7 @@ export const STORAGE_KEYS = {
   taskHistory: "taskHistory",
   startDate: "startDate",
   pendingGoalType: "pendingGoalType",
+  pendingCustomGoalTitle: "pendingCustomGoalTitle",
 } as const;
 
 export type TaskHistoryEntry = {

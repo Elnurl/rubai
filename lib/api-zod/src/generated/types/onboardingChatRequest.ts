@@ -10,5 +10,7 @@ import type { GoalType } from "./goalType";
 
 export interface OnboardingChatRequest {
   goalType: GoalType;
+  /** User-supplied goal title; required when goalType is "custom". */
+  customGoalTitle?: string;
   history: ChatMessage[];
 }

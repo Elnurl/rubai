@@ -17,6 +17,7 @@ export const GoalType = {
   programming: "programming",
   fitness: "fitness",
   finance: "finance",
+  custom: "custom",
 } as const;
 
 export type ChatMessageRole =
@@ -34,6 +35,8 @@ export interface ChatMessage {
 
 export interface UserProfile {
   goalType: GoalType;
+  /** User-supplied goal title; only set when goalType is "custom". */
+  customGoalTitle?: string;
   goalStatement: string;
   currentLevel: string;
   availableTimePerDayMinutes: number;
@@ -47,6 +50,8 @@ export interface UserProfile {
 
 export interface OnboardingChatRequest {
   goalType: GoalType;
+  /** User-supplied goal title; required when goalType is "custom". */
+  customGoalTitle?: string;
   history: ChatMessage[];
 }
 

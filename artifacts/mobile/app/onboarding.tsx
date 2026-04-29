@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { ChatBubble } from "@/components/ChatBubble";
-import { GOAL_META } from "@/constants/atlas";
+import { GOAL_META, goalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import {
@@ -32,6 +32,7 @@ export default function OnboardingScreen() {
 
   const {
     pendingGoalType,
+    pendingCustomGoalTitle,
     onboardingHistory,
     setOnboardingHistory,
     setProfile,
@@ -61,6 +62,9 @@ export default function OnboardingScreen() {
       const res = await chat.mutateAsync({
         data: {
           goalType: pendingGoalType,
+          ...(pendingGoalType === "custom" && pendingCustomGoalTitle
+            ? { customGoalTitle: pendingCustomGoalTitle }
+            : {}),
           history: newHistory,
         },
       });
@@ -89,6 +93,10 @@ export default function OnboardingScreen() {
   };
 
   const meta = pendingGoalType ? GOAL_META[pendingGoalType] : null;
+  const headerLabel =
+    pendingGoalType === "custom" && pendingCustomGoalTitle
+      ? goalLabel({ goalType: "custom", customGoalTitle: pendingCustomGoalTitle })
+      : meta?.label;
   const topPad = isWeb ? 67 : insets.top + 8;
   const bottomPad = isWeb ? 34 : insets.bottom;
 
@@ -109,14 +117,15 @@ export default function OnboardingScreen() {
         </Pressable>
         <View style={styles.headerCenter}>
           <AtlasLogo size="sm" />
-          {meta && (
+          {headerLabel && (
             <Text
               style={[
                 styles.headerSubtitle,
                 { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
               ]}
+              numberOfLines={1}
             >
-              {meta.label}
+              {headerLabel}
             </Text>
           )}
         </View>

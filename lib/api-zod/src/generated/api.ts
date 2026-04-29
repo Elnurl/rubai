@@ -19,7 +19,20 @@ export const HealthCheckResponse = zod.object({
  * @summary Continue an adaptive onboarding conversation for the chosen goal model
  */
 export const AtlasOnboardingChatBody = zod.object({
-  goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+  goalType: zod.enum([
+    "ielts",
+    "car",
+    "programming",
+    "fitness",
+    "finance",
+    "custom",
+  ]),
+  customGoalTitle: zod
+    .string()
+    .optional()
+    .describe(
+      'User-supplied goal title; required when goalType is \"custom\".',
+    ),
   history: zod.array(
     zod.object({
       role: zod.enum(["user", "assistant"]),
@@ -40,7 +53,14 @@ export const AtlasOnboardingChatResponse = zod.object({
           "programming",
           "fitness",
           "finance",
+          "custom",
         ]),
+        customGoalTitle: zod
+          .string()
+          .optional()
+          .describe(
+            'User-supplied goal title; only set when goalType is \"custom\".',
+          ),
         goalStatement: zod.string(),
         currentLevel: zod.string(),
         availableTimePerDayMinutes: zod.number(),
@@ -61,7 +81,20 @@ export const AtlasOnboardingChatResponse = zod.object({
  */
 export const AtlasGenerateRoadmapBody = zod.object({
   profile: zod.object({
-    goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+    goalType: zod.enum([
+      "ielts",
+      "car",
+      "programming",
+      "fitness",
+      "finance",
+      "custom",
+    ]),
+    customGoalTitle: zod
+      .string()
+      .optional()
+      .describe(
+        'User-supplied goal title; only set when goalType is \"custom\".',
+      ),
     goalStatement: zod.string(),
     currentLevel: zod.string(),
     availableTimePerDayMinutes: zod.number(),
@@ -75,7 +108,14 @@ export const AtlasGenerateRoadmapBody = zod.object({
 });
 
 export const AtlasGenerateRoadmapResponse = zod.object({
-  goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+  goalType: zod.enum([
+    "ielts",
+    "car",
+    "programming",
+    "fitness",
+    "finance",
+    "custom",
+  ]),
   headline: zod.string(),
   summary: zod.string(),
   totalWeeks: zod.number(),
@@ -105,7 +145,20 @@ export const AtlasGenerateRoadmapResponse = zod.object({
  */
 export const AtlasGenerateDailyPlanBody = zod.object({
   profile: zod.object({
-    goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+    goalType: zod.enum([
+      "ielts",
+      "car",
+      "programming",
+      "fitness",
+      "finance",
+      "custom",
+    ]),
+    customGoalTitle: zod
+      .string()
+      .optional()
+      .describe(
+        'User-supplied goal title; only set when goalType is \"custom\".',
+      ),
     goalStatement: zod.string(),
     currentLevel: zod.string(),
     availableTimePerDayMinutes: zod.number(),
@@ -117,7 +170,14 @@ export const AtlasGenerateDailyPlanBody = zod.object({
     notes: zod.string(),
   }),
   roadmap: zod.object({
-    goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+    goalType: zod.enum([
+      "ielts",
+      "car",
+      "programming",
+      "fitness",
+      "finance",
+      "custom",
+    ]),
     headline: zod.string(),
     summary: zod.string(),
     totalWeeks: zod.number(),
@@ -173,7 +233,20 @@ export const AtlasGenerateDailyPlanResponse = zod.object({
  */
 export const AtlasCoachBody = zod.object({
   profile: zod.object({
-    goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+    goalType: zod.enum([
+      "ielts",
+      "car",
+      "programming",
+      "fitness",
+      "finance",
+      "custom",
+    ]),
+    customGoalTitle: zod
+      .string()
+      .optional()
+      .describe(
+        'User-supplied goal title; only set when goalType is \"custom\".',
+      ),
     goalStatement: zod.string(),
     currentLevel: zod.string(),
     availableTimePerDayMinutes: zod.number(),
@@ -185,7 +258,14 @@ export const AtlasCoachBody = zod.object({
     notes: zod.string(),
   }),
   roadmap: zod.object({
-    goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+    goalType: zod.enum([
+      "ielts",
+      "car",
+      "programming",
+      "fitness",
+      "finance",
+      "custom",
+    ]),
     headline: zod.string(),
     summary: zod.string(),
     totalWeeks: zod.number(),
@@ -251,7 +331,20 @@ export const AtlasCoachResponse = zod.object({
  */
 export const AtlasAdaptPlanBody = zod.object({
   profile: zod.object({
-    goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+    goalType: zod.enum([
+      "ielts",
+      "car",
+      "programming",
+      "fitness",
+      "finance",
+      "custom",
+    ]),
+    customGoalTitle: zod
+      .string()
+      .optional()
+      .describe(
+        'User-supplied goal title; only set when goalType is \"custom\".',
+      ),
     goalStatement: zod.string(),
     currentLevel: zod.string(),
     availableTimePerDayMinutes: zod.number(),
@@ -263,7 +356,14 @@ export const AtlasAdaptPlanBody = zod.object({
     notes: zod.string(),
   }),
   roadmap: zod.object({
-    goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+    goalType: zod.enum([
+      "ielts",
+      "car",
+      "programming",
+      "fitness",
+      "finance",
+      "custom",
+    ]),
     headline: zod.string(),
     summary: zod.string(),
     totalWeeks: zod.number(),

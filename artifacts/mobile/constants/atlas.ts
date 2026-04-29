@@ -1,6 +1,6 @@
-import type { GoalType } from "@workspace/api-client-react";
+import type { GoalType, UserProfile } from "@workspace/api-client-react";
 
-export const GOAL_TYPES: GoalType[] = [
+export const TEMPLATE_GOAL_TYPES: Exclude<GoalType, "custom">[] = [
   "ielts",
   "programming",
   "fitness",
@@ -8,17 +8,16 @@ export const GOAL_TYPES: GoalType[] = [
   "car",
 ];
 
-export const GOAL_META: Record<
-  GoalType,
-  {
-    label: string;
-    tagline: string;
-    accent: string;
-    iconLib: "ionicons" | "feather" | "material" | "fontawesome5";
-    icon: string;
-    opener: string;
-  }
-> = {
+type GoalMeta = {
+  label: string;
+  tagline: string;
+  accent: string;
+  iconLib: "ionicons" | "feather" | "material" | "fontawesome5";
+  icon: string;
+  opener: string;
+};
+
+export const GOAL_META: Record<GoalType, GoalMeta> = {
   ielts: {
     label: "IELTS Preparation",
     tagline: "Hit your band score with disciplined daily practice.",
@@ -64,6 +63,32 @@ export const GOAL_META: Record<
     opener:
       "Welcome. I'm Atlas. Buying a car is a campaign, not a wish. To start — what kind of car are you targeting, and what's your real deadline to be driving it?",
   },
+  custom: {
+    label: "Custom Goal",
+    tagline: "Any target you set, in any field.",
+    accent: "#0E7C5A",
+    iconLib: "ionicons",
+    icon: "sparkles",
+    opener: "",
+  },
 };
+
+export function customOpener(title: string): string {
+  return `Welcome. I'm Atlas. You said: "${title.trim()}". I take that seriously. To turn it into a real plan — what's the specific outcome you'll be able to see, and what's your honest deadline?`;
+}
+
+export function goalLabel(profile: { goalType: GoalType; customGoalTitle?: string }): string {
+  if (profile.goalType === "custom" && profile.customGoalTitle?.trim()) {
+    return profile.customGoalTitle.trim();
+  }
+  return GOAL_META[profile.goalType].label;
+}
+
+export function profileGoalLabel(profile: UserProfile): string {
+  return goalLabel({
+    goalType: profile.goalType,
+    customGoalTitle: profile.customGoalTitle,
+  });
+}
 
 export const ATLAS_TAGLINE = "Your AI execution coach.";

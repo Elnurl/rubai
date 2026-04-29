@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EmptyState } from "@/components/EmptyState";
 import { PhaseCard } from "@/components/PhaseCard";
 import { SectionHeader } from "@/components/SectionHeader";
-import { GOAL_META } from "@/constants/atlas";
+import { GOAL_META, profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 
@@ -30,7 +30,7 @@ export default function RoadmapScreen() {
     );
   }
 
-  const goalLabel = profile ? GOAL_META[profile.goalType].label : "";
+  const goalLabel = profile ? profileGoalLabel(profile) : "";
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>

@@ -9,6 +9,8 @@ import type { GoalType } from "./goalType";
 
 export interface UserProfile {
   goalType: GoalType;
+  /** User-supplied goal title; only set when goalType is "custom". */
+  customGoalTitle?: string;
   goalStatement: string;
   currentLevel: string;
   availableTimePerDayMinutes: number;
