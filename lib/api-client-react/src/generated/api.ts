@@ -5,18 +5,33 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  AdaptRequest,
+  AdaptResponse,
+  CoachRequest,
+  CoachResponse,
+  DailyPlan,
+  DailyPlanRequest,
+  HealthStatus,
+  OnboardingChatRequest,
+  OnboardingChatResponse,
+  Roadmap,
+  RoadmapRequest,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -99,3 +114,433 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Continue an adaptive onboarding conversation for the chosen goal model
+ */
+export const getAtlasOnboardingChatUrl = () => {
+  return `/api/atlas/onboarding-chat`;
+};
+
+export const atlasOnboardingChat = async (
+  onboardingChatRequest: OnboardingChatRequest,
+  options?: RequestInit,
+): Promise<OnboardingChatResponse> => {
+  return customFetch<OnboardingChatResponse>(getAtlasOnboardingChatUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(onboardingChatRequest),
+  });
+};
+
+export const getAtlasOnboardingChatMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasOnboardingChat>>,
+    TError,
+    { data: BodyType<OnboardingChatRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof atlasOnboardingChat>>,
+  TError,
+  { data: BodyType<OnboardingChatRequest> },
+  TContext
+> => {
+  const mutationKey = ["atlasOnboardingChat"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof atlasOnboardingChat>>,
+    { data: BodyType<OnboardingChatRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return atlasOnboardingChat(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AtlasOnboardingChatMutationResult = NonNullable<
+  Awaited<ReturnType<typeof atlasOnboardingChat>>
+>;
+export type AtlasOnboardingChatMutationBody = BodyType<OnboardingChatRequest>;
+export type AtlasOnboardingChatMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Continue an adaptive onboarding conversation for the chosen goal model
+ */
+export const useAtlasOnboardingChat = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasOnboardingChat>>,
+    TError,
+    { data: BodyType<OnboardingChatRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof atlasOnboardingChat>>,
+  TError,
+  { data: BodyType<OnboardingChatRequest> },
+  TContext
+> => {
+  return useMutation(getAtlasOnboardingChatMutationOptions(options));
+};
+
+/**
+ * @summary Generate a personalized multi-phase roadmap from the user's profile
+ */
+export const getAtlasGenerateRoadmapUrl = () => {
+  return `/api/atlas/roadmap`;
+};
+
+export const atlasGenerateRoadmap = async (
+  roadmapRequest: RoadmapRequest,
+  options?: RequestInit,
+): Promise<Roadmap> => {
+  return customFetch<Roadmap>(getAtlasGenerateRoadmapUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(roadmapRequest),
+  });
+};
+
+export const getAtlasGenerateRoadmapMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasGenerateRoadmap>>,
+    TError,
+    { data: BodyType<RoadmapRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof atlasGenerateRoadmap>>,
+  TError,
+  { data: BodyType<RoadmapRequest> },
+  TContext
+> => {
+  const mutationKey = ["atlasGenerateRoadmap"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof atlasGenerateRoadmap>>,
+    { data: BodyType<RoadmapRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return atlasGenerateRoadmap(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AtlasGenerateRoadmapMutationResult = NonNullable<
+  Awaited<ReturnType<typeof atlasGenerateRoadmap>>
+>;
+export type AtlasGenerateRoadmapMutationBody = BodyType<RoadmapRequest>;
+export type AtlasGenerateRoadmapMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Generate a personalized multi-phase roadmap from the user's profile
+ */
+export const useAtlasGenerateRoadmap = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasGenerateRoadmap>>,
+    TError,
+    { data: BodyType<RoadmapRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof atlasGenerateRoadmap>>,
+  TError,
+  { data: BodyType<RoadmapRequest> },
+  TContext
+> => {
+  return useMutation(getAtlasGenerateRoadmapMutationOptions(options));
+};
+
+/**
+ * @summary Generate today's actionable execution plan
+ */
+export const getAtlasGenerateDailyPlanUrl = () => {
+  return `/api/atlas/daily-plan`;
+};
+
+export const atlasGenerateDailyPlan = async (
+  dailyPlanRequest: DailyPlanRequest,
+  options?: RequestInit,
+): Promise<DailyPlan> => {
+  return customFetch<DailyPlan>(getAtlasGenerateDailyPlanUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(dailyPlanRequest),
+  });
+};
+
+export const getAtlasGenerateDailyPlanMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasGenerateDailyPlan>>,
+    TError,
+    { data: BodyType<DailyPlanRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof atlasGenerateDailyPlan>>,
+  TError,
+  { data: BodyType<DailyPlanRequest> },
+  TContext
+> => {
+  const mutationKey = ["atlasGenerateDailyPlan"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof atlasGenerateDailyPlan>>,
+    { data: BodyType<DailyPlanRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return atlasGenerateDailyPlan(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AtlasGenerateDailyPlanMutationResult = NonNullable<
+  Awaited<ReturnType<typeof atlasGenerateDailyPlan>>
+>;
+export type AtlasGenerateDailyPlanMutationBody = BodyType<DailyPlanRequest>;
+export type AtlasGenerateDailyPlanMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Generate today's actionable execution plan
+ */
+export const useAtlasGenerateDailyPlan = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasGenerateDailyPlan>>,
+    TError,
+    { data: BodyType<DailyPlanRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof atlasGenerateDailyPlan>>,
+  TError,
+  { data: BodyType<DailyPlanRequest> },
+  TContext
+> => {
+  return useMutation(getAtlasGenerateDailyPlanMutationOptions(options));
+};
+
+/**
+ * @summary Conversational coaching reply with full execution context
+ */
+export const getAtlasCoachUrl = () => {
+  return `/api/atlas/coach`;
+};
+
+export const atlasCoach = async (
+  coachRequest: CoachRequest,
+  options?: RequestInit,
+): Promise<CoachResponse> => {
+  return customFetch<CoachResponse>(getAtlasCoachUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(coachRequest),
+  });
+};
+
+export const getAtlasCoachMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasCoach>>,
+    TError,
+    { data: BodyType<CoachRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof atlasCoach>>,
+  TError,
+  { data: BodyType<CoachRequest> },
+  TContext
+> => {
+  const mutationKey = ["atlasCoach"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof atlasCoach>>,
+    { data: BodyType<CoachRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return atlasCoach(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AtlasCoachMutationResult = NonNullable<
+  Awaited<ReturnType<typeof atlasCoach>>
+>;
+export type AtlasCoachMutationBody = BodyType<CoachRequest>;
+export type AtlasCoachMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Conversational coaching reply with full execution context
+ */
+export const useAtlasCoach = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasCoach>>,
+    TError,
+    { data: BodyType<CoachRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof atlasCoach>>,
+  TError,
+  { data: BodyType<CoachRequest> },
+  TContext
+> => {
+  return useMutation(getAtlasCoachMutationOptions(options));
+};
+
+/**
+ * @summary Adapt the plan based on behavioural performance data
+ */
+export const getAtlasAdaptPlanUrl = () => {
+  return `/api/atlas/adapt`;
+};
+
+export const atlasAdaptPlan = async (
+  adaptRequest: AdaptRequest,
+  options?: RequestInit,
+): Promise<AdaptResponse> => {
+  return customFetch<AdaptResponse>(getAtlasAdaptPlanUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adaptRequest),
+  });
+};
+
+export const getAtlasAdaptPlanMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasAdaptPlan>>,
+    TError,
+    { data: BodyType<AdaptRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof atlasAdaptPlan>>,
+  TError,
+  { data: BodyType<AdaptRequest> },
+  TContext
+> => {
+  const mutationKey = ["atlasAdaptPlan"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof atlasAdaptPlan>>,
+    { data: BodyType<AdaptRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return atlasAdaptPlan(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AtlasAdaptPlanMutationResult = NonNullable<
+  Awaited<ReturnType<typeof atlasAdaptPlan>>
+>;
+export type AtlasAdaptPlanMutationBody = BodyType<AdaptRequest>;
+export type AtlasAdaptPlanMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Adapt the plan based on behavioural performance data
+ */
+export const useAtlasAdaptPlan = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasAdaptPlan>>,
+    TError,
+    { data: BodyType<AdaptRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof atlasAdaptPlan>>,
+  TError,
+  { data: BodyType<AdaptRequest> },
+  TContext
+> => {
+  return useMutation(getAtlasAdaptPlanMutationOptions(options));
+};

@@ -8,3 +8,155 @@
 export interface HealthStatus {
   status: string;
 }
+
+export type GoalType = (typeof GoalType)[keyof typeof GoalType];
+
+export const GoalType = {
+  ielts: "ielts",
+  car: "car",
+  programming: "programming",
+  fitness: "fitness",
+  finance: "finance",
+} as const;
+
+export type ChatMessageRole =
+  (typeof ChatMessageRole)[keyof typeof ChatMessageRole];
+
+export const ChatMessageRole = {
+  user: "user",
+  assistant: "assistant",
+} as const;
+
+export interface ChatMessage {
+  role: ChatMessageRole;
+  content: string;
+}
+
+export interface UserProfile {
+  goalType: GoalType;
+  goalStatement: string;
+  currentLevel: string;
+  availableTimePerDayMinutes: number;
+  financialCondition: string;
+  productivityPattern: string;
+  consistencyLevel: string;
+  constraints: string[];
+  targetTimelineWeeks: number;
+  notes: string;
+}
+
+export interface OnboardingChatRequest {
+  goalType: GoalType;
+  history: ChatMessage[];
+}
+
+export interface OnboardingChatResponse {
+  message: string;
+  isComplete: boolean;
+  profile?: UserProfile | null;
+}
+
+export interface RoadmapRequest {
+  profile: UserProfile;
+}
+
+export interface RoadmapMilestone {
+  id: string;
+  title: string;
+  description: string;
+  weekNumber: number;
+}
+
+export interface RoadmapPhase {
+  id: string;
+  title: string;
+  focus: string;
+  startWeek: number;
+  endWeek: number;
+  milestones: RoadmapMilestone[];
+}
+
+export interface Roadmap {
+  goalType: GoalType;
+  headline: string;
+  summary: string;
+  totalWeeks: number;
+  strategy: string;
+  riskAnalysis: string[];
+  phases: RoadmapPhase[];
+}
+
+export interface BehavioralSnapshot {
+  completedTaskTitles: string[];
+  missedTaskTitles: string[];
+  currentStreakDays: number;
+  completionRate: number;
+  recentNotes: string[];
+}
+
+export interface DailyPlanRequest {
+  profile: UserProfile;
+  roadmap: Roadmap;
+  behavioral: BehavioralSnapshot;
+  date: string;
+  currentWeek: number;
+}
+
+export type DailyTaskPriority =
+  (typeof DailyTaskPriority)[keyof typeof DailyTaskPriority];
+
+export const DailyTaskPriority = {
+  critical: "critical",
+  high: "high",
+  normal: "normal",
+} as const;
+
+export interface DailyTask {
+  id: string;
+  title: string;
+  description: string;
+  durationMinutes: number;
+  category: string;
+  priority: DailyTaskPriority;
+}
+
+export interface DailyPlan {
+  date: string;
+  focusOfTheDay: string;
+  coachNote: string;
+  tasks: DailyTask[];
+}
+
+export interface CoachRequest {
+  profile: UserProfile;
+  roadmap: Roadmap;
+  todayPlan?: DailyPlan;
+  behavioral: BehavioralSnapshot;
+  history: ChatMessage[];
+  message: string;
+}
+
+export interface CoachResponse {
+  reply: string;
+}
+
+export interface AdaptRequest {
+  profile: UserProfile;
+  roadmap: Roadmap;
+  behavioral: BehavioralSnapshot;
+}
+
+export type AdaptResponseDifficultyAdjustment =
+  (typeof AdaptResponseDifficultyAdjustment)[keyof typeof AdaptResponseDifficultyAdjustment];
+
+export const AdaptResponseDifficultyAdjustment = {
+  easier: "easier",
+  same: "same",
+  harder: "harder",
+} as const;
+
+export interface AdaptResponse {
+  difficultyAdjustment: AdaptResponseDifficultyAdjustment;
+  adjustments: string[];
+  encouragement: string;
+}

@@ -14,3 +14,290 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * @summary Continue an adaptive onboarding conversation for the chosen goal model
+ */
+export const AtlasOnboardingChatBody = zod.object({
+  goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+  history: zod.array(
+    zod.object({
+      role: zod.enum(["user", "assistant"]),
+      content: zod.string(),
+    }),
+  ),
+});
+
+export const AtlasOnboardingChatResponse = zod.object({
+  message: zod.string(),
+  isComplete: zod.boolean(),
+  profile: zod
+    .union([
+      zod.object({
+        goalType: zod.enum([
+          "ielts",
+          "car",
+          "programming",
+          "fitness",
+          "finance",
+        ]),
+        goalStatement: zod.string(),
+        currentLevel: zod.string(),
+        availableTimePerDayMinutes: zod.number(),
+        financialCondition: zod.string(),
+        productivityPattern: zod.string(),
+        consistencyLevel: zod.string(),
+        constraints: zod.array(zod.string()),
+        targetTimelineWeeks: zod.number(),
+        notes: zod.string(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+});
+
+/**
+ * @summary Generate a personalized multi-phase roadmap from the user's profile
+ */
+export const AtlasGenerateRoadmapBody = zod.object({
+  profile: zod.object({
+    goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+    goalStatement: zod.string(),
+    currentLevel: zod.string(),
+    availableTimePerDayMinutes: zod.number(),
+    financialCondition: zod.string(),
+    productivityPattern: zod.string(),
+    consistencyLevel: zod.string(),
+    constraints: zod.array(zod.string()),
+    targetTimelineWeeks: zod.number(),
+    notes: zod.string(),
+  }),
+});
+
+export const AtlasGenerateRoadmapResponse = zod.object({
+  goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+  headline: zod.string(),
+  summary: zod.string(),
+  totalWeeks: zod.number(),
+  strategy: zod.string(),
+  riskAnalysis: zod.array(zod.string()),
+  phases: zod.array(
+    zod.object({
+      id: zod.string(),
+      title: zod.string(),
+      focus: zod.string(),
+      startWeek: zod.number(),
+      endWeek: zod.number(),
+      milestones: zod.array(
+        zod.object({
+          id: zod.string(),
+          title: zod.string(),
+          description: zod.string(),
+          weekNumber: zod.number(),
+        }),
+      ),
+    }),
+  ),
+});
+
+/**
+ * @summary Generate today's actionable execution plan
+ */
+export const AtlasGenerateDailyPlanBody = zod.object({
+  profile: zod.object({
+    goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+    goalStatement: zod.string(),
+    currentLevel: zod.string(),
+    availableTimePerDayMinutes: zod.number(),
+    financialCondition: zod.string(),
+    productivityPattern: zod.string(),
+    consistencyLevel: zod.string(),
+    constraints: zod.array(zod.string()),
+    targetTimelineWeeks: zod.number(),
+    notes: zod.string(),
+  }),
+  roadmap: zod.object({
+    goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+    headline: zod.string(),
+    summary: zod.string(),
+    totalWeeks: zod.number(),
+    strategy: zod.string(),
+    riskAnalysis: zod.array(zod.string()),
+    phases: zod.array(
+      zod.object({
+        id: zod.string(),
+        title: zod.string(),
+        focus: zod.string(),
+        startWeek: zod.number(),
+        endWeek: zod.number(),
+        milestones: zod.array(
+          zod.object({
+            id: zod.string(),
+            title: zod.string(),
+            description: zod.string(),
+            weekNumber: zod.number(),
+          }),
+        ),
+      }),
+    ),
+  }),
+  behavioral: zod.object({
+    completedTaskTitles: zod.array(zod.string()),
+    missedTaskTitles: zod.array(zod.string()),
+    currentStreakDays: zod.number(),
+    completionRate: zod.number(),
+    recentNotes: zod.array(zod.string()),
+  }),
+  date: zod.string(),
+  currentWeek: zod.number(),
+});
+
+export const AtlasGenerateDailyPlanResponse = zod.object({
+  date: zod.string(),
+  focusOfTheDay: zod.string(),
+  coachNote: zod.string(),
+  tasks: zod.array(
+    zod.object({
+      id: zod.string(),
+      title: zod.string(),
+      description: zod.string(),
+      durationMinutes: zod.number(),
+      category: zod.string(),
+      priority: zod.enum(["critical", "high", "normal"]),
+    }),
+  ),
+});
+
+/**
+ * @summary Conversational coaching reply with full execution context
+ */
+export const AtlasCoachBody = zod.object({
+  profile: zod.object({
+    goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+    goalStatement: zod.string(),
+    currentLevel: zod.string(),
+    availableTimePerDayMinutes: zod.number(),
+    financialCondition: zod.string(),
+    productivityPattern: zod.string(),
+    consistencyLevel: zod.string(),
+    constraints: zod.array(zod.string()),
+    targetTimelineWeeks: zod.number(),
+    notes: zod.string(),
+  }),
+  roadmap: zod.object({
+    goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+    headline: zod.string(),
+    summary: zod.string(),
+    totalWeeks: zod.number(),
+    strategy: zod.string(),
+    riskAnalysis: zod.array(zod.string()),
+    phases: zod.array(
+      zod.object({
+        id: zod.string(),
+        title: zod.string(),
+        focus: zod.string(),
+        startWeek: zod.number(),
+        endWeek: zod.number(),
+        milestones: zod.array(
+          zod.object({
+            id: zod.string(),
+            title: zod.string(),
+            description: zod.string(),
+            weekNumber: zod.number(),
+          }),
+        ),
+      }),
+    ),
+  }),
+  todayPlan: zod
+    .object({
+      date: zod.string(),
+      focusOfTheDay: zod.string(),
+      coachNote: zod.string(),
+      tasks: zod.array(
+        zod.object({
+          id: zod.string(),
+          title: zod.string(),
+          description: zod.string(),
+          durationMinutes: zod.number(),
+          category: zod.string(),
+          priority: zod.enum(["critical", "high", "normal"]),
+        }),
+      ),
+    })
+    .optional(),
+  behavioral: zod.object({
+    completedTaskTitles: zod.array(zod.string()),
+    missedTaskTitles: zod.array(zod.string()),
+    currentStreakDays: zod.number(),
+    completionRate: zod.number(),
+    recentNotes: zod.array(zod.string()),
+  }),
+  history: zod.array(
+    zod.object({
+      role: zod.enum(["user", "assistant"]),
+      content: zod.string(),
+    }),
+  ),
+  message: zod.string(),
+});
+
+export const AtlasCoachResponse = zod.object({
+  reply: zod.string(),
+});
+
+/**
+ * @summary Adapt the plan based on behavioural performance data
+ */
+export const AtlasAdaptPlanBody = zod.object({
+  profile: zod.object({
+    goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+    goalStatement: zod.string(),
+    currentLevel: zod.string(),
+    availableTimePerDayMinutes: zod.number(),
+    financialCondition: zod.string(),
+    productivityPattern: zod.string(),
+    consistencyLevel: zod.string(),
+    constraints: zod.array(zod.string()),
+    targetTimelineWeeks: zod.number(),
+    notes: zod.string(),
+  }),
+  roadmap: zod.object({
+    goalType: zod.enum(["ielts", "car", "programming", "fitness", "finance"]),
+    headline: zod.string(),
+    summary: zod.string(),
+    totalWeeks: zod.number(),
+    strategy: zod.string(),
+    riskAnalysis: zod.array(zod.string()),
+    phases: zod.array(
+      zod.object({
+        id: zod.string(),
+        title: zod.string(),
+        focus: zod.string(),
+        startWeek: zod.number(),
+        endWeek: zod.number(),
+        milestones: zod.array(
+          zod.object({
+            id: zod.string(),
+            title: zod.string(),
+            description: zod.string(),
+            weekNumber: zod.number(),
+          }),
+        ),
+      }),
+    ),
+  }),
+  behavioral: zod.object({
+    completedTaskTitles: zod.array(zod.string()),
+    missedTaskTitles: zod.array(zod.string()),
+    currentStreakDays: zod.number(),
+    completionRate: zod.number(),
+    recentNotes: zod.array(zod.string()),
+  }),
+});
+
+export const AtlasAdaptPlanResponse = zod.object({
+  difficultyAdjustment: zod.enum(["easier", "same", "harder"]),
+  adjustments: zod.array(zod.string()),
+  encouragement: zod.string(),
+});

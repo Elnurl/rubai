@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: atlas
+    description: Atlas AI goal coaching endpoints
 paths:
   /healthz:
     get:
@@ -24,6 +26,102 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /atlas/onboarding-chat:
+    post:
+      operationId: atlasOnboardingChat
+      tags: [atlas]
+      summary: Continue an adaptive onboarding conversation for the chosen goal model
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnboardingChatRequest"
+      responses:
+        "200":
+          description: Next assistant turn
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingChatResponse"
+
+  /atlas/roadmap:
+    post:
+      operationId: atlasGenerateRoadmap
+      tags: [atlas]
+      summary: Generate a personalized multi-phase roadmap from the user's profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoadmapRequest"
+      responses:
+        "200":
+          description: Generated roadmap
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Roadmap"
+
+  /atlas/daily-plan:
+    post:
+      operationId: atlasGenerateDailyPlan
+      tags: [atlas]
+      summary: Generate today's actionable execution plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DailyPlanRequest"
+      responses:
+        "200":
+          description: Today's plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyPlan"
+
+  /atlas/coach:
+    post:
+      operationId: atlasCoach
+      tags: [atlas]
+      summary: Conversational coaching reply with full execution context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CoachRequest"
+      responses:
+        "200":
+          description: Coach reply
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CoachResponse"
+
+  /atlas/adapt:
+    post:
+      operationId: atlasAdaptPlan
+      tags: [atlas]
+      summary: Adapt the plan based on behavioural performance data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdaptRequest"
+      responses:
+        "200":
+          description: Adaptive recommendations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdaptResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +132,282 @@ components:
       required:
         - status
 
+    GoalType:
+      type: string
+      enum:
+        - ielts
+        - car
+        - programming
+        - fitness
+        - finance
+
+    ChatMessage:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+      required: [role, content]
+
+    UserProfile:
+      type: object
+      properties:
+        goalType:
+          $ref: "#/components/schemas/GoalType"
+        goalStatement:
+          type: string
+        currentLevel:
+          type: string
+        availableTimePerDayMinutes:
+          type: integer
+        financialCondition:
+          type: string
+        productivityPattern:
+          type: string
+        consistencyLevel:
+          type: string
+        constraints:
+          type: array
+          items:
+            type: string
+        targetTimelineWeeks:
+          type: integer
+        notes:
+          type: string
+      required:
+        - goalType
+        - goalStatement
+        - currentLevel
+        - availableTimePerDayMinutes
+        - financialCondition
+        - productivityPattern
+        - consistencyLevel
+        - constraints
+        - targetTimelineWeeks
+        - notes
+
+    OnboardingChatRequest:
+      type: object
+      properties:
+        goalType:
+          $ref: "#/components/schemas/GoalType"
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+      required: [goalType, history]
+
+    OnboardingChatResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        isComplete:
+          type: boolean
+        profile:
+          oneOf:
+            - $ref: "#/components/schemas/UserProfile"
+            - type: "null"
+      required: [message, isComplete]
+
+    RoadmapRequest:
+      type: object
+      properties:
+        profile:
+          $ref: "#/components/schemas/UserProfile"
+      required: [profile]
+
+    RoadmapMilestone:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        weekNumber:
+          type: integer
+      required: [id, title, description, weekNumber]
+
+    RoadmapPhase:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        focus:
+          type: string
+        startWeek:
+          type: integer
+        endWeek:
+          type: integer
+        milestones:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoadmapMilestone"
+      required: [id, title, focus, startWeek, endWeek, milestones]
+
+    Roadmap:
+      type: object
+      properties:
+        goalType:
+          $ref: "#/components/schemas/GoalType"
+        headline:
+          type: string
+        summary:
+          type: string
+        totalWeeks:
+          type: integer
+        strategy:
+          type: string
+        riskAnalysis:
+          type: array
+          items:
+            type: string
+        phases:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoadmapPhase"
+      required:
+        - goalType
+        - headline
+        - summary
+        - totalWeeks
+        - strategy
+        - riskAnalysis
+        - phases
+
+    BehavioralSnapshot:
+      type: object
+      properties:
+        completedTaskTitles:
+          type: array
+          items:
+            type: string
+        missedTaskTitles:
+          type: array
+          items:
+            type: string
+        currentStreakDays:
+          type: integer
+        completionRate:
+          type: number
+        recentNotes:
+          type: array
+          items:
+            type: string
+      required:
+        - completedTaskTitles
+        - missedTaskTitles
+        - currentStreakDays
+        - completionRate
+        - recentNotes
+
+    DailyPlanRequest:
+      type: object
+      properties:
+        profile:
+          $ref: "#/components/schemas/UserProfile"
+        roadmap:
+          $ref: "#/components/schemas/Roadmap"
+        behavioral:
+          $ref: "#/components/schemas/BehavioralSnapshot"
+        date:
+          type: string
+        currentWeek:
+          type: integer
+      required: [profile, roadmap, behavioral, date, currentWeek]
+
+    DailyTask:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        durationMinutes:
+          type: integer
+        category:
+          type: string
+        priority:
+          type: string
+          enum: [critical, high, normal]
+      required:
+        - id
+        - title
+        - description
+        - durationMinutes
+        - category
+        - priority
+
+    DailyPlan:
+      type: object
+      properties:
+        date:
+          type: string
+        focusOfTheDay:
+          type: string
+        coachNote:
+          type: string
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyTask"
+      required: [date, focusOfTheDay, coachNote, tasks]
+
+    CoachRequest:
+      type: object
+      properties:
+        profile:
+          $ref: "#/components/schemas/UserProfile"
+        roadmap:
+          $ref: "#/components/schemas/Roadmap"
+        todayPlan:
+          $ref: "#/components/schemas/DailyPlan"
+        behavioral:
+          $ref: "#/components/schemas/BehavioralSnapshot"
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+        message:
+          type: string
+      required: [profile, roadmap, behavioral, history, message]
+
+    CoachResponse:
+      type: object
+      properties:
+        reply:
+          type: string
+      required: [reply]
+
+    AdaptRequest:
+      type: object
+      properties:
+        profile:
+          $ref: "#/components/schemas/UserProfile"
+        roadmap:
+          $ref: "#/components/schemas/Roadmap"
+        behavioral:
+          $ref: "#/components/schemas/BehavioralSnapshot"
+      required: [profile, roadmap, behavioral]
+
+    AdaptResponse:
+      type: object
+      properties:
+        difficultyAdjustment:
+          type: string
+          enum: [easier, same, harder]
+        adjustments:
+          type: array
+          items:
+            type: string
+        encouragement:
+          type: string
+      required: [difficultyAdjustment, adjustments, encouragement]

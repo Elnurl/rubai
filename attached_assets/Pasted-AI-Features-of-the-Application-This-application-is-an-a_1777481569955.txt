@@ -1,0 +1,98 @@
+AI Features of the Application
+
+This application is an adaptive AI-driven goal execution system designed to help users achieve real-life objectives through personalized planning, behavioral analysis, and continuous guidance.
+
+The AI is not a simple chatbot or reminder system. It acts as a proactive strategic assistant that understands the user’s current condition, builds realistic roadmaps, and guides the user daily toward a selected target.
+
+Core AI Features:
+
+1. Goal-Based AI Models
+Users can select specialized AI models based on their goals, such as:
+- IELTS Preparation
+- Buying a Car
+- Learning Programming
+- Fitness Goals
+- Financial Improvement
+
+Each model behaves differently and uses its own logic, questioning strategy, and planning system.
+
+2. Intelligent User Analysis
+The AI analyzes the user through dynamic onboarding conversations and behavioral data collection.
+
+The system learns:
+- current skill level
+- available time
+- financial condition
+- productivity patterns
+- consistency level
+- constraints and limitations
+
+The AI continuously refines its understanding of the user over time.
+
+3. Personalized Roadmap Generation
+Based on collected data, the AI creates a realistic roadmap that includes:
+- milestones
+- timelines
+- daily execution plans
+- risk analysis
+- adaptive strategies
+
+The roadmap is customized specifically for the individual user instead of using generic templates.
+
+4. Daily Execution System
+The AI converts long-term goals into actionable daily tasks.
+
+Tasks are practical real-world actions, not abstract suggestions.
+
+Examples:
+- “Complete one IELTS listening practice”
+- “Upload your current car to a marketplace website”
+- “Study variables and loops for 45 minutes”
+
+The system guides the user step-by-step every day.
+
+5. Continuous Behavioral Learning
+The AI monitors:
+- completed tasks
+- failed tasks
+- user consistency
+- productivity timing
+- recurring failure patterns
+
+The system gradually learns how the user behaves and adjusts future plans accordingly.
+
+6. Adaptive Planning Engine
+The application dynamically modifies plans based on user performance.
+
+If the user struggles:
+- task difficulty decreases
+- plans are simplified
+- timelines are adjusted
+
+If the user performs consistently:
+- progression speed increases
+- challenges become harder
+- roadmap accelerates
+
+7. Conversational AI Guidance
+The AI communicates naturally with the user through a daily chat interface.
+
+The assistant:
+- explains tasks
+- asks follow-up questions
+- motivates the user
+- identifies problems
+- updates plans intelligently
+
+The interaction feels like having a strategic mentor and execution coach combined into one system.
+
+8. Human Progress Optimization
+The primary objective of the AI is not conversation, but measurable human progress.
+
+The system is designed to:
+- maximize consistency
+- improve decision-making
+- reduce failure probability
+- optimize long-term goal achievement
+
+This transforms the application from a simple productivity tool into a personalized AI life execution platform.

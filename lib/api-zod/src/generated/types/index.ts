@@ -6,4 +6,24 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./adaptRequest";
+export * from "./adaptResponse";
+export * from "./adaptResponseDifficultyAdjustment";
+export * from "./behavioralSnapshot";
+export * from "./chatMessage";
+export * from "./chatMessageRole";
+export * from "./coachRequest";
+export * from "./coachResponse";
+export * from "./dailyPlan";
+export * from "./dailyPlanRequest";
+export * from "./dailyTask";
+export * from "./dailyTaskPriority";
+export * from "./goalType";
 export * from "./healthStatus";
+export * from "./onboardingChatRequest";
+export * from "./onboardingChatResponse";
+export * from "./roadmap";
+export * from "./roadmapMilestone";
+export * from "./roadmapPhase";
+export * from "./roadmapRequest";
+export * from "./userProfile";
