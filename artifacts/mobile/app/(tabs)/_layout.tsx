@@ -24,9 +24,13 @@ function NativeTabLayout() {
         <Icon sf={{ default: "bubble.left", selected: "bubble.left.fill" }} />
         <Label>Coach</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="me">
+      <NativeTabs.Trigger name="goals">
+        <Icon sf={{ default: "list.bullet", selected: "list.bullet.indent" }} />
+        <Label>Goals</Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="account">
         <Icon sf={{ default: "person.crop.circle", selected: "person.crop.circle.fill" }} />
-        <Label>Me</Label>
+        <Label>Account</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
@@ -47,7 +51,7 @@ function ClassicTabLayout() {
         headerShown: false,
         tabBarLabelStyle: {
           fontFamily: "Inter_600SemiBold",
-          fontSize: 11,
+          fontSize: 10.5,
           letterSpacing: 0.3,
         },
         tabBarStyle: {
@@ -112,9 +116,21 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="me"
+        name="goals"
         options={{
-          title: "Me",
+          title: "Goals",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="list.bullet" tintColor={color} size={24} />
+            ) : (
+              <Feather name="list" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="account"
+        options={{
+          title: "Account",
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="person.crop.circle" tintColor={color} size={24} />

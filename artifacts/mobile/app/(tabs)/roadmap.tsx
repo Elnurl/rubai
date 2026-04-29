@@ -3,10 +3,11 @@ import React from "react";
 import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { EmptyState } from "@/components/EmptyState";
 import { PhaseCard } from "@/components/PhaseCard";
 import { SectionHeader } from "@/components/SectionHeader";
-import { GOAL_META, profileGoalLabel } from "@/constants/atlas";
+import { profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 
@@ -16,21 +17,21 @@ export default function RoadmapScreen() {
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 8;
   const bottomTab = isWeb ? 100 : 110;
-  const { roadmap, currentWeek, profile } = useAtlas();
+  const { activeRoadmap, activeProfile, activeCurrentWeek } = useAtlas();
 
-  if (!roadmap) {
+  if (!activeRoadmap) {
     return (
       <View style={[styles.root, { backgroundColor: colors.background, paddingTop: topPad }]}>
         <EmptyState
           icon="map"
           title="No roadmap yet"
-          description="Finish onboarding and Atlas will generate your personalized roadmap."
+          description="Finish intake and Atlas will generate your personalized roadmap."
         />
       </View>
     );
   }
 
-  const goalLabel = profile ? profileGoalLabel(profile) : "";
+  const goalLabel = activeProfile ? profileGoalLabel(activeProfile) : "";
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -41,7 +42,7 @@ export default function RoadmapScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.hero}>
+        <View style={styles.topRow}>
           <Text
             style={[
               styles.eyebrow,
@@ -50,9 +51,12 @@ export default function RoadmapScreen() {
           >
             ROADMAP
           </Text>
+          <ActiveGoalChip />
+        </View>
+        <View style={styles.hero}>
           <SectionHeader
-            title={roadmap.headline}
-            subtitle={`${roadmap.totalWeeks} weeks${goalLabel ? ` • ${goalLabel}` : ""}`}
+            title={activeRoadmap.headline}
+            subtitle={`${activeRoadmap.totalWeeks} weeks${goalLabel ? ` • ${goalLabel}` : ""}`}
           />
           <Text
             style={[
@@ -60,7 +64,7 @@ export default function RoadmapScreen() {
               { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
             ]}
           >
-            {roadmap.summary}
+            {activeRoadmap.summary}
           </Text>
         </View>
 
@@ -91,24 +95,25 @@ export default function RoadmapScreen() {
               { color: colors.foreground, fontFamily: "Inter_400Regular" },
             ]}
           >
-            {roadmap.strategy}
+            {activeRoadmap.strategy}
           </Text>
         </View>
 
         <View style={styles.phases}>
-          {roadmap.phases.map((phase, i) => (
+          {activeRoadmap.phases.map((phase, i) => (
             <PhaseCard
               key={phase.id}
               phase={phase}
               index={i}
               isActive={
-                currentWeek >= phase.startWeek && currentWeek <= phase.endWeek
+                activeCurrentWeek >= phase.startWeek &&
+                activeCurrentWeek <= phase.endWeek
               }
             />
           ))}
         </View>
 
-        {roadmap.riskAnalysis.length > 0 && (
+        {activeRoadmap.riskAnalysis.length > 0 && (
           <View
             style={[
               styles.risksCard,
@@ -131,7 +136,7 @@ export default function RoadmapScreen() {
               </Text>
             </View>
             <View style={styles.risks}>
-              {roadmap.riskAnalysis.map((risk, i) => (
+              {activeRoadmap.riskAnalysis.map((risk, i) => (
                 <View key={i} style={styles.riskRow}>
                   <View style={[styles.riskDot, { backgroundColor: colors.destructive }]} />
                   <Text
@@ -158,9 +163,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     gap: 20,
   },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: 4,
+    gap: 12,
+  },
   hero: {
     gap: 10,
-    paddingTop: 4,
   },
   eyebrow: {
     fontSize: 11,

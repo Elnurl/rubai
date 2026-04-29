@@ -1,15 +1,18 @@
-import { useRouter } from "expo-router";
-import React, { useEffect, useRef } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useMemo, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { GOAL_META, profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
-import { useAtlasGenerateRoadmap } from "@workspace/api-client-react";
+import {
+  useAtlasGenerateRoadmap,
+  type UserProfile,
+} from "@workspace/api-client-react";
 
 const STEPS = [
-  "Reading your profile",
+  "Reading your intake",
   "Analyzing constraints and time",
   "Selecting strategy",
   "Drafting phases",
@@ -20,11 +23,23 @@ const STEPS = [
 export default function GeneratingScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, setRoadmap } = useAtlas();
+  const params = useLocalSearchParams<{ profile?: string }>();
+  const { createGoal, setRoadmapForGoal, setPendingDraft, pendingDraft } = useAtlas();
   const generate = useAtlasGenerateRoadmap();
   const [stepIndex, setStepIndex] = React.useState(0);
   const startedRef = useRef(false);
   const pulse = useRef(new Animated.Value(0)).current;
+
+  // Decode profile from route params, falling back to the pendingDraft's
+  // synthesised profile if the app was reopened mid-flow and params are gone.
+  const profile = useMemo<UserProfile | null>(() => {
+    try {
+      if (params.profile) return JSON.parse(params.profile) as UserProfile;
+    } catch {
+      // ignore parse failure, fall through to draft
+    }
+    return pendingDraft?.synthesizedProfile ?? null;
+  }, [params.profile, pendingDraft?.synthesizedProfile]);
 
   useEffect(() => {
     Animated.loop(
@@ -61,8 +76,12 @@ export default function GeneratingScreen() {
     startedRef.current = true;
     (async () => {
       try {
+        // Create the goal first (returns its id so we can attach the roadmap
+        // back to the exact goal without relying on async-state propagation).
+        const newGoal = await createGoal(profile);
         const roadmap = await generate.mutateAsync({ data: { profile } });
-        await setRoadmap(roadmap);
+        await setRoadmapForGoal(newGoal.id, roadmap);
+        await setPendingDraft(null);
         setStepIndex(STEPS.length - 1);
         setTimeout(() => router.replace("/(tabs)"), 700);
       } catch {
@@ -135,9 +154,7 @@ export default function GeneratingScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
+  root: { flex: 1 },
   center: {
     flex: 1,
     alignItems: "center",

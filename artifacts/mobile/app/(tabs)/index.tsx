@@ -12,12 +12,13 @@ import {
 import Animated, { FadeIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { AtlasButton } from "@/components/AtlasButton";
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { EmptyState } from "@/components/EmptyState";
 import { SectionHeader } from "@/components/SectionHeader";
 import { TaskCard } from "@/components/TaskCard";
-import { GOAL_META, profileGoalLabel } from "@/constants/atlas";
+import { profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { todayISO } from "@/lib/storage";
 import { useAtlas } from "@/providers/AtlasProvider";
@@ -31,61 +32,67 @@ export default function TodayScreen() {
   const bottomTab = isWeb ? 100 : 110;
 
   const {
-    profile,
-    roadmap,
-    dailyPlan,
-    behavioral,
-    currentWeek,
-    setDailyPlan,
-    recordTask,
-    taskHistory,
+    activeGoalId,
+    activeProfile,
+    activeRoadmap,
+    activeDailyPlan,
+    activeBehavioral,
+    activeCurrentWeek,
+    activeTaskHistory,
+    setActiveDailyPlan,
+    recordActiveTask,
   } = useAtlas();
 
   const generate = useAtlasGenerateDailyPlan();
   const today = todayISO();
   const requestedRef = useRef<string | null>(null);
 
-  const planIsForToday =
-    dailyPlan && dailyPlan.plan.date === today;
+  const planIsForToday = activeDailyPlan && activeDailyPlan.plan.date === today;
+
+  // Reset request guard when active goal changes so each goal regenerates today.
+  useEffect(() => {
+    requestedRef.current = null;
+  }, [activeGoalId]);
 
   useEffect(() => {
-    if (!profile || !roadmap) return;
+    if (!activeProfile || !activeRoadmap) return;
     if (planIsForToday) return;
-    if (requestedRef.current === today) return;
-    requestedRef.current = today;
+    const key = `${activeGoalId}:${today}`;
+    if (requestedRef.current === key) return;
+    requestedRef.current = key;
     generate
       .mutateAsync({
         data: {
-          profile,
-          roadmap,
-          behavioral,
+          profile: activeProfile,
+          roadmap: activeRoadmap,
+          behavioral: activeBehavioral,
           date: today,
-          currentWeek,
+          currentWeek: activeCurrentWeek,
         },
       })
       .then((plan) => {
-        setDailyPlan(plan);
+        void setActiveDailyPlan(plan);
       })
       .catch(() => {
         requestedRef.current = null;
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, roadmap, planIsForToday, today, currentWeek]);
+  }, [activeGoalId, activeProfile, activeRoadmap, planIsForToday, today, activeCurrentWeek]);
 
   const refresh = async () => {
-    if (!profile || !roadmap) return;
-    requestedRef.current = today;
+    if (!activeProfile || !activeRoadmap) return;
+    requestedRef.current = `${activeGoalId}:${today}`;
     try {
       const plan = await generate.mutateAsync({
         data: {
-          profile,
-          roadmap,
-          behavioral,
+          profile: activeProfile,
+          roadmap: activeRoadmap,
+          behavioral: activeBehavioral,
           date: today,
-          currentWeek,
+          currentWeek: activeCurrentWeek,
         },
       });
-      await setDailyPlan(plan);
+      await setActiveDailyPlan(plan);
     } catch {
       requestedRef.current = null;
     }
@@ -93,26 +100,43 @@ export default function TodayScreen() {
 
   const todaysCompletions = useMemo(() => {
     const map = new Map<string, boolean>();
-    for (const e of taskHistory) {
+    for (const e of activeTaskHistory) {
       if (e.date === today) map.set(e.taskId, e.completed);
     }
     return map;
-  }, [taskHistory, today]);
+  }, [activeTaskHistory, today]);
 
   const completedCount = useMemo(() => {
-    if (!dailyPlan) return 0;
-    return dailyPlan.plan.tasks.filter((t) => todaysCompletions.get(t.id)).length;
-  }, [dailyPlan, todaysCompletions]);
+    if (!activeDailyPlan) return 0;
+    return activeDailyPlan.plan.tasks.filter((t) => todaysCompletions.get(t.id)).length;
+  }, [activeDailyPlan, todaysCompletions]);
 
-  const totalCount = dailyPlan?.plan.tasks.length ?? 0;
+  const totalCount = activeDailyPlan?.plan.tasks.length ?? 0;
   const progressPct = totalCount > 0 ? completedCount / totalCount : 0;
-  const goalLabel = profile ? profileGoalLabel(profile) : "";
+  const goalLabel = activeProfile ? profileGoalLabel(activeProfile) : "";
 
   const heroDate = new Date().toLocaleDateString(undefined, {
     weekday: "long",
     month: "long",
     day: "numeric",
   });
+
+  if (!activeProfile) {
+    return (
+      <View
+        style={[
+          styles.root,
+          { backgroundColor: colors.background, paddingTop: topPad },
+        ]}
+      >
+        <EmptyState
+          icon="sun"
+          title="No active goal"
+          description="Add a goal in the Goals tab to see today's plan."
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -132,16 +156,19 @@ export default function TodayScreen() {
       >
         <View style={styles.headerRow}>
           <AtlasLogo size="sm" />
-          <View style={[styles.streakChip, { backgroundColor: colors.muted }]}>
-            <Feather name="zap" size={12} color={colors.accent} />
-            <Text
-              style={[
-                styles.streakText,
-                { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
-              ]}
-            >
-              {behavioral.currentStreakDays} day streak
-            </Text>
+          <View style={styles.headerRight}>
+            <ActiveGoalChip />
+            <View style={[styles.streakChip, { backgroundColor: colors.muted }]}>
+              <Feather name="zap" size={12} color={colors.accent} />
+              <Text
+                style={[
+                  styles.streakText,
+                  { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
+                ]}
+              >
+                {activeBehavioral.currentStreakDays}d
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -155,12 +182,12 @@ export default function TodayScreen() {
             {heroDate.toUpperCase()}
           </Text>
           <SectionHeader
-            title={dailyPlan?.plan.focusOfTheDay ?? "Today's plan is loading"}
-            subtitle={goalLabel ? `Week ${currentWeek} • ${goalLabel}` : undefined}
+            title={activeDailyPlan?.plan.focusOfTheDay ?? "Today's plan is loading"}
+            subtitle={goalLabel ? `Week ${activeCurrentWeek} • ${goalLabel}` : undefined}
           />
         </View>
 
-        {dailyPlan?.plan.coachNote && (
+        {activeDailyPlan?.plan.coachNote && (
           <Animated.View
             entering={FadeIn.duration(400)}
             style={[
@@ -190,7 +217,7 @@ export default function TodayScreen() {
                 { color: colors.foreground, fontFamily: "Inter_400Regular" },
               ]}
             >
-              {dailyPlan.plan.coachNote}
+              {activeDailyPlan.plan.coachNote}
             </Text>
           </Animated.View>
         )}
@@ -198,10 +225,7 @@ export default function TodayScreen() {
         {totalCount > 0 && (
           <View style={styles.progress}>
             <View
-              style={[
-                styles.progressTrack,
-                { backgroundColor: colors.muted },
-              ]}
+              style={[styles.progressTrack, { backgroundColor: colors.muted }]}
             >
               <View
                 style={[
@@ -237,8 +261,8 @@ export default function TodayScreen() {
                 Atlas is preparing today's tasks
               </Text>
             </View>
-          ) : dailyPlan ? (
-            dailyPlan.plan.tasks.map((task, i) => (
+          ) : activeDailyPlan ? (
+            activeDailyPlan.plan.tasks.map((task, i) => (
               <TaskCard
                 key={task.id}
                 task={task}
@@ -246,7 +270,7 @@ export default function TodayScreen() {
                 index={i}
                 onToggle={() => {
                   const wasCompleted = todaysCompletions.get(task.id) === true;
-                  recordTask({
+                  recordActiveTask({
                     taskId: task.id,
                     taskTitle: task.title,
                     date: today,
@@ -293,12 +317,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingTop: 4,
+    gap: 8,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 1,
   },
   streakChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
   },

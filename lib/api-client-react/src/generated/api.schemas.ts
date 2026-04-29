@@ -48,6 +48,64 @@ export interface UserProfile {
   notes: string;
 }
 
+export type IntakeQuestionType =
+  (typeof IntakeQuestionType)[keyof typeof IntakeQuestionType];
+
+export const IntakeQuestionType = {
+  short_text: "short_text",
+  long_text: "long_text",
+  single_select: "single_select",
+  multi_select: "multi_select",
+  number: "number",
+} as const;
+
+export interface IntakeQuestion {
+  /** Stable identifier used as the answer key. */
+  id: string;
+  /** The question shown to the user. */
+  label: string;
+  /** Optional helper subtext giving context. */
+  helper?: string;
+  type: IntakeQuestionType;
+  placeholder?: string;
+  /** Required for single_select / multi_select question types. */
+  options?: string[];
+  /** Optional unit hint for number questions (e.g. "minutes", "weeks"). */
+  unit?: string;
+  required: boolean;
+}
+
+export interface IntakeQuestionsRequest {
+  goalType: GoalType;
+  /** User-supplied free-form goal description. */
+  goalTitle: string;
+}
+
+export interface IntakeQuestionsResponse {
+  /** One short sentence Atlas says before the questions. */
+  introMessage: string;
+  questions: IntakeQuestion[];
+}
+
+export interface IntakeAnswer {
+  questionId: string;
+  /** Stringified answer (single value, comma-joined for multi_select, numeric as string). */
+  value: string;
+}
+
+export interface IntakeSubmitRequest {
+  goalType: GoalType;
+  goalTitle: string;
+  questions: IntakeQuestion[];
+  answers: IntakeAnswer[];
+}
+
+export interface IntakeSubmitResponse {
+  profile: UserProfile;
+  /** Optional short note Atlas wants to add before generating the roadmap. */
+  followUp?: string;
+}
+
 export interface OnboardingChatRequest {
   goalType: GoalType;
   /** User-supplied goal title; required when goalType is "custom". */

@@ -46,6 +46,44 @@ paths:
               schema:
                 $ref: "#/components/schemas/OnboardingChatResponse"
 
+  /atlas/intake-questions:
+    post:
+      operationId: atlasIntakeQuestions
+      tags: [atlas]
+      summary: Generate a tailored intake questionnaire for the user's goal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IntakeQuestionsRequest"
+      responses:
+        "200":
+          description: Generated questionnaire
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntakeQuestionsResponse"
+
+  /atlas/intake-submit:
+    post:
+      operationId: atlasIntakeSubmit
+      tags: [atlas]
+      summary: Convert intake answers into a complete UserProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IntakeSubmitRequest"
+      responses:
+        "200":
+          description: Built UserProfile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntakeSubmitResponse"
+
   /atlas/roadmap:
     post:
       operationId: atlasGenerateRoadmap
@@ -191,6 +229,102 @@ components:
         - constraints
         - targetTimelineWeeks
         - notes
+
+    IntakeQuestionType:
+      type: string
+      enum:
+        - short_text
+        - long_text
+        - single_select
+        - multi_select
+        - number
+
+    IntakeQuestion:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Stable identifier used as the answer key.
+        label:
+          type: string
+          description: The question shown to the user.
+        helper:
+          type: string
+          description: Optional helper subtext giving context.
+        type:
+          $ref: "#/components/schemas/IntakeQuestionType"
+        placeholder:
+          type: string
+        options:
+          type: array
+          description: Required for single_select / multi_select question types.
+          items:
+            type: string
+        unit:
+          type: string
+          description: Optional unit hint for number questions (e.g. "minutes", "weeks").
+        required:
+          type: boolean
+      required: [id, label, type, required]
+
+    IntakeQuestionsRequest:
+      type: object
+      properties:
+        goalType:
+          $ref: "#/components/schemas/GoalType"
+        goalTitle:
+          type: string
+          description: User-supplied free-form goal description.
+      required: [goalType, goalTitle]
+
+    IntakeQuestionsResponse:
+      type: object
+      properties:
+        introMessage:
+          type: string
+          description: One short sentence Atlas says before the questions.
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntakeQuestion"
+      required: [introMessage, questions]
+
+    IntakeAnswer:
+      type: object
+      properties:
+        questionId:
+          type: string
+        value:
+          type: string
+          description: Stringified answer (single value, comma-joined for multi_select, numeric as string).
+      required: [questionId, value]
+
+    IntakeSubmitRequest:
+      type: object
+      properties:
+        goalType:
+          $ref: "#/components/schemas/GoalType"
+        goalTitle:
+          type: string
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntakeQuestion"
+        answers:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntakeAnswer"
+      required: [goalType, goalTitle, questions, answers]
+
+    IntakeSubmitResponse:
+      type: object
+      properties:
+        profile:
+          $ref: "#/components/schemas/UserProfile"
+        followUp:
+          type: string
+          description: Optional short note Atlas wants to add before generating the roadmap.
+      required: [profile]
 
     OnboardingChatRequest:
       type: object

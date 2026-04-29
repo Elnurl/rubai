@@ -6,6 +6,8 @@ import {
   AtlasGenerateDailyPlanBody as atlasGenerateDailyPlanBody,
   AtlasCoachBody as atlasCoachBody,
   AtlasAdaptPlanBody as atlasAdaptPlanBody,
+  AtlasIntakeQuestionsBody as atlasIntakeQuestionsBody,
+  AtlasIntakeSubmitBody as atlasIntakeSubmitBody,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -466,6 +468,181 @@ router.post("/adapt", async (req, res) => {
     res.json(data);
   } catch (err) {
     req.log.error({ err }, "adapt request failed");
+    res.status(500).json({ error: "AI request failed" });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Intake form: the AI generates a tailored questionnaire and then converts the
+// answers into a UserProfile. This replaces the old one-question-at-a-time
+// chat flow for users who prefer to fill everything in a single screen.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const intakeQuestionsSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    introMessage: { type: "string" },
+    questions: {
+      type: "array",
+      minItems: 6,
+      maxItems: 10,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          id: { type: "string" },
+          label: { type: "string" },
+          helper: { type: "string" },
+          type: {
+            type: "string",
+            enum: ["short_text", "long_text", "single_select", "multi_select", "number"],
+          },
+          placeholder: { type: "string" },
+          options: { type: "array", items: { type: "string" } },
+          unit: { type: "string" },
+          required: { type: "boolean" },
+        },
+        required: ["id", "label", "helper", "type", "placeholder", "options", "unit", "required"],
+      },
+    },
+  },
+  required: ["introMessage", "questions"],
+} as const;
+
+const intakeProfileSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    profile: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        goalStatement: { type: "string" },
+        currentLevel: { type: "string" },
+        availableTimePerDayMinutes: { type: "integer" },
+        financialCondition: { type: "string" },
+        productivityPattern: { type: "string" },
+        consistencyLevel: { type: "string" },
+        constraints: { type: "array", items: { type: "string" } },
+        targetTimelineWeeks: { type: "integer" },
+        notes: { type: "string" },
+      },
+      required: [
+        "goalStatement",
+        "currentLevel",
+        "availableTimePerDayMinutes",
+        "financialCondition",
+        "productivityPattern",
+        "consistencyLevel",
+        "constraints",
+        "targetTimelineWeeks",
+        "notes",
+      ],
+    },
+    followUp: { type: "string" },
+  },
+  required: ["profile", "followUp"],
+} as const;
+
+router.post("/intake-questions", async (req, res) => {
+  const parsed = atlasIntakeQuestionsBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const { goalType, goalTitle } = parsed.data;
+  const label = resolveGoalLabel(goalType, goalType === "custom" ? goalTitle : undefined);
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: MODEL,
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "intake_questions", strict: true, schema: intakeQuestionsSchema },
+      },
+      messages: [
+        {
+          role: "system",
+          content: `You are Atlas, a strategic AI execution coach. Generate a focused intake questionnaire so the system can build a real, personalized roadmap for the user's goal. The user described their goal as: "${goalTitle}" (category: ${label}).
+
+Rules:
+- 6 to 10 questions, no more.
+- Mix of types: short_text, long_text, single_select (3-5 options), multi_select (3-6 options), number (use a unit like "minutes" or "weeks").
+- Always include questions that capture: target outcome, current starting point, daily time available (number, unit "minutes"), productivity window, consistency, constraints/blockers, and target timeline.
+- Tailor 2-3 questions to the SPECIFIC goal — don't ask generic things if the goal is concrete (e.g. for "learn Spanish", ask about target proficiency level; for "buy a car", ask about budget and timeline).
+- Question ids must be lowercase snake_case identifiers.
+- helper text is short context (one sentence). Provide an empty string when no helper is needed.
+- placeholder is short example text. Provide an empty string when not applicable.
+- options must be a non-empty array for single_select / multi_select. Use an empty array for other types.
+- unit is required for "number" questions ("minutes", "weeks", "USD", etc). Use an empty string for other types.
+- introMessage is one warm sentence (under 25 words) introducing what comes next. No emojis, no markdown.`,
+        },
+        {
+          role: "user",
+          content: `Generate the intake questionnaire for the goal: ${goalTitle}.`,
+        },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content ?? "{}";
+    const data = JSON.parse(raw);
+    res.json(data);
+  } catch (err) {
+    req.log.error({ err }, "intake-questions request failed");
+    res.status(500).json({ error: "AI request failed" });
+  }
+});
+
+router.post("/intake-submit", async (req, res) => {
+  const parsed = atlasIntakeSubmitBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const { goalType, goalTitle, questions, answers } = parsed.data;
+  const label = resolveGoalLabel(goalType, goalType === "custom" ? goalTitle : undefined);
+
+  const transcript = questions
+    .map((q) => {
+      const answer = answers.find((a) => a.questionId === q.id)?.value ?? "";
+      return `Q: ${q.label}\nA: ${answer || "(no answer)"}`;
+    })
+    .join("\n\n");
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: MODEL,
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "intake_profile", strict: true, schema: intakeProfileSchema },
+      },
+      messages: [
+        {
+          role: "system",
+          content: `You are Atlas's intake processor. Convert the user's questionnaire answers into a complete UserProfile that the roadmap engine can use.
+
+Rules:
+- Use the user's actual words where possible. Do not invent constraints they didn't mention.
+- availableTimePerDayMinutes must be a realistic integer derived from their answer (default 30 if missing).
+- targetTimelineWeeks must be a realistic integer (default 12 if missing).
+- constraints is a list of short imperative phrases (e.g. "Travels for work weekly").
+- notes is a one-paragraph synthesis (max 60 words) summarising the user.
+- followUp is one short, warm sentence Atlas wants to say before generating the roadmap. No emojis, no markdown.
+- Goal category: ${label}.`,
+        },
+        {
+          role: "user",
+          content: `Goal: ${goalTitle}\n\nIntake answers:\n${transcript}`,
+        },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content ?? "{}";
+    const data = JSON.parse(raw);
+    res.json(data);
+  } catch (err) {
+    req.log.error({ err }, "intake-submit request failed");
     res.status(500).json({ error: "AI request failed" });
   }
 });

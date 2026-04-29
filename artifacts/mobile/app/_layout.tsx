@@ -42,7 +42,8 @@ function RootLayoutNav() {
     >
       <Stack.Screen name="index" />
       <Stack.Screen name="welcome" />
-      <Stack.Screen name="onboarding" />
+      <Stack.Screen name="new-goal" />
+      <Stack.Screen name="intake" />
       <Stack.Screen name="generating" />
       <Stack.Screen name="(tabs)" />
     </Stack>

@@ -13,6 +13,7 @@ import {
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { ChatBubble } from "@/components/ChatBubble";
 import { EmptyState } from "@/components/EmptyState";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -38,12 +39,12 @@ export default function CoachScreen() {
   const bottomPad = isWeb ? 100 : insets.bottom + 90;
 
   const {
-    profile,
-    roadmap,
-    dailyPlan,
-    behavioral,
-    coachHistory,
-    setCoachHistory,
+    activeProfile,
+    activeRoadmap,
+    activeDailyPlan,
+    activeBehavioral,
+    activeCoachHistory,
+    setActiveCoachHistory,
   } = useAtlas();
 
   const coach = useAtlasCoach();
@@ -51,57 +52,54 @@ export default function CoachScreen() {
   const listRef = useRef<FlatList<ChatMessage>>(null);
 
   useEffect(() => {
-    if (coachHistory.length === 0 && profile && roadmap) {
+    if (activeCoachHistory.length === 0 && activeProfile && activeRoadmap) {
       const opener: ChatMessage = {
         role: "assistant",
-        content: `I'm here. We're working on ${roadmap.headline.toLowerCase()}. Tell me what's on your mind, what got in the way, or what you want to push on.`,
+        content: `I'm here. We're working on ${activeRoadmap.headline.toLowerCase()}. Tell me what's on your mind, what got in the way, or what you want to push on.`,
       };
-      void setCoachHistory([opener]);
+      void setActiveCoachHistory([opener]);
     }
-  }, [coachHistory.length, profile, roadmap, setCoachHistory]);
+  }, [activeCoachHistory.length, activeProfile, activeRoadmap, setActiveCoachHistory]);
 
   const send = async (text: string) => {
     const message = text.trim();
-    if (!message || !profile || !roadmap || coach.isPending) return;
+    if (!message || !activeProfile || !activeRoadmap || coach.isPending) return;
     setDraft("");
 
     const userMsg: ChatMessage = { role: "user", content: message };
-    const newHistory = [...coachHistory, userMsg];
-    await setCoachHistory(newHistory);
+    const newHistory = [...activeCoachHistory, userMsg];
+    await setActiveCoachHistory(newHistory);
 
     try {
       const res = await coach.mutateAsync({
         data: {
-          profile,
-          roadmap,
-          todayPlan: dailyPlan?.plan,
-          behavioral,
-          history: coachHistory.slice(-10),
+          profile: activeProfile,
+          roadmap: activeRoadmap,
+          todayPlan: activeDailyPlan?.plan,
+          behavioral: activeBehavioral,
+          history: activeCoachHistory.slice(-10),
           message,
         },
       });
-      const assistantMsg: ChatMessage = {
-        role: "assistant",
-        content: res.reply,
-      };
-      await setCoachHistory([...newHistory, assistantMsg]);
+      const assistantMsg: ChatMessage = { role: "assistant", content: res.reply };
+      await setActiveCoachHistory([...newHistory, assistantMsg]);
     } catch {
       const errMsg: ChatMessage = {
         role: "assistant",
         content:
           "Lost the line for a moment. Send that again and we'll pick it back up.",
       };
-      await setCoachHistory([...newHistory, errMsg]);
+      await setActiveCoachHistory([...newHistory, errMsg]);
     }
   };
 
-  if (!profile || !roadmap) {
+  if (!activeProfile || !activeRoadmap) {
     return (
       <View style={[styles.root, { backgroundColor: colors.background, paddingTop: topPad }]}>
         <EmptyState
           icon="message-circle"
-          title="Coach unlocks after onboarding"
-          description="Finish setting up your goal first."
+          title="Coach unlocks after intake"
+          description="Add a goal and finish the intake form first."
         />
       </View>
     );
@@ -114,12 +112,21 @@ export default function CoachScreen() {
       style={[styles.root, { backgroundColor: colors.background }]}
     >
       <View style={[styles.header, { paddingTop: topPad }]}>
-        <SectionHeader eyebrow="COACH" title="Atlas" subtitle={`Working on: ${roadmap.headline}`} />
+        <View style={styles.headerInner}>
+          <View style={{ flex: 1 }}>
+            <SectionHeader
+              eyebrow="COACH"
+              title="Atlas"
+              subtitle={`Working on: ${activeRoadmap.headline}`}
+            />
+          </View>
+          <ActiveGoalChip />
+        </View>
       </View>
 
       <FlatList
         ref={listRef}
-        data={coachHistory}
+        data={activeCoachHistory}
         keyExtractor={(_, i) => String(i)}
         contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8 }}
         renderItem={({ item }) => <ChatBubble role={item.role} content={item.content} />}
@@ -153,7 +160,7 @@ export default function CoachScreen() {
           },
         ]}
       >
-        {coachHistory.length <= 1 && (
+        {activeCoachHistory.length <= 1 && (
           <View style={styles.suggestions}>
             {SUGGESTIONS.map((s) => (
               <Pressable
@@ -228,6 +235,12 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 22,
     paddingBottom: 12,
+  },
+  headerInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
   typing: {
     flexDirection: "row",

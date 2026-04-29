@@ -9,16 +9,24 @@ import { useAtlas } from "@/providers/AtlasProvider";
 export default function IndexScreen() {
   const router = useRouter();
   const colors = useColors();
-  const { loaded, profile, roadmap } = useAtlas();
+  const { loaded, goals, pendingDraft } = useAtlas();
 
   useEffect(() => {
     if (!loaded) return;
-    if (profile && roadmap) {
+    if (pendingDraft) {
+      if (pendingDraft.stage === "ready_to_generate") {
+        router.replace("/generating");
+      } else {
+        router.replace("/intake");
+      }
+      return;
+    }
+    if (goals.length > 0) {
       router.replace("/(tabs)");
     } else {
       router.replace("/welcome");
     }
-  }, [loaded, profile, roadmap, router]);
+  }, [loaded, goals.length, pendingDraft, router]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

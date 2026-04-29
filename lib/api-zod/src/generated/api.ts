@@ -77,6 +77,144 @@ export const AtlasOnboardingChatResponse = zod.object({
 });
 
 /**
+ * @summary Generate a tailored intake questionnaire for the user's goal
+ */
+export const AtlasIntakeQuestionsBody = zod.object({
+  goalType: zod.enum([
+    "ielts",
+    "car",
+    "programming",
+    "fitness",
+    "finance",
+    "custom",
+  ]),
+  goalTitle: zod.string().describe("User-supplied free-form goal description."),
+});
+
+export const AtlasIntakeQuestionsResponse = zod.object({
+  introMessage: zod
+    .string()
+    .describe("One short sentence Atlas says before the questions."),
+  questions: zod.array(
+    zod.object({
+      id: zod.string().describe("Stable identifier used as the answer key."),
+      label: zod.string().describe("The question shown to the user."),
+      helper: zod
+        .string()
+        .optional()
+        .describe("Optional helper subtext giving context."),
+      type: zod.enum([
+        "short_text",
+        "long_text",
+        "single_select",
+        "multi_select",
+        "number",
+      ]),
+      placeholder: zod.string().optional(),
+      options: zod
+        .array(zod.string())
+        .optional()
+        .describe("Required for single_select \/ multi_select question types."),
+      unit: zod
+        .string()
+        .optional()
+        .describe(
+          'Optional unit hint for number questions (e.g. \"minutes\", \"weeks\").',
+        ),
+      required: zod.boolean(),
+    }),
+  ),
+});
+
+/**
+ * @summary Convert intake answers into a complete UserProfile
+ */
+export const AtlasIntakeSubmitBody = zod.object({
+  goalType: zod.enum([
+    "ielts",
+    "car",
+    "programming",
+    "fitness",
+    "finance",
+    "custom",
+  ]),
+  goalTitle: zod.string(),
+  questions: zod.array(
+    zod.object({
+      id: zod.string().describe("Stable identifier used as the answer key."),
+      label: zod.string().describe("The question shown to the user."),
+      helper: zod
+        .string()
+        .optional()
+        .describe("Optional helper subtext giving context."),
+      type: zod.enum([
+        "short_text",
+        "long_text",
+        "single_select",
+        "multi_select",
+        "number",
+      ]),
+      placeholder: zod.string().optional(),
+      options: zod
+        .array(zod.string())
+        .optional()
+        .describe("Required for single_select \/ multi_select question types."),
+      unit: zod
+        .string()
+        .optional()
+        .describe(
+          'Optional unit hint for number questions (e.g. \"minutes\", \"weeks\").',
+        ),
+      required: zod.boolean(),
+    }),
+  ),
+  answers: zod.array(
+    zod.object({
+      questionId: zod.string(),
+      value: zod
+        .string()
+        .describe(
+          "Stringified answer (single value, comma-joined for multi_select, numeric as string).",
+        ),
+    }),
+  ),
+});
+
+export const AtlasIntakeSubmitResponse = zod.object({
+  profile: zod.object({
+    goalType: zod.enum([
+      "ielts",
+      "car",
+      "programming",
+      "fitness",
+      "finance",
+      "custom",
+    ]),
+    customGoalTitle: zod
+      .string()
+      .optional()
+      .describe(
+        'User-supplied goal title; only set when goalType is \"custom\".',
+      ),
+    goalStatement: zod.string(),
+    currentLevel: zod.string(),
+    availableTimePerDayMinutes: zod.number(),
+    financialCondition: zod.string(),
+    productivityPattern: zod.string(),
+    consistencyLevel: zod.string(),
+    constraints: zod.array(zod.string()),
+    targetTimelineWeeks: zod.number(),
+    notes: zod.string(),
+  }),
+  followUp: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional short note Atlas wants to add before generating the roadmap.",
+    ),
+});
+
+/**
  * @summary Generate a personalized multi-phase roadmap from the user's profile
  */
 export const AtlasGenerateRoadmapBody = zod.object({

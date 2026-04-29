@@ -24,6 +24,10 @@ import type {
   DailyPlan,
   DailyPlanRequest,
   HealthStatus,
+  IntakeQuestionsRequest,
+  IntakeQuestionsResponse,
+  IntakeSubmitRequest,
+  IntakeSubmitResponse,
   OnboardingChatRequest,
   OnboardingChatResponse,
   Roadmap,
@@ -199,6 +203,178 @@ export const useAtlasOnboardingChat = <
   TContext
 > => {
   return useMutation(getAtlasOnboardingChatMutationOptions(options));
+};
+
+/**
+ * @summary Generate a tailored intake questionnaire for the user's goal
+ */
+export const getAtlasIntakeQuestionsUrl = () => {
+  return `/api/atlas/intake-questions`;
+};
+
+export const atlasIntakeQuestions = async (
+  intakeQuestionsRequest: IntakeQuestionsRequest,
+  options?: RequestInit,
+): Promise<IntakeQuestionsResponse> => {
+  return customFetch<IntakeQuestionsResponse>(getAtlasIntakeQuestionsUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(intakeQuestionsRequest),
+  });
+};
+
+export const getAtlasIntakeQuestionsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasIntakeQuestions>>,
+    TError,
+    { data: BodyType<IntakeQuestionsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof atlasIntakeQuestions>>,
+  TError,
+  { data: BodyType<IntakeQuestionsRequest> },
+  TContext
+> => {
+  const mutationKey = ["atlasIntakeQuestions"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof atlasIntakeQuestions>>,
+    { data: BodyType<IntakeQuestionsRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return atlasIntakeQuestions(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AtlasIntakeQuestionsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof atlasIntakeQuestions>>
+>;
+export type AtlasIntakeQuestionsMutationBody = BodyType<IntakeQuestionsRequest>;
+export type AtlasIntakeQuestionsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Generate a tailored intake questionnaire for the user's goal
+ */
+export const useAtlasIntakeQuestions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasIntakeQuestions>>,
+    TError,
+    { data: BodyType<IntakeQuestionsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof atlasIntakeQuestions>>,
+  TError,
+  { data: BodyType<IntakeQuestionsRequest> },
+  TContext
+> => {
+  return useMutation(getAtlasIntakeQuestionsMutationOptions(options));
+};
+
+/**
+ * @summary Convert intake answers into a complete UserProfile
+ */
+export const getAtlasIntakeSubmitUrl = () => {
+  return `/api/atlas/intake-submit`;
+};
+
+export const atlasIntakeSubmit = async (
+  intakeSubmitRequest: IntakeSubmitRequest,
+  options?: RequestInit,
+): Promise<IntakeSubmitResponse> => {
+  return customFetch<IntakeSubmitResponse>(getAtlasIntakeSubmitUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(intakeSubmitRequest),
+  });
+};
+
+export const getAtlasIntakeSubmitMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasIntakeSubmit>>,
+    TError,
+    { data: BodyType<IntakeSubmitRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof atlasIntakeSubmit>>,
+  TError,
+  { data: BodyType<IntakeSubmitRequest> },
+  TContext
+> => {
+  const mutationKey = ["atlasIntakeSubmit"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof atlasIntakeSubmit>>,
+    { data: BodyType<IntakeSubmitRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return atlasIntakeSubmit(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AtlasIntakeSubmitMutationResult = NonNullable<
+  Awaited<ReturnType<typeof atlasIntakeSubmit>>
+>;
+export type AtlasIntakeSubmitMutationBody = BodyType<IntakeSubmitRequest>;
+export type AtlasIntakeSubmitMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Convert intake answers into a complete UserProfile
+ */
+export const useAtlasIntakeSubmit = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasIntakeSubmit>>,
+    TError,
+    { data: BodyType<IntakeSubmitRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof atlasIntakeSubmit>>,
+  TError,
+  { data: BodyType<IntakeSubmitRequest> },
+  TContext
+> => {
+  return useMutation(getAtlasIntakeSubmitMutationOptions(options));
 };
 
 /**
