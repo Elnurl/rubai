@@ -174,7 +174,7 @@ export default function AccountScreen() {
                   { color: colors.foreground, fontFamily: "Inter_400Regular" },
                 ]}
               >
-                Run a quick re-evaluation. Atlas will look at your last two
+                Run a quick re-evaluation. RubAI will look at your last two
                 weeks and decide whether to soften, hold, or push the plan.
               </Text>
               <AtlasButton

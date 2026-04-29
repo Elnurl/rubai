@@ -258,7 +258,7 @@ export default function TodayScreen() {
                   { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
                 ]}
               >
-                Atlas is preparing today's tasks
+                RubAI is preparing today's tasks
               </Text>
             </View>
           ) : activeDailyPlan ? (

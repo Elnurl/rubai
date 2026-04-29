@@ -36,7 +36,7 @@ export function AtlasLogo({ size = "md" }: Props) {
           },
         ]}
       >
-        atlas
+        rubai
       </Text>
     </View>
   );

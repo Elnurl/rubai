@@ -1,6 +1,6 @@
-# Atlas — AI Goal Coach
+# RubAI — AI Goal Coach
 
-A mobile (Expo) AI-driven execution coach. Users describe ANY goal (custom or one of five templates: IELTS prep, programming, fitness, financial improvement, buying a car). Atlas then generates a tailored intake form, synthesises a structured `UserProfile`, builds a multi-phase roadmap, produces a fresh daily plan, and chats as an adaptive coach.
+A mobile (Expo) AI-driven execution coach. Users describe ANY goal (custom or one of five templates: IELTS prep, programming, fitness, financial improvement, buying a car). RubAI then generates a tailored intake form, synthesises a structured `UserProfile`, builds a multi-phase roadmap, produces a fresh daily plan, and chats as an adaptive coach.
 
 The app supports MULTIPLE concurrent goals. The number of active goals is gated by a (demo) subscription tier:
 - **Free** — 1 goal
