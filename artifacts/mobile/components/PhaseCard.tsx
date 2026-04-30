@@ -9,9 +9,11 @@ type Props = {
   phase: RoadmapPhase;
   index: number;
   isActive: boolean;
+  /** When true, renders a subtle "Updated" badge to flag a phase the AI just modified. */
+  updated?: boolean;
 };
 
-export function PhaseCard({ phase, index, isActive }: Props) {
+export function PhaseCard({ phase, index, isActive, updated = false }: Props) {
   const colors = useColors();
 
   return (
@@ -65,18 +67,38 @@ export function PhaseCard({ phase, index, isActive }: Props) {
             Week {phase.startWeek} – Week {phase.endWeek}
           </Text>
         </View>
-        {isActive && (
-          <View style={[styles.activeChip, { backgroundColor: colors.primary }]}>
-            <Text
+        <View style={styles.headerChips}>
+          {updated && (
+            <View
               style={[
-                styles.activeChipText,
-                { color: colors.primaryForeground, fontFamily: "Inter_600SemiBold" },
+                styles.updatedChip,
+                { borderColor: colors.accent, backgroundColor: colors.accent + "15" },
               ]}
             >
-              NOW
-            </Text>
-          </View>
-        )}
+              <Feather name="zap" size={10} color={colors.accent} />
+              <Text
+                style={[
+                  styles.activeChipText,
+                  { color: colors.accent, fontFamily: "Inter_600SemiBold" },
+                ]}
+              >
+                UPDATED
+              </Text>
+            </View>
+          )}
+          {isActive && (
+            <View style={[styles.activeChip, { backgroundColor: colors.primary }]}>
+              <Text
+                style={[
+                  styles.activeChipText,
+                  { color: colors.primaryForeground, fontFamily: "Inter_600SemiBold" },
+                ]}
+              >
+                NOW
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
 
       <Text
@@ -165,10 +187,24 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     letterSpacing: 0.4,
   },
+  headerChips: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   activeChip: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
+  },
+  updatedChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
   },
   activeChipText: {
     fontSize: 10,

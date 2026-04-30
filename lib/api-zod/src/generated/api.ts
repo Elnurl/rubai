@@ -830,3 +830,229 @@ export const AtlasBehavioralProfileResponse = zod.object({
       "One short sentence the user sees as a fresh insight after a refresh.",
     ),
 });
+
+/**
+ * @summary Evolve the existing roadmap based on the learned profile, behaviour and reflections
+ */
+export const AtlasEvolveRoadmapBody = zod.object({
+  profile: zod.object({
+    goalType: zod.enum([
+      "ielts",
+      "car",
+      "programming",
+      "fitness",
+      "finance",
+      "custom",
+    ]),
+    customGoalTitle: zod
+      .string()
+      .optional()
+      .describe(
+        'User-supplied goal title; only set when goalType is \"custom\".',
+      ),
+    goalStatement: zod.string(),
+    currentLevel: zod.string(),
+    availableTimePerDayMinutes: zod.number(),
+    financialCondition: zod.string(),
+    productivityPattern: zod.string(),
+    consistencyLevel: zod.string(),
+    constraints: zod.array(zod.string()),
+    targetTimelineWeeks: zod.number(),
+    notes: zod.string(),
+  }),
+  currentRoadmap: zod.object({
+    goalType: zod.enum([
+      "ielts",
+      "car",
+      "programming",
+      "fitness",
+      "finance",
+      "custom",
+    ]),
+    headline: zod.string(),
+    summary: zod.string(),
+    totalWeeks: zod.number(),
+    strategy: zod.string(),
+    riskAnalysis: zod.array(zod.string()),
+    phases: zod.array(
+      zod.object({
+        id: zod.string(),
+        title: zod.string(),
+        focus: zod.string(),
+        startWeek: zod.number(),
+        endWeek: zod.number(),
+        milestones: zod.array(
+          zod.object({
+            id: zod.string(),
+            title: zod.string(),
+            description: zod.string(),
+            weekNumber: zod.number(),
+          }),
+        ),
+      }),
+    ),
+  }),
+  behavioral: zod.object({
+    completedTaskTitles: zod.array(zod.string()),
+    missedTaskTitles: zod.array(zod.string()),
+    currentStreakDays: zod.number(),
+    completionRate: zod.number(),
+    recentNotes: zod.array(zod.string()),
+  }),
+  learnedProfile: zod
+    .union([
+      zod
+        .object({
+          summary: zod
+            .string()
+            .describe(
+              "2-3 sentence narrative description of how this user functions psychologically and operationally.",
+            ),
+          consistencyLevel: zod.enum([
+            "very_low",
+            "low",
+            "moderate",
+            "high",
+            "very_high",
+          ]),
+          workloadTolerance: zod.enum(["light", "moderate", "heavy"]),
+          motivationTrend: zod.enum(["rising", "steady", "declining"]),
+          focusStyle: zod
+            .string()
+            .describe(
+              'e.g. \"deep blocks\", \"short sprints\", \"context-switcher\"',
+            ),
+          learningPreference: zod
+            .string()
+            .describe(
+              'e.g. \"practical-first\", \"theoretical-then-practice\", \"mixed\"',
+            ),
+          peakHours: zod
+            .array(zod.string())
+            .describe(
+              'Time windows when the user is most productive, e.g. [\"07:00-09:00\", \"20:00-22:00\"].',
+            ),
+          failurePatterns: zod
+            .array(zod.string())
+            .describe(
+              'Recurring reasons tasks get missed, e.g. \"low energy after work\".',
+            ),
+          strengths: zod
+            .array(zod.string())
+            .describe(
+              'What this user is reliably good at, e.g. \"morning execution\", \"short focused sessions\".',
+            ),
+          recommendedAdjustments: zod
+            .array(zod.string())
+            .describe("Concrete short imperatives the planner should apply."),
+          updatedAt: zod.string(),
+        })
+        .describe(
+          "Cumulative behavioural identity model the AI builds over time from history and reflections.",
+        ),
+      zod.null(),
+    ])
+    .optional()
+    .describe("Cumulative learned behavioural profile, if available."),
+  recentReflections: zod
+    .array(
+      zod.object({
+        taskId: zod.string(),
+        taskTitle: zod.string(),
+        date: zod.string(),
+        completed: zod.boolean(),
+        reasonTag: zod
+          .enum([
+            "easy",
+            "just_right",
+            "tough",
+            "skipped",
+            "energized",
+            "tired",
+            "distracted",
+            "focused",
+            "no_time",
+            "blocked",
+          ])
+          .optional(),
+        note: zod.string().optional(),
+        reflectedAt: zod.string(),
+      }),
+    )
+    .describe("Last ~20 reflections."),
+  currentWeek: zod
+    .number()
+    .describe("Which week of the plan the user is currently on."),
+  trigger: zod
+    .enum(["manual", "auto"])
+    .describe("Whether this evolution was user-initiated or automatic."),
+});
+
+export const AtlasEvolveRoadmapResponse = zod.object({
+  evolvedRoadmap: zod.object({
+    goalType: zod.enum([
+      "ielts",
+      "car",
+      "programming",
+      "fitness",
+      "finance",
+      "custom",
+    ]),
+    headline: zod.string(),
+    summary: zod.string(),
+    totalWeeks: zod.number(),
+    strategy: zod.string(),
+    riskAnalysis: zod.array(zod.string()),
+    phases: zod.array(
+      zod.object({
+        id: zod.string(),
+        title: zod.string(),
+        focus: zod.string(),
+        startWeek: zod.number(),
+        endWeek: zod.number(),
+        milestones: zod.array(
+          zod.object({
+            id: zod.string(),
+            title: zod.string(),
+            description: zod.string(),
+            weekNumber: zod.number(),
+          }),
+        ),
+      }),
+    ),
+  }),
+  hasChanged: zod
+    .boolean()
+    .describe(
+      "False when the roadmap should remain as-is (no meaningful evolution warranted).",
+    ),
+  changeSummary: zod
+    .string()
+    .describe(
+      "One short paragraph (under 60 words) summarizing what was changed and why, in plain language.",
+    ),
+  phaseChanges: zod
+    .array(
+      zod
+        .object({
+          phaseId: zod.string(),
+          phaseTitle: zod.string(),
+          changeType: zod.enum(["added", "removed", "modified", "unchanged"]),
+          summary: zod
+            .string()
+            .describe(
+              "One sentence explaining what changed for this phase, in plain language.",
+            ),
+        })
+        .describe("Structured per-phase summary of how the roadmap changed."),
+    )
+    .describe(
+      "One entry per phase in the evolved roadmap describing how it changed.",
+    ),
+  rationale: zod
+    .string()
+    .describe(
+      "Brief explanation of the reasoning the AI used (under 80 words).",
+    ),
+  evolvedAt: zod.string(),
+});

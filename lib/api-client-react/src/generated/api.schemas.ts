@@ -329,3 +329,62 @@ export interface BehavioralProfileResponse {
   /** One short sentence the user sees as a fresh insight after a refresh. */
   aiInsight: string;
 }
+
+export type PhaseChangeType =
+  (typeof PhaseChangeType)[keyof typeof PhaseChangeType];
+
+export const PhaseChangeType = {
+  added: "added",
+  removed: "removed",
+  modified: "modified",
+  unchanged: "unchanged",
+} as const;
+
+/**
+ * Structured per-phase summary of how the roadmap changed.
+ */
+export interface PhaseChange {
+  phaseId: string;
+  phaseTitle: string;
+  changeType: PhaseChangeType;
+  /** One sentence explaining what changed for this phase, in plain language. */
+  summary: string;
+}
+
+/**
+ * Whether this evolution was user-initiated or automatic.
+ */
+export type RoadmapEvolutionRequestTrigger =
+  (typeof RoadmapEvolutionRequestTrigger)[keyof typeof RoadmapEvolutionRequestTrigger];
+
+export const RoadmapEvolutionRequestTrigger = {
+  manual: "manual",
+  auto: "auto",
+} as const;
+
+export interface RoadmapEvolutionRequest {
+  profile: UserProfile;
+  currentRoadmap: Roadmap;
+  behavioral: BehavioralSnapshot;
+  /** Cumulative learned behavioural profile, if available. */
+  learnedProfile?: BehavioralProfile | null;
+  /** Last ~20 reflections. */
+  recentReflections: ReflectionEntry[];
+  /** Which week of the plan the user is currently on. */
+  currentWeek: number;
+  /** Whether this evolution was user-initiated or automatic. */
+  trigger: RoadmapEvolutionRequestTrigger;
+}
+
+export interface RoadmapEvolutionResponse {
+  evolvedRoadmap: Roadmap;
+  /** False when the roadmap should remain as-is (no meaningful evolution warranted). */
+  hasChanged: boolean;
+  /** One short paragraph (under 60 words) summarizing what was changed and why, in plain language. */
+  changeSummary: string;
+  /** One entry per phase in the evolved roadmap describing how it changed. */
+  phaseChanges: PhaseChange[];
+  /** Brief explanation of the reasoning the AI used (under 80 words). */
+  rationale: string;
+  evolvedAt: string;
+}

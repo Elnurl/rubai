@@ -64,6 +64,23 @@ The Account tab shows an Insights section: profile summary, trait grid (consiste
 
 `Goal`s stored before this layer are backfilled at load time via `ensureGoalShape()` so the new fields are always defined.
 
+### Adaptive roadmap (Phase 2)
+
+The roadmap evolves over time so it stays accurate to how the user actually executes — it's not regenerated from scratch.
+
+`Goal` carries two more fields, also backfilled by `ensureGoalShape()`:
+- `roadmapEvolutions: RoadmapEvolutionEntry[]` — most-recent-first log of evolutions, capped at 10. Each entry holds `evolvedAt`, `trigger` (`manual` | `auto`), `changeSummary`, `rationale`, and `phaseChanges`.
+- `lastEvolvedAt: string | null` — drives both the auto-trigger throttle and the "Last evolved …" label in the UI.
+
+The provider exposes `applyRoadmapEvolution(goalId, roadmap, entry)`, `activeRoadmapEvolutions`, and `activeLastEvolvedAt`. All API + threshold logic lives in the `useEvolveRoadmap()` hook (`hooks/useEvolveRoadmap.ts`):
+- `evolve(trigger)` — always fires the request, applies the result, logs the entry. When the AI returns `hasChanged=false` the existing roadmap is kept but the entry is still recorded so the user sees we checked. The goal id and source roadmap are pinned at request-start, so a mid-flight goal switch can't land an evolution on the wrong goal.
+- `maybeAutoEvolve()` — fires only when there's a roadmap, a learned profile, ≥3 reflections since `lastEvolvedAt` (or ≥3 total if never evolved), and ≥3 days have passed.
+- A module-level `inFlightByGoal` map dedupes by goal id across hook instances, so a manual tap during an in-flight auto evolve coalesces into the same request rather than firing a second one.
+
+Auto-trigger is self-driven by a `useEffect` inside the hook keyed on `(activeGoalId, activeReflections.length, activeBehavioralProfile?.updatedAt, activeLastEvolvedAt)` — that way it always sees the freshly-flushed state instead of a stale closure from inline `.then(...)` callers. Today mounts the hook so a reflection submit will trigger it once the new profile and reflection have settled into context. Manual trigger lives in the new `AdaptiveEngineCard` at the top of the Roadmap tab — it shows the latest `changeSummary`, an expandable per-phase change list with ADDED / REMOVED / MODIFIED badges and the rationale, plus an "Evolve roadmap now" button. Phases that the latest evolution flagged as added or modified render an "UPDATED" chip on `PhaseCard`.
+
+The endpoint preserves progress: it keeps phase ids stable, only restructures upcoming phases, stays within ±2 weeks of the original total duration, and respects the learned profile's peak hours, workload tolerance and recommended adjustments.
+
 ### Storage migration
 
 On first load, the provider reads any pre-existing `atlas:v1:*` keys (the legacy single-goal layout) and migrates them into the new `atlas:v2:goals` array as a single goal with active focus. A `migrated` flag is set so the migration only runs once.

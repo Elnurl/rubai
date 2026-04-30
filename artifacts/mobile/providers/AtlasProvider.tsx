@@ -36,6 +36,7 @@ import {
   type AccountPrefs,
   type Goal,
   type IntakeDraft,
+  type RoadmapEvolutionEntry,
   type StoredDailyPlan,
   type Subscription,
   type SubscriptionTier,
@@ -70,6 +71,8 @@ type AtlasContextValue = AtlasState & {
   activeTaskHistory: TaskHistoryEntry[];
   activeReflections: ReflectionEntry[];
   activeBehavioralProfile: BehavioralProfile | null;
+  activeRoadmapEvolutions: RoadmapEvolutionEntry[];
+  activeLastEvolvedAt: string | null;
   activeBehavioral: BehavioralSnapshot;
   activeCurrentWeek: number;
   goalLimit: number;
@@ -87,6 +90,11 @@ type AtlasContextValue = AtlasState & {
   recordActiveTask: (entry: TaskHistoryEntry) => Promise<void>;
   recordActiveReflection: (entry: ReflectionEntry) => Promise<void>;
   setActiveBehavioralProfile: (profile: BehavioralProfile | null) => Promise<void>;
+  applyRoadmapEvolution: (
+    goalId: string,
+    evolvedRoadmap: Roadmap,
+    entry: RoadmapEvolutionEntry,
+  ) => Promise<void>;
   setActiveCoachHistory: (history: ChatMessage[]) => Promise<void>;
   appendActiveCoachMessage: (msg: ChatMessage) => Promise<void>;
 
@@ -175,19 +183,27 @@ async function migrateV1ToGoal(): Promise<Goal | null> {
     taskHistory: (v1.taskHistory as TaskHistoryEntry[] | null) ?? [],
     reflections: [],
     behavioralProfile: null,
+    roadmapEvolutions: [],
+    lastEvolvedAt: null,
   };
   await clearV1Storage();
   return goal;
 }
 
-// Backfill the new Phase 1 fields on goals stored before this update so the
-// rest of the provider can rely on them being defined.
+// Backfill any newer optional fields on goals stored before they existed so
+// the rest of the provider can rely on them being defined.
 function ensureGoalShape(goal: Goal): Goal {
-  if (goal.reflections && goal.behavioralProfile !== undefined) return goal;
+  const needsPhase1 =
+    !goal.reflections || goal.behavioralProfile === undefined;
+  const needsPhase2 =
+    !goal.roadmapEvolutions || goal.lastEvolvedAt === undefined;
+  if (!needsPhase1 && !needsPhase2) return goal;
   return {
     ...goal,
     reflections: goal.reflections ?? [],
     behavioralProfile: goal.behavioralProfile ?? null,
+    roadmapEvolutions: goal.roadmapEvolutions ?? [],
+    lastEvolvedAt: goal.lastEvolvedAt ?? null,
   };
 }
 
@@ -314,6 +330,8 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
         taskHistory: [],
         reflections: [],
         behavioralProfile: null,
+        roadmapEvolutions: [],
+        lastEvolvedAt: null,
       };
       const next = [...currentGoals, goal];
       await persistGoals(next);
@@ -433,6 +451,26 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     [updateActiveGoal],
   );
 
+  const applyRoadmapEvolution = useCallback(
+    async (
+      goalId: string,
+      evolvedRoadmap: Roadmap,
+      entry: RoadmapEvolutionEntry,
+    ) => {
+      // Route the write through `updateGoal(goalId, ...)` so a mid-flight goal
+      // switch can't land an evolution on the wrong goal — the caller pins the
+      // target by capturing `activeGoalId` at request start.
+      await updateGoal(goalId, (g) => ({
+        ...g,
+        roadmap: evolvedRoadmap,
+        // Most recent first, cap at 10 historical entries.
+        roadmapEvolutions: [entry, ...g.roadmapEvolutions].slice(0, 10),
+        lastEvolvedAt: entry.evolvedAt,
+      }));
+    },
+    [updateGoal],
+  );
+
   const setActiveCoachHistory = useCallback(
     async (history: ChatMessage[]) => {
       await updateActiveGoal((g) => ({ ...g, coachHistory: history.slice(-30) }));
@@ -541,6 +579,8 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     activeTaskHistory: activeGoal?.taskHistory ?? [],
     activeReflections: activeGoal?.reflections ?? [],
     activeBehavioralProfile: activeGoal?.behavioralProfile ?? null,
+    activeRoadmapEvolutions: activeGoal?.roadmapEvolutions ?? [],
+    activeLastEvolvedAt: activeGoal?.lastEvolvedAt ?? null,
     activeBehavioral,
     activeCurrentWeek,
     goalLimit,
@@ -556,6 +596,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     recordActiveTask,
     recordActiveReflection,
     setActiveBehavioralProfile,
+    applyRoadmapEvolution,
     setActiveCoachHistory,
     appendActiveCoachMessage,
     setPendingDraft,

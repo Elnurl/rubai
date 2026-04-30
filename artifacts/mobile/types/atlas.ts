@@ -5,6 +5,7 @@ import type {
   GoalType,
   IntakeAnswer,
   IntakeQuestion,
+  PhaseChange,
   ReflectionEntry,
   Roadmap,
   UserProfile,
@@ -14,6 +15,14 @@ import type { TaskHistoryEntry } from "@/lib/storage";
 export type StoredDailyPlan = {
   plan: DailyPlan;
   generatedAt: string;
+};
+
+export type RoadmapEvolutionEntry = {
+  evolvedAt: string;
+  trigger: "manual" | "auto";
+  changeSummary: string;
+  rationale: string;
+  phaseChanges: PhaseChange[];
 };
 
 export type Goal = {
@@ -27,6 +36,8 @@ export type Goal = {
   taskHistory: TaskHistoryEntry[];
   reflections: ReflectionEntry[];
   behavioralProfile: BehavioralProfile | null;
+  roadmapEvolutions: RoadmapEvolutionEntry[];
+  lastEvolvedAt: string | null;
 };
 
 export type SubscriptionTier = "free" | "pro" | "premium";

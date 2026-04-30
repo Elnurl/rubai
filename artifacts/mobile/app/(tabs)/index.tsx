@@ -21,6 +21,7 @@ import { SectionHeader } from "@/components/SectionHeader";
 import { TaskCard } from "@/components/TaskCard";
 import { profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
+import { useEvolveRoadmap } from "@/hooks/useEvolveRoadmap";
 import { todayISO } from "@/lib/storage";
 import { useAtlas } from "@/providers/AtlasProvider";
 import {
@@ -55,6 +56,9 @@ export default function TodayScreen() {
 
   const generate = useAtlasGenerateDailyPlan();
   const refreshProfile = useAtlasBehavioralProfile();
+  // Mount the hook so its self-driving effect runs while Today is open and
+  // can auto-evolve the roadmap right after a reflection updates state.
+  useEvolveRoadmap();
   const today = todayISO();
   const requestedRef = useRef<string | null>(null);
 
@@ -173,8 +177,11 @@ export default function TodayScreen() {
             : {}),
         },
       })
-      .then((res) => {
-        void setActiveBehavioralProfile(res.profile);
+      .then(async (res) => {
+        await setActiveBehavioralProfile(res.profile);
+        // Auto-evolution is fired by useEvolveRoadmap's self-driving effect
+        // once the new profile + reflection have flushed into context, so we
+        // don't call it inline here (avoids stale-closure misses).
       })
       .catch(() => {
         // Silent — background refresh; user keeps the app running.

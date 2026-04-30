@@ -9,6 +9,7 @@ import {
   AtlasIntakeQuestionsBody as atlasIntakeQuestionsBody,
   AtlasIntakeSubmitBody as atlasIntakeSubmitBody,
   AtlasBehavioralProfileBody as atlasBehavioralProfileBody,
+  AtlasEvolveRoadmapBody as atlasEvolveRoadmapBody,
 } from "@workspace/api-zod";
 
 function summarizeLearnedProfile(p: unknown): string {
@@ -850,6 +851,170 @@ ${reflectionLines || "(none yet)"}`,
     });
   } catch (err) {
     req.log.error({ err }, "behavioral-profile request failed");
+    res.status(500).json({ error: "AI request failed" });
+  }
+});
+
+const roadmapEvolutionSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    evolvedRoadmap: roadmapSchema,
+    hasChanged: { type: "boolean" },
+    changeSummary: { type: "string" },
+    phaseChanges: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          phaseId: { type: "string" },
+          phaseTitle: { type: "string" },
+          changeType: {
+            type: "string",
+            enum: ["added", "removed", "modified", "unchanged"],
+          },
+          summary: { type: "string" },
+        },
+        required: ["phaseId", "phaseTitle", "changeType", "summary"],
+      },
+    },
+    rationale: { type: "string" },
+  },
+  required: [
+    "evolvedRoadmap",
+    "hasChanged",
+    "changeSummary",
+    "phaseChanges",
+    "rationale",
+  ],
+} as const;
+
+router.post("/evolve-roadmap", async (req, res) => {
+  const parsed = atlasEvolveRoadmapBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const {
+    profile,
+    currentRoadmap,
+    behavioral,
+    learnedProfile,
+    recentReflections,
+    currentWeek,
+    trigger,
+  } = parsed.data;
+  const learnedSummary = summarizeLearnedProfile(learnedProfile);
+
+  const reflectionLines = recentReflections
+    .slice(-12)
+    .map(
+      (r) =>
+        `- ${r.date} • ${r.completed ? "done" : "skipped"} • ${r.taskTitle}${
+          r.reasonTag ? ` [${r.reasonTag}]` : ""
+        }${r.note ? ` — "${r.note}"` : ""}`,
+    )
+    .join("\n");
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: MODEL,
+      max_completion_tokens: 4500,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "roadmap_evolution",
+          strict: true,
+          schema: roadmapEvolutionSchema,
+        },
+      },
+      messages: [
+        {
+          role: "system",
+          content: `You are RubAI's adaptive planner. Your job is to EVOLVE an existing roadmap so it stays accurate to how this user is actually executing — not to rewrite it from scratch.
+
+Inputs you receive:
+- the user's stated UserProfile,
+- the CURRENT roadmap they are working through,
+- a behavioural snapshot (streak, completion rate, recent done/missed task titles),
+- their cumulative LEARNED behavioural profile if available (consistency, workload tolerance, motivation trend, focus style, peak hours, failure patterns, strengths, recommended adjustments),
+- recent REFLECTIONS (the user's own short notes on how tasks went),
+- the current week number in the plan,
+- whether this evolution was manual (user pressed a button) or auto (background trigger after enough new signal).
+
+Hard rules:
+- Preserve the user's progress: do NOT renumber or destroy phases that are already in the past or that the user is currently in unless they are clearly broken. Strongly prefer modifying upcoming phases (current week and beyond).
+- Preserve phase ids when keeping the same phase ("phase-1", "phase-2", ...). Use the same id format for any new phases.
+- Total phases must stay between 3 and 5. Each phase 2-6 weeks, with 2-4 milestones. Milestone ids: m-<phaseNumber>-<index>.
+- totalWeeks must be the sum of phase durations and respect the original target timeline (do not extend or shrink dramatically — keep within ±2 weeks).
+- Tasks/milestones must be CONCRETE and real-world.
+- No emojis. No markdown.
+
+Decision rules:
+- If the user is clearly struggling (low completion rate, declining motivation, repeated failure patterns, or "tough"/"no_time"/"tired" reflections dominating): ease upcoming phases — fewer or smaller milestones, more recovery, address the failure patterns directly.
+- If the user is consistently crushing it (high completion rate, "easy"/"just_right" with rising motivation): raise ambition in upcoming phases — add stretch milestones, advance the timeline.
+- If signal is mixed or weak: keep the roadmap structurally the same and only refine wording / re-sequence within phases. Set hasChanged=false if literally nothing meaningful would change.
+- Apply the LEARNED PROFILE's recommendedAdjustments and respect peakHours / workload tolerance when restructuring.
+
+Output:
+- evolvedRoadmap: the FULL new roadmap (same shape as the input, with goalType implied — you do not include goalType, the server adds it).
+- hasChanged: true if you changed anything meaningful, false if you returned the same roadmap unchanged.
+- changeSummary: ONE short paragraph (under 60 words) in plain language explaining what you changed and why. Reference the actual signal (e.g. "your last 5 reflections marked tasks as 'tough'").
+- phaseChanges: ONE entry per phase in the evolved roadmap, in order. changeType is "added" | "removed" | "modified" | "unchanged". Removed phases also appear here (use the removed phase's old id and title). summary: one sentence per phase.
+- rationale: brief explanation (under 80 words) of the reasoning, for the user to read if they want depth.`,
+        },
+        {
+          role: "user",
+          content: `TRIGGER: ${trigger}
+CURRENT WEEK: ${currentWeek}
+GOAL: ${resolveGoalLabel(profile.goalType, profile.customGoalTitle)}
+
+USER PROFILE:
+${JSON.stringify(profile, null, 2)}
+
+CURRENT ROADMAP:
+${JSON.stringify(currentRoadmap, null, 2)}
+
+BEHAVIOURAL SNAPSHOT:
+- streak: ${behavioral.currentStreakDays} days
+- completion rate: ${(behavioral.completionRate * 100).toFixed(0)}%
+- recent completed: ${behavioral.completedTaskTitles.join("; ") || "(none)"}
+- recent missed: ${behavioral.missedTaskTitles.join("; ") || "(none)"}
+
+LEARNED PROFILE:
+${learnedSummary || "(not yet available)"}
+
+RECENT REFLECTIONS (most recent last):
+${reflectionLines || "(none yet)"}`,
+        },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content ?? "{}";
+    const data = JSON.parse(raw) as {
+      evolvedRoadmap: Record<string, unknown>;
+      hasChanged: boolean;
+      changeSummary: string;
+      phaseChanges: Array<{
+        phaseId: string;
+        phaseTitle: string;
+        changeType: "added" | "removed" | "modified" | "unchanged";
+        summary: string;
+      }>;
+      rationale: string;
+    };
+
+    res.json({
+      evolvedRoadmap: { goalType: profile.goalType, ...data.evolvedRoadmap },
+      hasChanged: data.hasChanged,
+      changeSummary: data.changeSummary,
+      phaseChanges: data.phaseChanges,
+      rationale: data.rationale,
+      evolvedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "evolve-roadmap request failed");
     res.status(500).json({ error: "AI request failed" });
   }
 });

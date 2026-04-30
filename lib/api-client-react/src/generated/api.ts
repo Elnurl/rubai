@@ -33,6 +33,8 @@ import type {
   OnboardingChatRequest,
   OnboardingChatResponse,
   Roadmap,
+  RoadmapEvolutionRequest,
+  RoadmapEvolutionResponse,
   RoadmapRequest,
 } from "./api.schemas";
 
@@ -811,4 +813,90 @@ export const useAtlasBehavioralProfile = <
   TContext
 > => {
   return useMutation(getAtlasBehavioralProfileMutationOptions(options));
+};
+
+/**
+ * @summary Evolve the existing roadmap based on the learned profile, behaviour and reflections
+ */
+export const getAtlasEvolveRoadmapUrl = () => {
+  return `/api/atlas/evolve-roadmap`;
+};
+
+export const atlasEvolveRoadmap = async (
+  roadmapEvolutionRequest: RoadmapEvolutionRequest,
+  options?: RequestInit,
+): Promise<RoadmapEvolutionResponse> => {
+  return customFetch<RoadmapEvolutionResponse>(getAtlasEvolveRoadmapUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(roadmapEvolutionRequest),
+  });
+};
+
+export const getAtlasEvolveRoadmapMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasEvolveRoadmap>>,
+    TError,
+    { data: BodyType<RoadmapEvolutionRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof atlasEvolveRoadmap>>,
+  TError,
+  { data: BodyType<RoadmapEvolutionRequest> },
+  TContext
+> => {
+  const mutationKey = ["atlasEvolveRoadmap"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof atlasEvolveRoadmap>>,
+    { data: BodyType<RoadmapEvolutionRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return atlasEvolveRoadmap(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AtlasEvolveRoadmapMutationResult = NonNullable<
+  Awaited<ReturnType<typeof atlasEvolveRoadmap>>
+>;
+export type AtlasEvolveRoadmapMutationBody = BodyType<RoadmapEvolutionRequest>;
+export type AtlasEvolveRoadmapMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Evolve the existing roadmap based on the learned profile, behaviour and reflections
+ */
+export const useAtlasEvolveRoadmap = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasEvolveRoadmap>>,
+    TError,
+    { data: BodyType<RoadmapEvolutionRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof atlasEvolveRoadmap>>,
+  TError,
+  { data: BodyType<RoadmapEvolutionRequest> },
+  TContext
+> => {
+  return useMutation(getAtlasEvolveRoadmapMutationOptions(options));
 };

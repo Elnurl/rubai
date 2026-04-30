@@ -1,14 +1,16 @@
 import { Feather } from "@expo/vector-icons";
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ActiveGoalChip } from "@/components/ActiveGoalChip";
+import { AdaptiveEngineCard } from "@/components/AdaptiveEngineCard";
 import { EmptyState } from "@/components/EmptyState";
 import { PhaseCard } from "@/components/PhaseCard";
 import { SectionHeader } from "@/components/SectionHeader";
 import { profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
+import { useEvolveRoadmap } from "@/hooks/useEvolveRoadmap";
 import { useAtlas } from "@/providers/AtlasProvider";
 
 export default function RoadmapScreen() {
@@ -17,7 +19,47 @@ export default function RoadmapScreen() {
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 8;
   const bottomTab = isWeb ? 100 : 110;
-  const { activeRoadmap, activeProfile, activeCurrentWeek } = useAtlas();
+  const {
+    activeRoadmap,
+    activeProfile,
+    activeCurrentWeek,
+    activeRoadmapEvolutions,
+    activeLastEvolvedAt,
+    activeBehavioralProfile,
+  } = useAtlas();
+  const { evolve, isEvolving } = useEvolveRoadmap();
+  const [evolveError, setEvolveError] = useState<string | null>(null);
+  const [lastNoChangeAt, setLastNoChangeAt] = useState<string | null>(null);
+
+  const latestEvolution = activeRoadmapEvolutions[0] ?? null;
+  // Phases that the most recent evolution flagged as added or modified, so we
+  // can highlight them in the list below.
+  const updatedPhaseIds = useMemo(() => {
+    if (!latestEvolution) return new Set<string>();
+    return new Set(
+      latestEvolution.phaseChanges
+        .filter((p) => p.changeType === "added" || p.changeType === "modified")
+        .map((p) => p.phaseId),
+    );
+  }, [latestEvolution]);
+
+  // Need at least one reflection AND a learned profile before evolution makes sense.
+  const canEvolve = Boolean(activeRoadmap && activeBehavioralProfile);
+
+  const onEvolve = async () => {
+    if (!canEvolve || isEvolving) return;
+    setEvolveError(null);
+    try {
+      const res = await evolve("manual");
+      if (res && !res.changed) {
+        setLastNoChangeAt(new Date().toISOString());
+      } else {
+        setLastNoChangeAt(null);
+      }
+    } catch {
+      setEvolveError("Couldn't evolve the roadmap right now. Try again in a moment.");
+    }
+  };
 
   if (!activeRoadmap) {
     return (
@@ -68,6 +110,60 @@ export default function RoadmapScreen() {
           </Text>
         </View>
 
+        <AdaptiveEngineCard
+          lastEvolvedAt={activeLastEvolvedAt}
+          latest={latestEvolution}
+          isEvolving={isEvolving}
+          canEvolve={canEvolve}
+          onEvolve={onEvolve}
+        />
+
+        {evolveError && (
+          <View
+            style={[
+              styles.banner,
+              {
+                backgroundColor: colors.destructive + "15",
+                borderColor: colors.destructive,
+                borderRadius: colors.radius,
+              },
+            ]}
+          >
+            <Feather name="alert-circle" size={14} color={colors.destructive} />
+            <Text
+              style={[
+                styles.bannerText,
+                { color: colors.destructive, fontFamily: "Inter_500Medium" },
+              ]}
+            >
+              {evolveError}
+            </Text>
+          </View>
+        )}
+
+        {lastNoChangeAt && !evolveError && (
+          <View
+            style={[
+              styles.banner,
+              {
+                backgroundColor: colors.muted,
+                borderColor: colors.border,
+                borderRadius: colors.radius,
+              },
+            ]}
+          >
+            <Feather name="check-circle" size={14} color={colors.mutedForeground} />
+            <Text
+              style={[
+                styles.bannerText,
+                { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
+              ]}
+            >
+              Checked — your roadmap is still the right shape for now.
+            </Text>
+          </View>
+        )}
+
         <View
           style={[
             styles.strategyCard,
@@ -109,6 +205,7 @@ export default function RoadmapScreen() {
                 activeCurrentWeek >= phase.startWeek &&
                 activeCurrentWeek <= phase.endWeek
               }
+              updated={updatedPhaseIds.has(phase.id)}
             />
           ))}
         </View>
@@ -198,6 +295,18 @@ const styles = StyleSheet.create({
   strategyText: {
     fontSize: 14.5,
     lineHeight: 21,
+  },
+  banner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    borderWidth: 1,
+  },
+  bannerText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
   },
   phases: {
     gap: 12,
