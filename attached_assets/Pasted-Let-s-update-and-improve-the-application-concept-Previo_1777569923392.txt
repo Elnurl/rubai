@@ -1,0 +1,25 @@
+Let’s update and improve the application concept.
+
+Previously, we defined the system as an AI-powered goal and target tracking platform. Now, the application should evolve into a fully adaptive AI-driven human progress management system.
+
+Users will define their personal goals, targets, or life objectives independently. The AI will analyze and understand the user’s intentions, behavioral patterns, consistency level, habits, productivity style, limitations, motivations, and overall progress history. Based on this understanding, the system will intelligently recognize what type of goal the user is trying to achieve and generate the most realistic and optimized path toward that objective.
+
+The AI will automatically create personalized daily tasks, milestones, execution plans, and behavioral strategies tailored specifically to each individual user. These tasks will continuously evolve according to the user’s real-world performance, task completion rate, failures, delays, motivation level, and behavioral responses over time.
+
+The system should function as a smart and proactive AI companion focused entirely on maximizing the probability of human goal achievement. It should not behave as a simple chatbot or static planner. Instead, it should operate as an intelligent strategic assistant that actively guides, tracks, motivates, adapts, reminds, analyzes, and optimizes user progress continuously.
+
+The AI should include advanced features such as:
+
+* personalized roadmap generation
+* adaptive daily planning
+* progress analysis
+* behavioral learning
+* intelligent reminders
+* motivational support
+* performance diagnostics
+* dynamic strategy modification
+* long-term progress optimization
+
+The application should continuously learn from the user’s interactions and gradually build a deeper behavioral understanding of the individual in order to improve personalization, prediction accuracy, and execution quality over time.
+
+The ultimate goal of the system is to become a personalized AI execution manager that helps humans realistically achieve complex long-term goals through structured daily action, adaptive intelligence, and continuous behavioral optimization.

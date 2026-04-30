@@ -19,6 +19,36 @@ type Props = {
 
 type AnswerMap = Record<string, string>;
 
+const OTHER_LABEL = "Other";
+const OTHER_VALUE_PREFIX = "Other: ";
+
+function isOtherEntry(s: string): boolean {
+  const t = s.trim();
+  return t === OTHER_LABEL || t.startsWith(OTHER_VALUE_PREFIX);
+}
+
+function otherEntryText(s: string): string {
+  const t = s.trim();
+  if (t.startsWith(OTHER_VALUE_PREFIX)) return t.slice(OTHER_VALUE_PREFIX.length);
+  return "";
+}
+
+function buildOtherEntry(text: string): string {
+  const trimmed = text.trim();
+  return trimmed.length > 0 ? `${OTHER_VALUE_PREFIX}${trimmed}` : OTHER_LABEL;
+}
+
+function splitMulti(value: string): string[] {
+  return value
+    .split("|")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+function joinMulti(items: string[]): string {
+  return items.join("|");
+}
+
 function toMap(answers?: IntakeAnswer[]): AnswerMap {
   const m: AnswerMap = {};
   if (answers) for (const a of answers) m[a.questionId] = a.value;
@@ -29,6 +59,17 @@ function toAnswers(map: AnswerMap): IntakeAnswer[] {
   return Object.entries(map).map(([questionId, value]) => ({ questionId, value }));
 }
 
+function isMeaningfulAnswer(value: string): boolean {
+  const items = splitMulti(value);
+  if (items.length === 0) return false;
+  // A bare "Other" with no description does not count as answered.
+  for (const item of items) {
+    if (item === OTHER_LABEL) continue;
+    return true;
+  }
+  return false;
+}
+
 export function validateIntake(
   questions: IntakeQuestion[],
   answers: IntakeAnswer[],
@@ -37,8 +78,8 @@ export function validateIntake(
   const missing: string[] = [];
   for (const q of questions) {
     if (!q.required) continue;
-    const val = map[q.id]?.trim() ?? "";
-    if (val.length === 0) missing.push(q.id);
+    const val = map[q.id] ?? "";
+    if (!isMeaningfulAnswer(val)) missing.push(q.id);
   }
   return { ok: missing.length === 0, missingIds: missing };
 }
@@ -205,98 +246,212 @@ function FieldRenderer({
           ) : null}
         </View>
       );
-    case "single_select":
+    case "single_select": {
+      const otherSelected = isOtherEntry(value);
+      const builtIn = (question.options ?? []).filter(
+        (o) => o.toLowerCase() !== "other",
+      );
       return (
-        <View style={styles.choices}>
-          {(question.options ?? []).map((opt) => {
-            const selected = value === opt;
-            return (
-              <Pressable
-                key={opt}
-                onPress={() => onChange(opt)}
-                style={({ pressed }) => [
-                  styles.chip,
-                  {
-                    backgroundColor: selected ? colors.primary : colors.background,
-                    borderColor: selected ? colors.primary : colors.border,
-                    opacity: pressed ? 0.85 : 1,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.chipText,
+        <View style={{ gap: 10 }}>
+          <View style={styles.choices}>
+            {builtIn.map((opt) => {
+              const selected = !otherSelected && value === opt;
+              return (
+                <Pressable
+                  key={opt}
+                  onPress={() => onChange(opt)}
+                  style={({ pressed }) => [
+                    styles.chip,
                     {
-                      color: selected ? colors.primaryForeground : colors.foreground,
-                      fontFamily: "Inter_500Medium",
+                      backgroundColor: selected ? colors.primary : colors.background,
+                      borderColor: selected ? colors.primary : colors.border,
+                      opacity: pressed ? 0.85 : 1,
                     },
                   ]}
                 >
-                  {opt}
-                </Text>
-              </Pressable>
-            );
-          })}
+                  <Text
+                    style={[
+                      styles.chipText,
+                      {
+                        color: selected ? colors.primaryForeground : colors.foreground,
+                        fontFamily: "Inter_500Medium",
+                      },
+                    ]}
+                  >
+                    {opt}
+                  </Text>
+                </Pressable>
+              );
+            })}
+            <OtherChip
+              selected={otherSelected}
+              onPress={() => onChange(otherSelected ? "" : OTHER_LABEL)}
+            />
+          </View>
+          {otherSelected ? (
+            <OtherInput
+              value={otherEntryText(value)}
+              onChange={(t) => onChange(buildOtherEntry(t))}
+            />
+          ) : null}
         </View>
       );
+    }
     case "multi_select": {
-      const set = new Set(
-        value
-          .split("|")
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0),
+      const items = splitMulti(value);
+      const otherItem = items.find(isOtherEntry);
+      const otherSelected = Boolean(otherItem);
+      const builtIn = (question.options ?? []).filter(
+        (o) => o.toLowerCase() !== "other",
       );
-      const toggle = (opt: string) => {
+      const set = new Set(items.filter((s) => !isOtherEntry(s)));
+
+      const toggleBuiltIn = (opt: string) => {
         const next = new Set(set);
         if (next.has(opt)) next.delete(opt);
         else next.add(opt);
-        onChange(Array.from(next).join("|"));
+        const list = Array.from(next);
+        if (otherItem) list.push(otherItem);
+        onChange(joinMulti(list));
       };
+
+      const toggleOther = () => {
+        const list = Array.from(set);
+        if (!otherSelected) list.push(OTHER_LABEL);
+        onChange(joinMulti(list));
+      };
+
+      const updateOtherText = (t: string) => {
+        const list = Array.from(set);
+        list.push(buildOtherEntry(t));
+        onChange(joinMulti(list));
+      };
+
       return (
-        <View style={styles.choices}>
-          {(question.options ?? []).map((opt) => {
-            const selected = set.has(opt);
-            return (
-              <Pressable
-                key={opt}
-                onPress={() => toggle(opt)}
-                style={({ pressed }) => [
-                  styles.chip,
-                  {
-                    backgroundColor: selected ? colors.primary : colors.background,
-                    borderColor: selected ? colors.primary : colors.border,
-                    opacity: pressed ? 0.85 : 1,
-                  },
-                ]}
-              >
-                {selected ? (
-                  <Feather
-                    name="check"
-                    size={13}
-                    color={colors.primaryForeground}
-                    style={{ marginRight: 4 }}
-                  />
-                ) : null}
-                <Text
-                  style={[
-                    styles.chipText,
+        <View style={{ gap: 10 }}>
+          <View style={styles.choices}>
+            {builtIn.map((opt) => {
+              const selected = set.has(opt);
+              return (
+                <Pressable
+                  key={opt}
+                  onPress={() => toggleBuiltIn(opt)}
+                  style={({ pressed }) => [
+                    styles.chip,
                     {
-                      color: selected ? colors.primaryForeground : colors.foreground,
-                      fontFamily: "Inter_500Medium",
+                      backgroundColor: selected ? colors.primary : colors.background,
+                      borderColor: selected ? colors.primary : colors.border,
+                      opacity: pressed ? 0.85 : 1,
                     },
                   ]}
                 >
-                  {opt}
-                </Text>
-              </Pressable>
-            );
-          })}
+                  {selected ? (
+                    <Feather
+                      name="check"
+                      size={13}
+                      color={colors.primaryForeground}
+                      style={{ marginRight: 4 }}
+                    />
+                  ) : null}
+                  <Text
+                    style={[
+                      styles.chipText,
+                      {
+                        color: selected ? colors.primaryForeground : colors.foreground,
+                        fontFamily: "Inter_500Medium",
+                      },
+                    ]}
+                  >
+                    {opt}
+                  </Text>
+                </Pressable>
+              );
+            })}
+            <OtherChip selected={otherSelected} onPress={toggleOther} />
+          </View>
+          {otherSelected ? (
+            <OtherInput
+              value={otherEntryText(otherItem ?? "")}
+              onChange={updateOtherText}
+            />
+          ) : null}
         </View>
       );
     }
     default:
       return null;
   }
+}
+
+function OtherChip({
+  selected,
+  onPress,
+}: {
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const colors = useColors();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.chip,
+        {
+          backgroundColor: selected ? colors.primary : colors.background,
+          borderColor: selected ? colors.primary : colors.border,
+          borderStyle: selected ? "solid" : "dashed",
+          opacity: pressed ? 0.85 : 1,
+        },
+      ]}
+    >
+      <Feather
+        name={selected ? "edit-3" : "plus"}
+        size={13}
+        color={selected ? colors.primaryForeground : colors.mutedForeground}
+        style={{ marginRight: 4 }}
+      />
+      <Text
+        style={[
+          styles.chipText,
+          {
+            color: selected ? colors.primaryForeground : colors.mutedForeground,
+            fontFamily: "Inter_500Medium",
+          },
+        ]}
+      >
+        Other
+      </Text>
+    </Pressable>
+  );
+}
+
+function OtherInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const colors = useColors();
+  return (
+    <TextInput
+      value={value}
+      onChangeText={onChange}
+      placeholder="Describe your own answer"
+      placeholderTextColor={colors.mutedForeground}
+      multiline
+      style={[
+        styles.textArea,
+        {
+          color: colors.foreground,
+          borderColor: colors.border,
+          backgroundColor: colors.background,
+          fontFamily: "Inter_400Regular",
+          minHeight: 70,
+        },
+      ]}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

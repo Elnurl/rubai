@@ -603,10 +603,25 @@ router.post("/intake-submit", async (req, res) => {
   const { goalType, goalTitle, questions, answers } = parsed.data;
   const label = resolveGoalLabel(goalType, goalType === "custom" ? goalTitle : undefined);
 
+  const formatAnswer = (raw: string, type: string): string => {
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) return "(no answer)";
+    if (type === "multi_select") {
+      // Multi-select values are stored as "Option1|Option2|Other: custom text".
+      // Render them as a comma-separated list so the AI reads them naturally.
+      return trimmed
+        .split("|")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+        .join(", ");
+    }
+    return trimmed;
+  };
+
   const transcript = questions
     .map((q) => {
-      const answer = answers.find((a) => a.questionId === q.id)?.value ?? "";
-      return `Q: ${q.label}\nA: ${answer || "(no answer)"}`;
+      const raw = answers.find((a) => a.questionId === q.id)?.value ?? "";
+      return `Q: ${q.label}\nA: ${formatAnswer(raw, q.type)}`;
     })
     .join("\n\n");
 
@@ -624,10 +639,12 @@ router.post("/intake-submit", async (req, res) => {
 
 Rules:
 - Use the user's actual words where possible. Do not invent constraints they didn't mention.
+- Treat answers prefixed with "Other:" as fully valid, custom user input — analyze them with equal weight to predefined selections, and let them override or refine generic options.
+- When a multi-select answer mixes predefined options with an "Other:" entry, synthesise both into the profile (do not discard either).
 - availableTimePerDayMinutes must be a realistic integer derived from their answer (default 30 if missing).
 - targetTimelineWeeks must be a realistic integer (default 12 if missing).
 - constraints is a list of short imperative phrases (e.g. "Travels for work weekly").
-- notes is a one-paragraph synthesis (max 60 words) summarising the user.
+- notes is a one-paragraph synthesis (max 60 words) summarising the user, capturing any unique custom details they provided via "Other:" entries.
 - followUp is one short, warm sentence RubAI wants to say before generating the roadmap. No emojis, no markdown.
 - Goal category: ${label}.`,
         },
