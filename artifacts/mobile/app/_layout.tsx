@@ -40,10 +40,12 @@ function resolveApiBaseUrl(): string | null {
   // When loaded via Expo Go / dev client, `hostUri` looks like
   // "<repl-domain>:<port>" — the actual API server is exposed at the same
   // domain over HTTPS without the port.
+  const legacyManifest = (Constants as unknown as {
+    manifest?: { debuggerHost?: string };
+  }).manifest;
   const hostUri =
     Constants.expoConfig?.hostUri ||
-    // @ts-expect-error legacy manifest field may exist on some bundles
-    Constants.manifest?.debuggerHost ||
+    legacyManifest?.debuggerHost ||
     "";
   if (typeof hostUri === "string" && hostUri.length > 0) {
     const host = hostUri.split(":")[0];
