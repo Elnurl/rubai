@@ -13,12 +13,14 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useUser } from "@clerk/expo";
+
 import { AtlasButton } from "@/components/AtlasButton";
 import { SectionHeader } from "@/components/SectionHeader";
-import { SubscriptionCard } from "@/components/SubscriptionCard";
 import { profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
+import { TIER_INFO, type SubscriptionTier } from "@/types/atlas";
 import {
   useAtlasAdaptPlan,
   useAtlasBehavioralProfile,
@@ -56,7 +58,8 @@ export default function AccountScreen() {
 
   const {
     goals,
-    subscription,
+    tier,
+    goalLimit,
     account,
     activeGoal,
     activeProfile,
@@ -65,11 +68,15 @@ export default function AccountScreen() {
     activeBehavioralProfile,
     activeReflections,
     activeTaskHistory,
+    syncStatus,
+    syncMessage,
     setActiveBehavioralProfile,
-    updateSubscription,
     updateAccount,
     resetAll,
+    signOut,
+    dismissSyncMessage,
   } = useAtlas();
+  const { user } = useUser();
 
   const adapt = useAtlasAdaptPlan();
   const refreshProfile = useAtlasBehavioralProfile();
@@ -122,6 +129,28 @@ export default function AccountScreen() {
     }
   };
 
+  const onSignOut = () => {
+    const doSignOut = async () => {
+      await signOut();
+      // AuthGate will redirect to /(auth)/sign-in once Clerk reports
+      // signed-out, so we don't need to navigate here.
+    };
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.confirm("Sign out of RubAI?")) {
+        void doSignOut();
+      }
+    } else {
+      Alert.alert("Sign out?", "You can sign back in any time.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign out", onPress: doSignOut },
+      ]);
+    }
+  };
+
+  const tierInfo =
+    TIER_INFO[(tier as SubscriptionTier) in TIER_INFO ? (tier as SubscriptionTier) : "free"];
+  const accountEmail = user?.primaryEmailAddress?.emailAddress ?? null;
+
   const onAdapt = async () => {
     if (!activeProfile || !activeRoadmap) return;
     try {
@@ -149,15 +178,112 @@ export default function AccountScreen() {
       >
         <SectionHeader
           eyebrow="ACCOUNT"
-          title="Your subscription"
-          subtitle="Demo account — switch tiers freely."
+          title="Your account"
+          subtitle={accountEmail ?? "Signed in"}
         />
 
-        <SubscriptionCard
-          currentTier={subscription.tier}
-          goalsUsed={goals.length}
-          onSelect={(tier) => void updateSubscription(tier)}
-        />
+        {syncMessage ? (
+          <Pressable
+            onPress={dismissSyncMessage}
+            style={[
+              styles.syncBanner,
+              {
+                backgroundColor:
+                  syncStatus === "error"
+                    ? colors.destructive + "14"
+                    : colors.primary + "14",
+                borderColor:
+                  syncStatus === "error" ? colors.destructive : colors.primary,
+                borderRadius: colors.radius,
+              },
+            ]}
+          >
+            <Feather
+              name={syncStatus === "error" ? "alert-circle" : "cloud"}
+              size={14}
+              color={syncStatus === "error" ? colors.destructive : colors.primary}
+            />
+            <Text
+              style={[
+                styles.syncBannerText,
+                {
+                  color:
+                    syncStatus === "error" ? colors.destructive : colors.primary,
+                  fontFamily: "Inter_500Medium",
+                },
+              ]}
+            >
+              {syncMessage}
+            </Text>
+          </Pressable>
+        ) : null}
+
+        <View
+          style={[
+            styles.planCard,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderRadius: colors.radius,
+            },
+          ]}
+        >
+          <View style={styles.planCardHeader}>
+            <View style={[styles.planBadge, { backgroundColor: colors.primary }]}>
+              <Feather name="award" size={14} color={colors.primaryForeground} />
+              <Text
+                style={[
+                  styles.planBadgeText,
+                  {
+                    color: colors.primaryForeground,
+                    fontFamily: "Inter_700Bold",
+                  },
+                ]}
+              >
+                {tierInfo.label.toUpperCase()}
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.planMeta,
+                { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
+              ]}
+            >
+              {goals.length} of {goalLimit} goals
+            </Text>
+          </View>
+          <Text
+            style={[
+              styles.planTagline,
+              { color: colors.foreground, fontFamily: "Inter_400Regular" },
+            ]}
+          >
+            {tierInfo.tagline}
+          </Text>
+        </View>
+
+        <Pressable
+          onPress={onSignOut}
+          style={({ pressed }) => [
+            styles.signOutBtn,
+            {
+              borderColor: colors.border,
+              borderRadius: colors.radius,
+              backgroundColor: colors.card,
+              opacity: pressed ? 0.85 : 1,
+            },
+          ]}
+        >
+          <Feather name="log-out" size={16} color={colors.foreground} />
+          <Text
+            style={[
+              styles.signOutText,
+              { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
+            ]}
+          >
+            Sign out
+          </Text>
+        </Pressable>
 
         <SectionHeader
           eyebrow="PREFERENCES"
@@ -709,6 +835,60 @@ const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: 22,
     gap: 16,
+  },
+  syncBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+  },
+  syncBannerText: {
+    flex: 1,
+    fontSize: 12.5,
+    lineHeight: 17,
+  },
+  planCard: {
+    padding: 16,
+    borderWidth: 1,
+    gap: 10,
+  },
+  planCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  planBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  planBadgeText: {
+    fontSize: 11,
+    letterSpacing: 1.2,
+  },
+  planMeta: {
+    fontSize: 12.5,
+  },
+  planTagline: {
+    fontSize: 13.5,
+    lineHeight: 19,
+  },
+  signOutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    padding: 14,
+    borderWidth: 1,
+  },
+  signOutText: {
+    fontSize: 14,
+    letterSpacing: 0.2,
   },
   prefsCard: {
     borderWidth: 1,

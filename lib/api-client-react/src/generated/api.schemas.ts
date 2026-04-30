@@ -9,6 +9,67 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface ErrorResponse {
+  error: string;
+}
+
+/**
+ * Public-safe identity and tier for the signed-in user.
+ */
+export interface MeResponse {
+  clerkUserId: string;
+  email: string | null;
+  /** Server-side subscription tier. "free" today; later "pro" etc. */
+  tier: string;
+}
+
+/**
+ * Opaque per-goal blob (profile, roadmap, history, plans, reflections, learnedProfile, evolutions, coachMemory, etc). Schema enforced client-side.
+ */
+export interface MeStateGoalBlob {
+  [key: string]: unknown;
+}
+
+/**
+ * Opaque account preferences blob. Schema enforced client-side.
+ */
+export interface MeStateAccountPrefsBlob {
+  [key: string]: unknown;
+}
+
+/**
+ * Opaque pending intake draft blob. Schema enforced client-side.
+ */
+export interface MeStateDraftBlob {
+  [key: string]: unknown;
+}
+
+export interface MeStateResponse {
+  clerkUserId: string;
+  email: string | null;
+  tier: string;
+  goals: MeStateGoalBlob[];
+  activeGoalId: string | null;
+  accountPrefs: MeStateAccountPrefsBlob;
+  pendingDraft: MeStateDraftBlob | null;
+  /** Monotonic version used for optimistic concurrency. Bumped on every successful PUT. */
+  version: number;
+}
+
+export interface MeStateRequest {
+  goals: MeStateGoalBlob[];
+  activeGoalId: string | null;
+  accountPrefs: MeStateAccountPrefsBlob;
+  pendingDraft: MeStateDraftBlob | null;
+  /** The version the client believes is current. If it doesn't match, the server returns 409 with the latest state. */
+  expectedVersion: number;
+}
+
+export interface MeStateConflictResponse {
+  error: string;
+  latest: MeStateResponse;
+}
+
 export type GoalType = (typeof GoalType)[keyof typeof GoalType];
 
 export const GoalType = {

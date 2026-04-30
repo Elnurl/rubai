@@ -16,6 +16,114 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
+ * @summary Current authenticated user (identity + tier)
+ */
+export const GetMeResponse = zod
+  .object({
+    clerkUserId: zod.string(),
+    email: zod.union([zod.string(), zod.null()]),
+    tier: zod
+      .string()
+      .describe(
+        'Server-side subscription tier. \"free\" today; later \"pro\" etc.',
+      ),
+  })
+  .describe("Public-safe identity and tier for the signed-in user.");
+
+/**
+ * @summary Full personal state for the signed-in user (goals, prefs, draft)
+ */
+export const GetMeStateResponse = zod.object({
+  clerkUserId: zod.string(),
+  email: zod.union([zod.string(), zod.null()]),
+  tier: zod.string(),
+  goals: zod.array(
+    zod
+      .record(zod.string(), zod.unknown())
+      .describe(
+        "Opaque per-goal blob (profile, roadmap, history, plans, reflections, learnedProfile, evolutions, coachMemory, etc). Schema enforced client-side.",
+      ),
+  ),
+  activeGoalId: zod.union([zod.string(), zod.null()]),
+  accountPrefs: zod
+    .record(zod.string(), zod.unknown())
+    .describe("Opaque account preferences blob. Schema enforced client-side."),
+  pendingDraft: zod.union([
+    zod
+      .record(zod.string(), zod.unknown())
+      .describe(
+        "Opaque pending intake draft blob. Schema enforced client-side.",
+      ),
+    zod.null(),
+  ]),
+  version: zod
+    .number()
+    .describe(
+      "Monotonic version used for optimistic concurrency. Bumped on every successful PUT.",
+    ),
+});
+
+/**
+ * @summary Replace personal state with optimistic locking
+ */
+export const PutMeStateBody = zod.object({
+  goals: zod.array(
+    zod
+      .record(zod.string(), zod.unknown())
+      .describe(
+        "Opaque per-goal blob (profile, roadmap, history, plans, reflections, learnedProfile, evolutions, coachMemory, etc). Schema enforced client-side.",
+      ),
+  ),
+  activeGoalId: zod.union([zod.string(), zod.null()]),
+  accountPrefs: zod
+    .record(zod.string(), zod.unknown())
+    .describe("Opaque account preferences blob. Schema enforced client-side."),
+  pendingDraft: zod.union([
+    zod
+      .record(zod.string(), zod.unknown())
+      .describe(
+        "Opaque pending intake draft blob. Schema enforced client-side.",
+      ),
+    zod.null(),
+  ]),
+  expectedVersion: zod
+    .number()
+    .describe(
+      "The version the client believes is current. If it doesn't match, the server returns 409 with the latest state.",
+    ),
+});
+
+export const PutMeStateResponse = zod.object({
+  clerkUserId: zod.string(),
+  email: zod.union([zod.string(), zod.null()]),
+  tier: zod.string(),
+  goals: zod.array(
+    zod
+      .record(zod.string(), zod.unknown())
+      .describe(
+        "Opaque per-goal blob (profile, roadmap, history, plans, reflections, learnedProfile, evolutions, coachMemory, etc). Schema enforced client-side.",
+      ),
+  ),
+  activeGoalId: zod.union([zod.string(), zod.null()]),
+  accountPrefs: zod
+    .record(zod.string(), zod.unknown())
+    .describe("Opaque account preferences blob. Schema enforced client-side."),
+  pendingDraft: zod.union([
+    zod
+      .record(zod.string(), zod.unknown())
+      .describe(
+        "Opaque pending intake draft blob. Schema enforced client-side.",
+      ),
+    zod.null(),
+  ]),
+  version: zod
+    .number()
+    .describe(
+      "Monotonic version used for optimistic concurrency. Bumped on every successful PUT.",
+    ),
+});
+
+/**
  * @summary Continue an adaptive onboarding conversation for the chosen goal model
  */
 export const AtlasOnboardingChatBody = zod.object({

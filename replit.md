@@ -2,19 +2,19 @@
 
 A mobile (Expo) AI-driven execution coach. Users describe ANY goal (custom or one of five templates: IELTS prep, programming, fitness, financial improvement, buying a car). RubAI then generates a tailored intake form, synthesises a structured `UserProfile`, builds a multi-phase roadmap, produces a fresh daily plan, and chats as an adaptive coach.
 
-The app supports MULTIPLE concurrent goals. The number of active goals is gated by a (demo) subscription tier:
+The app supports MULTIPLE concurrent goals. The number of active goals is gated by a server-controlled subscription tier returned with every authed request:
 - **Free** — 1 goal
 - **Pro** — 5 goals
 - **Premium** — 25 goals
 
-The subscription is stored locally with no real payments — users can switch tiers freely from the Account tab.
+Tier is set server-side (`users.tier` column) — there's no in-app upgrade flow yet (no Stripe / RevenueCat). The Account screen displays the current tier read-only.
 
 ## Architecture
 
 Monorepo (pnpm) with three artifacts:
 
-- `artifacts/mobile` — Expo React Native app (the user-facing product). All persistence is client-side via AsyncStorage; no database.
-- `artifacts/api-server` — Express server providing AI endpoints under `/api/atlas/*`. Calls OpenAI via `@workspace/integrations-openai-ai-server` (model `gpt-5.4` with `json_schema` structured outputs).
+- `artifacts/mobile` — Expo React Native app (the user-facing product). Server is the source of truth; per-user AsyncStorage snapshot acts as a fast-paint cache only.
+- `artifacts/api-server` — Express server providing AI endpoints under `/api/atlas/*` (auth-required) and per-user cloud state at `/api/me/*`. Calls OpenAI via `@workspace/integrations-openai-ai-server` (model `gpt-5.4` with `json_schema` structured outputs). Uses Clerk for auth and Drizzle/Postgres for persistence.
 - `artifacts/mockup-sandbox` — sandbox for design exploration (registered but unused in this product).
 
 API contract lives in `lib/api-spec/openapi.yaml`; running `pnpm --filter @workspace/api-spec run codegen` regenerates:
@@ -108,6 +108,41 @@ Enforced in two places (defence-in-depth):
 - UI: `(tabs)/goals.tsx` and `welcome.tsx` / `new-goal.tsx` check `canAddMoreGoals` and disable the entry point when the limit is reached.
 - Provider: `createGoal` throws a `GoalLimitError` if the current goal count already equals the tier limit.
 
+### Cloud sync (Phase 4)
+
+Auth — Clerk (`@clerk/expo`):
+- `app/_layout.tsx` wraps the tree in `ClerkProvider` (with a SecureStore `tokenCache`) and `ClerkLoaded`. An `AuthGate` reads `useAuth().getToken()` and feeds it into the API client (`setAuthTokenGetter`) so every authed request carries `Authorization: Bearer <session JWT>`. Signed-out users are redirected to `/sign-in`; signed-in users sitting on `/(auth)` routes are redirected to `/`.
+- Auth screens live in `app/(auth)/sign-in.tsx` and `sign-up.tsx` — branded Email+Password forms plus "Continue with Google" via `useOAuth({ strategy: "oauth_google" })` with `expo-auth-session` + `expo-web-browser`.
+- The Clerk publishable key is forwarded into the Expo bundle as `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` (wired through `package.json` dev script and `build.js`).
+
+Server (`artifacts/api-server`):
+- `src/middleware/clerk.ts` runs Clerk's Express middleware, then `requireClerkAuth` ensures `req.auth.userId` exists. `clerkProxyMiddleware` upserts a row in `users` on every authed request (so the very first request from a brand-new Clerk user provisions a record with `tier: "free"`).
+- `src/routes/me.ts` exposes:
+  - `GET /api/me/state` — returns `{ version, tier, goals, activeGoalId, accountPrefs, pendingDraft }`. Auto-creates an empty `user_state` row at `version=0` when missing.
+  - `PUT /api/me/state` — body includes `expectedVersion`. Mismatch returns **409** with the latest server snapshot in the body (typed as `MeStateConflictResponse`); success bumps the version and echoes the new state.
+- `src/routes/atlas.ts` is now mounted behind `requireClerkAuth` so the AI endpoints can't be called anonymously.
+- Schema (`src/db/schema.ts`): `users(id pk = clerk userId, email, tier)` and `user_state(user_id pk fk → users.id, version, goals jsonb, active_goal_id, account_prefs jsonb, pending_draft jsonb, updated_at)`. Migrations live under `artifacts/api-server/drizzle/`.
+
+Mobile sync model (`artifacts/mobile/providers/AtlasProvider.tsx`):
+- Server is source of truth. On sign-in, the provider:
+  1. Fast-paints from a per-user cache snapshot (`atlas:cache:<clerkUserId>`) if present.
+  2. GETs `/me/state`. If `version === 0 && goals.length === 0` AND `migrated:<clerkUserId>` is unset AND legacy `atlas:v2:goals` exists locally → PUTs the legacy data with `expectedVersion=0`, sets the migrated flag, then adopts the uploaded snapshot.
+  3. Otherwise adopts the server snapshot directly and sets the migrated flag.
+- Mutations are optimistic + coalesced: any local edit marks `pushDirty`; a single `pushInFlight` PUT runs at a time, and another push is auto-queued if more edits land mid-flight. Each successful PUT stores the new `version` and rewrites the per-user cache.
+- 409 handling: when `ApiError.status === 409`, the provider drops the optimistic state, adopts `MeStateConflictResponse.latest`, and surfaces a one-shot "Synced from another device" banner on the Account tab (dismissible).
+- Tier is server-controlled. `subscription` remains a derived view (`{ tier, limit }`) for back-compat with existing UI gating; `updateSubscription` is a no-op stub (real upgrades require a billing integration).
+- Sign-out (`signOut()`): clears the per-user cache snapshot, calls Clerk `signOut()`, resets in-memory state. The `migrated:<clerkUserId>` flag is intentionally **kept** so re-signing in on the same device doesn't re-migrate already-synced legacy data.
+- Account tab (`app/(tabs)/account.tsx`) shows the signed-in email (from `useUser()`), the read-only plan badge, the goals/limit usage, the sync banner, an Insights section, and a "Sign out" button.
+
+Storage keys (per-user namespacing):
+- `atlas:cache:<clerkUserId>` — JSON snapshot for fast-paint (cleared on sign-out).
+- `atlas:migrated:<clerkUserId>` — boolean flag, kept across sign-outs.
+- `atlas:v2:*` — legacy single-tenant keys; read-only after Phase 4 (consumed once by the migration path).
+
+API client (`lib/api-client-react/src/index.ts`):
+- `setAuthTokenGetter(fn)` is called from `AuthGate`; the generated fetch helper attaches `Authorization: Bearer <token>` when the getter resolves to a token.
+- `ApiError` (exported) is thrown for non-2xx responses and exposes `status` + parsed `data` so the provider can switch on 409 vs other failures.
+
 ## Theme
 
 Warm cream + emerald + amber palette; Inter for typography. `constants/colors.ts` defines `light` and `dark` palettes consumed via `hooks/useColors.ts`. No emojis anywhere; iconography via `@expo/vector-icons` and SF Symbols (iOS).
@@ -116,13 +151,21 @@ Warm cream + emerald + amber palette; Inter for typography. `constants/colors.ts
 
 - `AI_INTEGRATIONS_OPENAI_BASE_URL` and `AI_INTEGRATIONS_OPENAI_API_KEY` — wired via the OpenAI integration; do not handle directly.
 - `EXPO_PUBLIC_DOMAIN` — provided by Expo workflow; used by the mobile bundle to call the API.
+- `CLERK_SECRET_KEY` (server) and `CLERK_PUBLISHABLE_KEY` (server, also forwarded to Expo as `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`) — managed via Replit's Clerk integration. Never read or print these directly.
+- `DATABASE_URL` — Replit Postgres for `users` + `user_state` tables.
 
 ## Key files
 
-- `artifacts/api-server/src/routes/atlas.ts` — all Atlas endpoints (structured outputs).
-- `artifacts/api-server/src/routes/index.ts` — mounts the atlas router at `/atlas`.
+- `artifacts/api-server/src/routes/atlas.ts` — all Atlas endpoints (structured outputs), behind `requireClerkAuth`.
+- `artifacts/api-server/src/routes/me.ts` — `GET`/`PUT /api/me/state` with optimistic-concurrency `expectedVersion`.
+- `artifacts/api-server/src/middleware/clerk.ts` — Clerk Express middleware + `requireClerkAuth` + `clerkProxyMiddleware` (user upsert).
+- `artifacts/api-server/src/db/schema.ts` — Drizzle schema for `users` + `user_state`.
+- `artifacts/api-server/src/routes/index.ts` — mounts `/me` and the auth-protected `/atlas` router.
 - `lib/api-spec/openapi.yaml` — single source of truth for the API contract.
-- `artifacts/mobile/providers/AtlasProvider.tsx` — multi-goal state + persistence + ref-based callbacks.
+- `lib/api-client-react/src/index.ts` — public surface (`setAuthTokenGetter`, `setBaseUrl`, `ApiError`, generated hooks).
+- `artifacts/mobile/app/_layout.tsx` — ClerkProvider + AuthGate (token getter wiring + auth redirects).
+- `artifacts/mobile/app/(auth)/sign-in.tsx`, `sign-up.tsx` — branded auth screens.
+- `artifacts/mobile/providers/AtlasProvider.tsx` — API-backed multi-goal state, version-based optimistic sync, first-sign-in migration.
 - `artifacts/mobile/types/atlas.ts` — `Goal`, `Subscription`, `IntakeDraft`, `TIER_INFO` and helpers.
 - `artifacts/mobile/constants/atlas.ts` — goal-template metadata (label, tagline, icon, default titles).
 - `artifacts/mobile/lib/storage.ts` — AsyncStorage helpers, v2 keys, and v1 migration reader.

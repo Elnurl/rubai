@@ -7,8 +7,10 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ClerkLoaded, ClerkProvider, useAuth } from "@clerk/expo";
+import { tokenCache } from "@clerk/expo/token-cache";
 import Constants from "expo-constants";
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as SystemUI from "expo-system-ui";
 import React, { useEffect } from "react";
@@ -16,7 +18,7 @@ import { Platform, useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { setBaseUrl } from "@workspace/api-client-react";
+import { setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import colors from "@/constants/colors";
@@ -70,6 +72,14 @@ if (__DEV__) {
   console.log("[rubai] API base URL:", API_BASE_URL ?? "(none — relative)");
 }
 
+const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+if (!CLERK_PUBLISHABLE_KEY) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    "[rubai] Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY — auth screens will fail to load.",
+  );
+}
+
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient({
@@ -77,6 +87,31 @@ const queryClient = new QueryClient({
     queries: { retry: 1, refetchOnWindowFocus: false },
   },
 });
+
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    setAuthTokenGetter(() => getToken());
+    return () => {
+      setAuthTokenGetter(null);
+    };
+  }, [getToken]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    const inAuthGroup = segments[0] === "(auth)";
+    if (!isSignedIn && !inAuthGroup) {
+      router.replace("/(auth)/sign-in");
+    } else if (isSignedIn && inAuthGroup) {
+      router.replace("/");
+    }
+  }, [isLoaded, isSignedIn, segments, router]);
+
+  return <>{children}</>;
+}
 
 function RootLayoutNav() {
   return (
@@ -86,6 +121,7 @@ function RootLayoutNav() {
         contentStyle: { backgroundColor: "transparent" },
       }}
     >
+      <Stack.Screen name="(auth)" />
       <Stack.Screen name="index" />
       <Stack.Screen name="welcome" />
       <Stack.Screen name="new-goal" />
@@ -124,13 +160,22 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <KeyboardProvider>
-              <AtlasProvider>
-                <RootLayoutNav />
-              </AtlasProvider>
-            </KeyboardProvider>
-          </GestureHandlerRootView>
+          <ClerkProvider
+            publishableKey={CLERK_PUBLISHABLE_KEY ?? ""}
+            tokenCache={tokenCache}
+          >
+            <ClerkLoaded>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <KeyboardProvider>
+                  <AtlasProvider>
+                    <AuthGate>
+                      <RootLayoutNav />
+                    </AuthGate>
+                  </AtlasProvider>
+                </KeyboardProvider>
+              </GestureHandlerRootView>
+            </ClerkLoaded>
+          </ClerkProvider>
         </QueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>

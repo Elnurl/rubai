@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: atlas
     description: Atlas AI goal coaching endpoints
+  - name: me
+    description: Authenticated user state and profile
 paths:
   /healthz:
     get:
@@ -26,6 +28,73 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /me:
+    get:
+      operationId: getMe
+      tags: [me]
+      summary: Current authenticated user (identity + tier)
+      responses:
+        "200":
+          description: Authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /me/state:
+    get:
+      operationId: getMeState
+      tags: [me]
+      summary: Full personal state for the signed-in user (goals, prefs, draft)
+      responses:
+        "200":
+          description: User state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeStateResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: putMeState
+      tags: [me]
+      summary: Replace personal state with optimistic locking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MeStateRequest"
+      responses:
+        "200":
+          description: Updated state with new version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeStateResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Version conflict — fetch latest before retrying
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeStateConflictResponse"
 
   /atlas/onboarding-chat:
     post:
@@ -207,6 +276,104 @@ components:
           type: string
       required:
         - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    MeResponse:
+      type: object
+      description: Public-safe identity and tier for the signed-in user.
+      properties:
+        clerkUserId:
+          type: string
+        email:
+          oneOf:
+            - type: string
+            - type: "null"
+        tier:
+          type: string
+          description: Server-side subscription tier. "free" today; later "pro" etc.
+      required: [clerkUserId, email, tier]
+
+    MeStateGoalBlob:
+      type: object
+      description: Opaque per-goal blob (profile, roadmap, history, plans, reflections, learnedProfile, evolutions, coachMemory, etc). Schema enforced client-side.
+      additionalProperties: true
+
+    MeStateAccountPrefsBlob:
+      type: object
+      description: Opaque account preferences blob. Schema enforced client-side.
+      additionalProperties: true
+
+    MeStateDraftBlob:
+      type: object
+      description: Opaque pending intake draft blob. Schema enforced client-side.
+      additionalProperties: true
+
+    MeStateResponse:
+      type: object
+      properties:
+        clerkUserId:
+          type: string
+        email:
+          oneOf:
+            - type: string
+            - type: "null"
+        tier:
+          type: string
+        goals:
+          type: array
+          items:
+            $ref: "#/components/schemas/MeStateGoalBlob"
+        activeGoalId:
+          oneOf:
+            - type: string
+            - type: "null"
+        accountPrefs:
+          $ref: "#/components/schemas/MeStateAccountPrefsBlob"
+        pendingDraft:
+          oneOf:
+            - $ref: "#/components/schemas/MeStateDraftBlob"
+            - type: "null"
+        version:
+          type: integer
+          description: Monotonic version used for optimistic concurrency. Bumped on every successful PUT.
+      required: [clerkUserId, email, tier, goals, activeGoalId, accountPrefs, pendingDraft, version]
+
+    MeStateRequest:
+      type: object
+      properties:
+        goals:
+          type: array
+          items:
+            $ref: "#/components/schemas/MeStateGoalBlob"
+        activeGoalId:
+          oneOf:
+            - type: string
+            - type: "null"
+        accountPrefs:
+          $ref: "#/components/schemas/MeStateAccountPrefsBlob"
+        pendingDraft:
+          oneOf:
+            - $ref: "#/components/schemas/MeStateDraftBlob"
+            - type: "null"
+        expectedVersion:
+          type: integer
+          description: The version the client believes is current. If it doesn't match, the server returns 409 with the latest state.
+      required: [goals, activeGoalId, accountPrefs, pendingDraft, expectedVersion]
+
+    MeStateConflictResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        latest:
+          $ref: "#/components/schemas/MeStateResponse"
+      required: [error, latest]
 
     GoalType:
       type: string

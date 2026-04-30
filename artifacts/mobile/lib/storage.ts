@@ -50,6 +50,106 @@ export const STORAGE_KEYS = {
   migrated: "migrated",
 } as const;
 
+// ---------------------------------------------------------------------------
+// Cloud-sync helpers (Phase 4)
+// ---------------------------------------------------------------------------
+//
+// `migrated:<clerkUserId>` — once we've uploaded any pre-existing local
+// goals on this device for this user, we set the flag so we never re-upload.
+// `cache:<clerkUserId>` — fast-paint snapshot of the last server state we
+// observed, scoped per user so multiple accounts on the same device don't
+// leak data into each other.
+
+const MIGRATED_PREFIX = `${PREFIX}migrated:`;
+const USER_CACHE_PREFIX = `${PREFIX}cache:`;
+
+export async function getMigratedFlag(clerkUserId: string): Promise<boolean> {
+  try {
+    const raw = await AsyncStorage.getItem(MIGRATED_PREFIX + clerkUserId);
+    return raw === "1";
+  } catch {
+    return false;
+  }
+}
+
+export async function setMigratedFlag(clerkUserId: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(MIGRATED_PREFIX + clerkUserId, "1");
+  } catch {
+    // ignore
+  }
+}
+
+export type UserCacheSnapshot<G = unknown, AP = unknown, PD = unknown> = {
+  goals: G[];
+  activeGoalId: string | null;
+  accountPrefs: AP;
+  pendingDraft: PD | null;
+  version: number;
+  tier: string;
+};
+
+export async function loadUserCache<G = unknown, AP = unknown, PD = unknown>(
+  clerkUserId: string,
+): Promise<UserCacheSnapshot<G, AP, PD> | null> {
+  try {
+    const raw = await AsyncStorage.getItem(USER_CACHE_PREFIX + clerkUserId);
+    if (!raw) return null;
+    return JSON.parse(raw) as UserCacheSnapshot<G, AP, PD>;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveUserCache<G = unknown, AP = unknown, PD = unknown>(
+  clerkUserId: string,
+  snapshot: UserCacheSnapshot<G, AP, PD>,
+): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      USER_CACHE_PREFIX + clerkUserId,
+      JSON.stringify(snapshot),
+    );
+  } catch {
+    // ignore
+  }
+}
+
+export async function clearUserCache(clerkUserId: string): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(USER_CACHE_PREFIX + clerkUserId);
+  } catch {
+    // ignore
+  }
+}
+
+// Read the legacy local-only goals snapshot if one exists on this device.
+// Used exactly once, on first sign-in, to seed the cloud copy.
+export async function loadLegacyV2Goals<T = unknown>(): Promise<{
+  goals: T[];
+  activeGoalId: string | null;
+} | null> {
+  const goals = await loadJson<T[]>(STORAGE_KEYS.goals);
+  if (!goals || goals.length === 0) return null;
+  const activeGoalId = await loadJson<string>(STORAGE_KEYS.activeGoalId);
+  return { goals, activeGoalId: activeGoalId ?? null };
+}
+
+// Drop the legacy local snapshot once it has been migrated to the cloud.
+export async function clearLegacyV2Snapshot(): Promise<void> {
+  try {
+    await AsyncStorage.multiRemove([
+      PREFIX + STORAGE_KEYS.goals,
+      PREFIX + STORAGE_KEYS.activeGoalId,
+      PREFIX + STORAGE_KEYS.subscription,
+      PREFIX + STORAGE_KEYS.account,
+      PREFIX + STORAGE_KEYS.pendingDraft,
+    ]);
+  } catch {
+    // ignore
+  }
+}
+
 const V1_KEYS = {
   profile: "profile",
   roadmap: "roadmap",

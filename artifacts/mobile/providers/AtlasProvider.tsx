@@ -1,3 +1,4 @@
+import { useAuth } from "@clerk/expo";
 import React, {
   createContext,
   useCallback,
@@ -16,20 +17,25 @@ import type {
   DailyPlan,
   IntakeAnswer,
   IntakeQuestion,
+  MeStateConflictResponse,
+  MeStateRequest,
+  MeStateResponse,
   ReflectionEntry,
   Roadmap,
   UserProfile,
 } from "@workspace/api-client-react";
+import { ApiError, getMeState, putMeState } from "@workspace/api-client-react";
 import {
-  STORAGE_KEYS,
   TaskHistoryEntry,
   clearAllAtlas,
-  clearV1Storage,
-  loadJson,
+  clearLegacyV2Snapshot,
+  clearUserCache,
+  getMigratedFlag,
+  loadLegacyV2Goals,
+  loadUserCache,
   makeId,
-  readV1ForMigration,
-  removeKey,
-  saveJson,
+  saveUserCache,
+  setMigratedFlag,
   todayISO,
 } from "@/lib/storage";
 import {
@@ -53,6 +59,8 @@ const EMPTY_BEHAVIORAL: BehavioralSnapshot = {
   recentNotes: [],
 };
 
+type SyncStatus = "idle" | "loading" | "syncing" | "conflict" | "error";
+
 type AtlasState = {
   loaded: boolean;
   goals: Goal[];
@@ -60,6 +68,9 @@ type AtlasState = {
   subscription: Subscription;
   account: AccountPrefs;
   pendingDraft: IntakeDraft | null;
+  tier: string;
+  syncStatus: SyncStatus;
+  syncMessage: string | null;
 };
 
 type GoalUpdater = (goal: Goal) => Goal;
@@ -115,10 +126,14 @@ type AtlasContextValue = AtlasState & {
   ) => Promise<void>;
   attachPendingProfile: (profile: UserProfile, followUp?: string) => Promise<void>;
 
+  // Tier is now server-controlled. This becomes a no-op locally; kept for
+  // compatibility with any callsites that still reference it.
   updateSubscription: (tier: SubscriptionTier) => Promise<void>;
   updateAccount: (prefs: Partial<AccountPrefs>) => Promise<void>;
 
   resetAll: () => Promise<void>;
+  signOut: () => Promise<void>;
+  dismissSyncMessage: () => void;
 };
 
 export class GoalLimitError extends Error {
@@ -177,38 +192,10 @@ function computeCurrentWeek(startDate: string | null): number {
   return Math.max(1, Math.floor(days / 7) + 1);
 }
 
-async function migrateV1ToGoal(): Promise<Goal | null> {
-  const v1 = await readV1ForMigration();
-  if (!v1?.profile) return null;
-  const profile = v1.profile as UserProfile;
-  const goal: Goal = {
-    id: makeId("goal"),
-    createdAt: new Date().toISOString(),
-    startDate: v1.startDate ?? todayISO(),
-    profile,
-    roadmap: (v1.roadmap as Roadmap | null) ?? null,
-    dailyPlan: (v1.dailyPlan as StoredDailyPlan | null) ?? null,
-    coachHistory: (v1.coachHistory as ChatMessage[] | null) ?? [],
-    taskHistory: (v1.taskHistory as TaskHistoryEntry[] | null) ?? [],
-    reflections: [],
-    behavioralProfile: null,
-    roadmapEvolutions: [],
-    lastEvolvedAt: null,
-    coachMemory: null,
-  };
-  await clearV1Storage();
-  return goal;
-}
-
 // Backfill any newer optional fields on goals stored before they existed so
-// the rest of the provider can rely on them being defined.
+// the rest of the provider can rely on them being defined. Also runs on goals
+// loaded from the cloud, since older clients may have pushed sparser blobs.
 function ensureGoalShape(goal: Goal): Goal {
-  const needsPhase1 =
-    !goal.reflections || goal.behavioralProfile === undefined;
-  const needsPhase2 =
-    !goal.roadmapEvolutions || goal.lastEvolvedAt === undefined;
-  const needsPhase3 = goal.coachMemory === undefined;
-  if (!needsPhase1 && !needsPhase2 && !needsPhase3) return goal;
   return {
     ...goal,
     reflections: goal.reflections ?? [],
@@ -219,67 +206,67 @@ function ensureGoalShape(goal: Goal): Goal {
   };
 }
 
+function tierToSubscription(tier: string): Subscription {
+  // The local Subscription type is the Phase 3 union; we coerce unknown values
+  // back to the default so the UI never crashes on a future server tier.
+  const known: SubscriptionTier[] = ["free", "pro", "premium"];
+  const safeTier = (known as readonly string[]).includes(tier)
+    ? (tier as SubscriptionTier)
+    : DEFAULT_SUBSCRIPTION.tier;
+  return { tier: safeTier, startedAt: new Date(0).toISOString() };
+}
+
+function pickAccountPrefs(blob: unknown): AccountPrefs {
+  if (!blob || typeof blob !== "object") return DEFAULT_ACCOUNT;
+  const b = blob as Partial<AccountPrefs>;
+  return {
+    notificationsEnabled:
+      typeof b.notificationsEnabled === "boolean"
+        ? b.notificationsEnabled
+        : DEFAULT_ACCOUNT.notificationsEnabled,
+    performanceUpdates:
+      typeof b.performanceUpdates === "boolean"
+        ? b.performanceUpdates
+        : DEFAULT_ACCOUNT.performanceUpdates,
+    reminderTime:
+      typeof b.reminderTime === "string"
+        ? b.reminderTime
+        : DEFAULT_ACCOUNT.reminderTime,
+  };
+}
+
 export function AtlasProvider({ children }: { children: React.ReactNode }) {
+  const { isLoaded: clerkLoaded, isSignedIn, userId, signOut: clerkSignOut } =
+    useAuth();
+
   const [loaded, setLoaded] = useState(false);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [activeGoalId, setActiveGoalId] = useState<string | null>(null);
-  const [subscription, setSubscription] = useState<Subscription>(DEFAULT_SUBSCRIPTION);
+  const [tier, setTier] = useState<string>(DEFAULT_SUBSCRIPTION.tier);
   const [account, setAccount] = useState<AccountPrefs>(DEFAULT_ACCOUNT);
   const [pendingDraft, setPendingDraftState] = useState<IntakeDraft | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   // Refs always reflect the latest state so callbacks avoid stale-closure bugs
   // when chained synchronously across awaits (e.g. createGoal then setActiveRoadmap).
   const goalsRef = useRef<Goal[]>([]);
   const activeIdRef = useRef<string | null>(null);
-  const subscriptionRef = useRef<Subscription>(DEFAULT_SUBSCRIPTION);
+  const accountRef = useRef<AccountPrefs>(DEFAULT_ACCOUNT);
+  const pendingDraftRef = useRef<IntakeDraft | null>(null);
 
-  // Initial load + v1 migration
-  useEffect(() => {
-    (async () => {
-      const [storedGoals, storedActive, storedSub, storedAcc, storedDraft, migratedFlag] =
-        await Promise.all([
-          loadJson<Goal[]>(STORAGE_KEYS.goals),
-          loadJson<string>(STORAGE_KEYS.activeGoalId),
-          loadJson<Subscription>(STORAGE_KEYS.subscription),
-          loadJson<AccountPrefs>(STORAGE_KEYS.account),
-          loadJson<IntakeDraft>(STORAGE_KEYS.pendingDraft),
-          loadJson<boolean>(STORAGE_KEYS.migrated),
-        ]);
-
-      let goalsList = (storedGoals ?? []).map(ensureGoalShape);
-      let active = storedActive ?? null;
-
-      if (goalsList.length === 0 && !migratedFlag) {
-        const migrated = await migrateV1ToGoal();
-        if (migrated) {
-          goalsList = [migrated];
-          active = migrated.id;
-          await saveJson(STORAGE_KEYS.goals, goalsList);
-          await saveJson(STORAGE_KEYS.activeGoalId, active);
-        }
-        await saveJson(STORAGE_KEYS.migrated, true);
-      }
-
-      if (active && !goalsList.find((g) => g.id === active)) {
-        active = goalsList[0]?.id ?? null;
-      }
-      if (!active && goalsList.length > 0) {
-        active = goalsList[0].id;
-      }
-
-      goalsRef.current = goalsList;
-      activeIdRef.current = active;
-      const sub = storedSub ?? DEFAULT_SUBSCRIPTION;
-      subscriptionRef.current = sub;
-
-      setGoals(goalsList);
-      setActiveGoalId(active);
-      setSubscription(sub);
-      setAccount(storedAcc ?? DEFAULT_ACCOUNT);
-      setPendingDraftState(storedDraft ?? null);
-      setLoaded(true);
-    })();
-  }, []);
+  // Server-side concurrency cursor. Set after every successful GET/PUT.
+  const versionRef = useRef<number>(0);
+  // Active Clerk user the in-memory state belongs to. Used to detect
+  // identity flips and avoid pushing one user's data under another's session.
+  const ownerRef = useRef<string | null>(null);
+  // Coalesce push requests: if a push is in-flight we just mark dirty and the
+  // running loop will fire one more PUT after the current one resolves.
+  const pushInFlightRef = useRef(false);
+  const pushDirtyRef = useRef(false);
+  // Quiet pushes during the initial boot/hydrate sequence so adopting server
+  // state doesn't immediately echo it back as a write.
+  const suppressPushRef = useRef(true);
 
   // Keep refs in sync with state on every commit.
   useEffect(() => {
@@ -289,21 +276,344 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     activeIdRef.current = activeGoalId;
   }, [activeGoalId]);
   useEffect(() => {
-    subscriptionRef.current = subscription;
-  }, [subscription]);
+    accountRef.current = account;
+  }, [account]);
+  useEffect(() => {
+    pendingDraftRef.current = pendingDraft;
+  }, [pendingDraft]);
 
-  const persistGoals = useCallback(async (next: Goal[]) => {
-    goalsRef.current = next;
-    setGoals(next);
-    await saveJson(STORAGE_KEYS.goals, next);
-  }, []);
+  // ----- Server adoption helpers ---------------------------------------
 
-  const persistActive = useCallback(async (id: string | null) => {
-    activeIdRef.current = id;
-    setActiveGoalId(id);
-    if (id) await saveJson(STORAGE_KEYS.activeGoalId, id);
-    else await removeKey(STORAGE_KEYS.activeGoalId);
-  }, []);
+  const adoptServerState = useCallback(
+    (state: MeStateResponse) => {
+      const nextGoals = (state.goals as unknown as Goal[]).map(ensureGoalShape);
+      goalsRef.current = nextGoals;
+      activeIdRef.current = state.activeGoalId;
+      accountRef.current = pickAccountPrefs(state.accountPrefs);
+      pendingDraftRef.current = (state.pendingDraft as IntakeDraft | null) ?? null;
+      versionRef.current = state.version;
+
+      setGoals(nextGoals);
+      setActiveGoalId(state.activeGoalId);
+      setAccount(accountRef.current);
+      setPendingDraftState(pendingDraftRef.current);
+      setTier(state.tier);
+    },
+    [],
+  );
+
+  const writeCacheSnapshot = useCallback(async (clerkUserId: string) => {
+    await saveUserCache(clerkUserId, {
+      goals: goalsRef.current,
+      activeGoalId: activeIdRef.current,
+      accountPrefs: accountRef.current,
+      pendingDraft: pendingDraftRef.current,
+      version: versionRef.current,
+      tier,
+    });
+  }, [tier]);
+
+  // ----- Push loop ------------------------------------------------------
+
+  const doPushOnce = useCallback(async () => {
+    const owner = ownerRef.current;
+    if (!owner) return;
+
+    const body: MeStateRequest = {
+      goals: goalsRef.current as unknown as MeStateRequest["goals"],
+      activeGoalId: activeIdRef.current,
+      accountPrefs: accountRef.current as unknown as MeStateRequest["accountPrefs"],
+      pendingDraft:
+        (pendingDraftRef.current as unknown as MeStateRequest["pendingDraft"]) ??
+        null,
+      expectedVersion: versionRef.current,
+    };
+
+    // After every await, re-check that the active owner is unchanged. A
+    // late response from user A's PUT must NOT mutate React state under
+    // user B's session (sign-out, account switch).
+    const stillOwner = (): boolean => ownerRef.current === owner;
+
+    try {
+      const res = await putMeState(body);
+      if (!stillOwner()) return;
+      versionRef.current = res.version;
+      setTier(res.tier);
+      setSyncStatus("idle");
+      setSyncMessage(null);
+      await writeCacheSnapshot(owner);
+    } catch (err) {
+      if (!stillOwner()) return;
+      if (err instanceof ApiError && err.status === 409) {
+        const conflict = err.data as MeStateConflictResponse | null;
+        if (conflict?.latest) {
+          adoptServerState(conflict.latest);
+          await writeCacheSnapshot(owner);
+          if (!stillOwner()) return;
+        } else {
+          // Fall back to a fresh GET if the body wasn't shaped as expected.
+          try {
+            const latest = await getMeState();
+            if (!stillOwner()) return;
+            adoptServerState(latest);
+            await writeCacheSnapshot(owner);
+            if (!stillOwner()) return;
+          } catch {
+            if (!stillOwner()) return;
+          }
+        }
+        // Drop the locally-queued change since the server version moved.
+        pushDirtyRef.current = false;
+        setSyncStatus("conflict");
+        setSyncMessage(
+          "Synced from another device. Your latest local edits were replaced.",
+        );
+        return;
+      }
+      // Network / 5xx / auth errors: leave local state in place; surface a
+      // soft message and let the next mutation retry.
+      setSyncStatus("error");
+      setSyncMessage("Couldn't reach the cloud. Changes will sync when you're back online.");
+      // eslint-disable-next-line no-console
+      if (__DEV__) console.warn("[atlas] push failed", err);
+    }
+  }, [adoptServerState, writeCacheSnapshot]);
+
+  const schedulePush = useCallback(() => {
+    // Suppress during boot/hydrate — the UI is gated on `loaded=false` for
+    // the duration of the boot sequence so no user mutation can reach this
+    // path. The check is defensive belt-and-braces.
+    if (suppressPushRef.current) return;
+    if (!ownerRef.current) return;
+    pushDirtyRef.current = true;
+    if (pushInFlightRef.current) return;
+    pushInFlightRef.current = true;
+    setSyncStatus("syncing");
+    void (async () => {
+      try {
+        while (pushDirtyRef.current) {
+          pushDirtyRef.current = false;
+          await doPushOnce();
+        }
+      } finally {
+        pushInFlightRef.current = false;
+      }
+    })();
+  }, [doPushOnce]);
+
+  // ----- Boot / hydrate sequence ---------------------------------------
+
+  // When Clerk reports a fresh signed-in user, adopt their cloud state. When
+  // they sign out (or a different user signs in) reset in-memory state.
+  useEffect(() => {
+    if (!clerkLoaded) return;
+
+    if (!isSignedIn || !userId) {
+      // Sign-out (or pre-sign-in). Wipe in-memory state so the next user
+      // doesn't see leftovers, but keep AsyncStorage caches around.
+      suppressPushRef.current = true;
+      ownerRef.current = null;
+      goalsRef.current = [];
+      activeIdRef.current = null;
+      accountRef.current = DEFAULT_ACCOUNT;
+      pendingDraftRef.current = null;
+      versionRef.current = 0;
+      setGoals([]);
+      setActiveGoalId(null);
+      setAccount(DEFAULT_ACCOUNT);
+      setPendingDraftState(null);
+      setTier(DEFAULT_SUBSCRIPTION.tier);
+      setSyncStatus("idle");
+      setSyncMessage(null);
+      setLoaded(true);
+      return;
+    }
+
+    // Signed-in. If the owner already matches we're already booted; nothing
+    // to do (this guards against effect re-runs from Clerk re-emitting the
+    // same identity).
+    if (ownerRef.current === userId) return;
+
+    let cancelled = false;
+    suppressPushRef.current = true;
+    ownerRef.current = userId;
+    setLoaded(false);
+    setSyncStatus("loading");
+    setSyncMessage(null);
+
+    // After every await in the boot async work we re-check ownership before
+    // mutating React state. If the user signed out or switched accounts
+    // mid-await, abandon the work — the new boot run owns the state.
+    const stillBooting = (): boolean =>
+      !cancelled && ownerRef.current === userId;
+
+    void (async () => {
+      // 1. Fast paint from per-user cache so the UI doesn't flash empty.
+      // We deliberately do NOT setLoaded(true) here — the AuthGate keeps the
+      // splash up until the server snapshot is adopted (or boot errors out).
+      // This prevents a boot-vs-mutation race where the user could edit
+      // cached data before the GET completes, only to have those edits
+      // overwritten by adoptServerState(server).
+      const cached = await loadUserCache<Goal, AccountPrefs, IntakeDraft>(userId);
+      if (!stillBooting()) return;
+      if (cached) {
+        const cachedGoals = cached.goals.map(ensureGoalShape);
+        goalsRef.current = cachedGoals;
+        activeIdRef.current = cached.activeGoalId;
+        accountRef.current = pickAccountPrefs(cached.accountPrefs);
+        pendingDraftRef.current = cached.pendingDraft;
+        versionRef.current = cached.version;
+        setGoals(cachedGoals);
+        setActiveGoalId(cached.activeGoalId);
+        setAccount(accountRef.current);
+        setPendingDraftState(pendingDraftRef.current);
+        setTier(cached.tier);
+      }
+
+      // 2. GET /me/state to refresh against the server.
+      try {
+        const server = await getMeState();
+        if (!stillBooting()) return;
+
+        // 3. First-sign-in migration: if the server is empty for this user
+        // and we have legacy local goals on this device that have never
+        // been migrated, push them up.
+        const migrated = await getMigratedFlag(userId);
+        if (!stillBooting()) return;
+        if (
+          !migrated &&
+          server.goals.length === 0 &&
+          server.version === 0
+        ) {
+          const legacy = await loadLegacyV2Goals<Goal>();
+          if (!stillBooting()) return;
+          if (legacy && legacy.goals.length > 0) {
+            const seededGoals = legacy.goals.map(ensureGoalShape);
+            goalsRef.current = seededGoals;
+            activeIdRef.current =
+              legacy.activeGoalId &&
+              seededGoals.find((g) => g.id === legacy.activeGoalId)
+                ? legacy.activeGoalId
+                : (seededGoals[0]?.id ?? null);
+            accountRef.current = DEFAULT_ACCOUNT;
+            pendingDraftRef.current = null;
+            versionRef.current = 0;
+            setGoals(seededGoals);
+            setActiveGoalId(activeIdRef.current);
+            setAccount(DEFAULT_ACCOUNT);
+            setPendingDraftState(null);
+            setTier(server.tier);
+            // Defer setLoaded(true) until the migration PUT resolves so the
+            // user can't mutate seeded data before it's been uploaded.
+
+            try {
+              const uploaded = await putMeState({
+                goals: seededGoals as unknown as MeStateRequest["goals"],
+                activeGoalId: activeIdRef.current,
+                accountPrefs:
+                  DEFAULT_ACCOUNT as unknown as MeStateRequest["accountPrefs"],
+                pendingDraft: null,
+                expectedVersion: 0,
+              });
+              if (!stillBooting()) return;
+              versionRef.current = uploaded.version;
+              setTier(uploaded.tier);
+              await setMigratedFlag(userId);
+              if (!stillBooting()) return;
+              await clearLegacyV2Snapshot();
+              if (!stillBooting()) return;
+              await writeCacheSnapshot(userId);
+              if (!stillBooting()) return;
+              setSyncStatus("idle");
+              setSyncMessage(
+                "We brought your existing goals up to the cloud.",
+              );
+            } catch (err) {
+              if (!stillBooting()) return;
+              if (
+                err instanceof ApiError &&
+                err.status === 409 &&
+                (err.data as MeStateConflictResponse | null)?.latest
+              ) {
+                // Server got data from another device first — adopt it and
+                // stop trying to seed.
+                const conflict = err.data as MeStateConflictResponse;
+                adoptServerState(conflict.latest);
+                await setMigratedFlag(userId);
+                if (!stillBooting()) return;
+                await writeCacheSnapshot(userId);
+                if (!stillBooting()) return;
+                setSyncStatus("idle");
+                setSyncMessage(
+                  "Loaded your goals from another device.",
+                );
+              } else {
+                setSyncStatus("error");
+                setSyncMessage(
+                  "Couldn't upload local goals — we'll retry on your next change.",
+                );
+              }
+            }
+            if (!stillBooting()) return;
+            setLoaded(true);
+            return;
+          }
+
+          // No legacy data to migrate; record the flag so we never look again.
+          await setMigratedFlag(userId);
+          if (!stillBooting()) return;
+        }
+
+        // 4. Standard adoption path: trust the server snapshot.
+        adoptServerState(server);
+        await writeCacheSnapshot(userId);
+        if (!stillBooting()) return;
+        setLoaded(true);
+        setSyncStatus("idle");
+      } catch (err) {
+        if (!stillBooting()) return;
+        // If we already painted from cache, keep that and surface a soft
+        // error. Otherwise we have nothing to show, so flip loaded=true
+        // anyway so the UI exits its splash state.
+        setSyncStatus("error");
+        setSyncMessage("Couldn't reach the cloud. Showing your last sync.");
+        setLoaded(true);
+        // eslint-disable-next-line no-console
+        if (__DEV__) console.warn("[atlas] hydrate failed", err);
+      } finally {
+        // Suppression is gated by ownership in schedulePush() too, but we
+        // only lift it for the still-current owner. A stale boot returning
+        // late should not re-enable pushes for the new owner.
+        if (!cancelled && ownerRef.current === userId) {
+          suppressPushRef.current = false;
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clerkLoaded, isSignedIn, userId, adoptServerState, writeCacheSnapshot]);
+
+  // ----- Local mutators (each schedules a push) ------------------------
+
+  const persistGoals = useCallback(
+    (next: Goal[]) => {
+      goalsRef.current = next;
+      setGoals(next);
+      schedulePush();
+    },
+    [schedulePush],
+  );
+
+  const persistActive = useCallback(
+    (id: string | null) => {
+      activeIdRef.current = id;
+      setActiveGoalId(id);
+      schedulePush();
+    },
+    [schedulePush],
+  );
 
   const activeGoal = useMemo(
     () => goals.find((g) => g.id === activeGoalId) ?? null,
@@ -341,6 +651,11 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     };
   }, [activeGoal, activeCurrentWeek]);
 
+  const subscription: Subscription = useMemo(
+    () => tierToSubscription(tier),
+    [tier],
+  );
+
   const goalLimit = tierGoalLimit(subscription.tier);
   const canAddMoreGoals = goals.length < goalLimit;
 
@@ -348,7 +663,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     async (profile: UserProfile): Promise<Goal> => {
       // Provider-level limit guard (defense-in-depth on top of UI gating).
       const currentGoals = goalsRef.current;
-      const currentLimit = tierGoalLimit(subscriptionRef.current.tier);
+      const currentLimit = tierGoalLimit(tierToSubscription(tier).tier);
       if (currentGoals.length >= currentLimit) {
         throw new GoalLimitError(currentLimit);
       }
@@ -368,19 +683,19 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
         coachMemory: null,
       };
       const next = [...currentGoals, goal];
-      await persistGoals(next);
-      await persistActive(goal.id);
+      persistGoals(next);
+      persistActive(goal.id);
       return goal;
     },
-    [persistGoals, persistActive],
+    [persistGoals, persistActive, tier],
   );
 
   const removeGoal = useCallback(
     async (goalId: string) => {
       const next = goalsRef.current.filter((g) => g.id !== goalId);
-      await persistGoals(next);
+      persistGoals(next);
       if (activeIdRef.current === goalId) {
-        await persistActive(next[0]?.id ?? null);
+        persistActive(next[0]?.id ?? null);
       }
     },
     [persistGoals, persistActive],
@@ -389,7 +704,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
   const setActiveGoal = useCallback(
     async (goalId: string) => {
       if (!goalsRef.current.find((g) => g.id === goalId)) return;
-      await persistActive(goalId);
+      persistActive(goalId);
     },
     [persistActive],
   );
@@ -397,7 +712,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
   const updateGoal = useCallback(
     async (goalId: string, updater: GoalUpdater) => {
       const next = goalsRef.current.map((g) => (g.id === goalId ? updater(g) : g));
-      await persistGoals(next);
+      persistGoals(next);
     },
     [persistGoals],
   );
@@ -558,81 +873,118 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     [updateActiveGoal],
   );
 
-  const setPendingDraft = useCallback(async (draft: IntakeDraft | null) => {
-    setPendingDraftState(draft);
-    if (draft) await saveJson(STORAGE_KEYS.pendingDraft, draft);
-    else await removeKey(STORAGE_KEYS.pendingDraft);
-  }, []);
+  const setPendingDraft = useCallback(
+    async (draft: IntakeDraft | null) => {
+      pendingDraftRef.current = draft;
+      setPendingDraftState(draft);
+      schedulePush();
+    },
+    [schedulePush],
+  );
 
-  const updatePendingAnswers = useCallback(async (answers: IntakeAnswer[]) => {
-    setPendingDraftState((prev) => {
-      if (!prev) return prev;
+  const updatePendingAnswers = useCallback(
+    async (answers: IntakeAnswer[]) => {
+      const prev = pendingDraftRef.current;
+      if (!prev) return;
       const next = { ...prev, answers };
-      void saveJson(STORAGE_KEYS.pendingDraft, next);
-      return next;
-    });
-  }, []);
+      pendingDraftRef.current = next;
+      setPendingDraftState(next);
+      schedulePush();
+    },
+    [schedulePush],
+  );
 
   const attachPendingQuestions = useCallback(
     async (questions: IntakeQuestion[], introMessage: string) => {
-      setPendingDraftState((prev) => {
-        if (!prev) return prev;
-        const next: IntakeDraft = {
-          ...prev,
-          questions,
-          introMessage,
-          stage: "answering",
-        };
-        void saveJson(STORAGE_KEYS.pendingDraft, next);
-        return next;
-      });
+      const prev = pendingDraftRef.current;
+      if (!prev) return;
+      const next: IntakeDraft = {
+        ...prev,
+        questions,
+        introMessage,
+        stage: "answering",
+      };
+      pendingDraftRef.current = next;
+      setPendingDraftState(next);
+      schedulePush();
     },
-    [],
+    [schedulePush],
   );
 
   const attachPendingProfile = useCallback(
     async (profile: UserProfile, followUp?: string) => {
-      setPendingDraftState((prev) => {
-        if (!prev) return prev;
-        const next: IntakeDraft = {
-          ...prev,
-          synthesizedProfile: profile,
-          followUp,
-          stage: "ready_to_generate",
-        };
-        void saveJson(STORAGE_KEYS.pendingDraft, next);
-        return next;
-      });
+      const prev = pendingDraftRef.current;
+      if (!prev) return;
+      const next: IntakeDraft = {
+        ...prev,
+        synthesizedProfile: profile,
+        followUp,
+        stage: "ready_to_generate",
+      };
+      pendingDraftRef.current = next;
+      setPendingDraftState(next);
+      schedulePush();
     },
-    [],
+    [schedulePush],
   );
 
-  const updateSubscription = useCallback(async (tier: SubscriptionTier) => {
-    const next: Subscription = { tier, startedAt: new Date().toISOString() };
-    subscriptionRef.current = next;
-    setSubscription(next);
-    await saveJson(STORAGE_KEYS.subscription, next);
+  // Tier is now controlled by the server; local "upgrade" is a no-op so any
+  // legacy callers don't crash. Surface a dev-only warning once.
+  const updateSubscription = useCallback(async (_tier: SubscriptionTier) => {
+    if (__DEV__) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[atlas] updateSubscription is a no-op — tier is server-controlled.",
+      );
+    }
   }, []);
 
-  const updateAccount = useCallback(async (prefs: Partial<AccountPrefs>) => {
-    setAccount((prev) => {
-      const next = { ...prev, ...prefs };
-      void saveJson(STORAGE_KEYS.account, next);
-      return next;
-    });
-  }, []);
+  const updateAccount = useCallback(
+    async (prefs: Partial<AccountPrefs>) => {
+      const next = { ...accountRef.current, ...prefs };
+      accountRef.current = next;
+      setAccount(next);
+      schedulePush();
+    },
+    [schedulePush],
+  );
 
   const resetAll = useCallback(async () => {
-    await clearAllAtlas();
+    // Clear locally first so the UI updates instantly, then push the empty
+    // state up to the server so other devices see the reset.
     goalsRef.current = [];
     activeIdRef.current = null;
-    subscriptionRef.current = DEFAULT_SUBSCRIPTION;
+    accountRef.current = DEFAULT_ACCOUNT;
+    pendingDraftRef.current = null;
     setGoals([]);
     setActiveGoalId(null);
-    setSubscription(DEFAULT_SUBSCRIPTION);
     setAccount(DEFAULT_ACCOUNT);
     setPendingDraftState(null);
-  }, []);
+    schedulePush();
+  }, [schedulePush]);
+
+  const signOut = useCallback(async () => {
+    const owner = ownerRef.current;
+    // Stop anything queued before we lose the auth token.
+    suppressPushRef.current = true;
+    pushDirtyRef.current = false;
+    if (owner) {
+      await clearUserCache(owner);
+    }
+    try {
+      await clerkSignOut();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      if (__DEV__) console.warn("[atlas] signOut failed", err);
+    }
+  }, [clerkSignOut]);
+
+  const dismissSyncMessage = useCallback(() => {
+    setSyncMessage(null);
+    if (syncStatus === "conflict" || syncStatus === "error") {
+      setSyncStatus("idle");
+    }
+  }, [syncStatus]);
 
   const value: AtlasContextValue = {
     loaded,
@@ -641,6 +993,9 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     subscription,
     account,
     pendingDraft,
+    tier,
+    syncStatus,
+    syncMessage,
     activeGoal,
     activeProfile: activeGoal?.profile ?? null,
     activeRoadmap: activeGoal?.roadmap ?? null,
@@ -680,6 +1035,8 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     updateSubscription,
     updateAccount,
     resetAll,
+    signOut,
+    dismissSyncMessage,
   };
 
   return <AtlasContext.Provider value={value}>{children}</AtlasContext.Provider>;
@@ -690,3 +1047,7 @@ export function useAtlas() {
   if (!ctx) throw new Error("useAtlas must be used within AtlasProvider");
   return ctx;
 }
+
+// `clearAllAtlas` is still re-exported for any caller that wants a hard
+// device-wide wipe (used by the secondary "danger zone" reset path).
+export { clearAllAtlas };

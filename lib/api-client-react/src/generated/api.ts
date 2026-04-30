@@ -25,11 +25,16 @@ import type {
   CoachResponse,
   DailyPlan,
   DailyPlanRequest,
+  ErrorResponse,
   HealthStatus,
   IntakeQuestionsRequest,
   IntakeQuestionsResponse,
   IntakeSubmitRequest,
   IntakeSubmitResponse,
+  MeResponse,
+  MeStateConflictResponse,
+  MeStateRequest,
+  MeStateResponse,
   OnboardingChatRequest,
   OnboardingChatResponse,
   Roadmap,
@@ -122,6 +127,232 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Current authenticated user (identity + tier)
+ */
+export const getGetMeUrl = () => {
+  return `/api/me`;
+};
+
+export const getMe = async (options?: RequestInit): Promise<MeResponse> => {
+  return customFetch<MeResponse>(getGetMeUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMeQueryKey = () => {
+  return [`/api/me`] as const;
+};
+
+export const getGetMeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMe>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMeQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMe>>> = ({
+    signal,
+  }) => getMe({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMe>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMeQueryResult = NonNullable<Awaited<ReturnType<typeof getMe>>>;
+export type GetMeQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Current authenticated user (identity + tier)
+ */
+
+export function useGetMe<
+  TData = Awaited<ReturnType<typeof getMe>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMeQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Full personal state for the signed-in user (goals, prefs, draft)
+ */
+export const getGetMeStateUrl = () => {
+  return `/api/me/state`;
+};
+
+export const getMeState = async (
+  options?: RequestInit,
+): Promise<MeStateResponse> => {
+  return customFetch<MeStateResponse>(getGetMeStateUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMeStateQueryKey = () => {
+  return [`/api/me/state`] as const;
+};
+
+export const getGetMeStateQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMeState>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMeState>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMeStateQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMeState>>> = ({
+    signal,
+  }) => getMeState({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMeState>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMeStateQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMeState>>
+>;
+export type GetMeStateQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Full personal state for the signed-in user (goals, prefs, draft)
+ */
+
+export function useGetMeState<
+  TData = Awaited<ReturnType<typeof getMeState>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMeState>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMeStateQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Replace personal state with optimistic locking
+ */
+export const getPutMeStateUrl = () => {
+  return `/api/me/state`;
+};
+
+export const putMeState = async (
+  meStateRequest: MeStateRequest,
+  options?: RequestInit,
+): Promise<MeStateResponse> => {
+  return customFetch<MeStateResponse>(getPutMeStateUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(meStateRequest),
+  });
+};
+
+export const getPutMeStateMutationOptions = <
+  TError = ErrorType<ErrorResponse | MeStateConflictResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putMeState>>,
+    TError,
+    { data: BodyType<MeStateRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putMeState>>,
+  TError,
+  { data: BodyType<MeStateRequest> },
+  TContext
+> => {
+  const mutationKey = ["putMeState"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putMeState>>,
+    { data: BodyType<MeStateRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return putMeState(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PutMeStateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof putMeState>>
+>;
+export type PutMeStateMutationBody = BodyType<MeStateRequest>;
+export type PutMeStateMutationError = ErrorType<
+  ErrorResponse | MeStateConflictResponse
+>;
+
+/**
+ * @summary Replace personal state with optimistic locking
+ */
+export const usePutMeState = <
+  TError = ErrorType<ErrorResponse | MeStateConflictResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putMeState>>,
+    TError,
+    { data: BodyType<MeStateRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof putMeState>>,
+  TError,
+  { data: BodyType<MeStateRequest> },
+  TContext
+> => {
+  return useMutation(getPutMeStateMutationOptions(options));
+};
 
 /**
  * @summary Continue an adaptive onboarding conversation for the chosen goal model
