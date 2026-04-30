@@ -245,40 +245,99 @@ export interface DailyPlan {
   tasks: DailyTask[];
 }
 
-export interface CoachRequest {
-  profile: UserProfile;
-  roadmap: Roadmap;
-  todayPlan?: DailyPlan;
-  behavioral: BehavioralSnapshot;
-  /** Cumulative behavioural identity model. Optional. */
-  learnedProfile?: BehavioralProfile | null;
-  history: ChatMessage[];
-  message: string;
-}
+export type RoadmapEvolutionEntryTrigger =
+  (typeof RoadmapEvolutionEntryTrigger)[keyof typeof RoadmapEvolutionEntryTrigger];
 
-export interface CoachResponse {
-  reply: string;
-}
-
-export interface AdaptRequest {
-  profile: UserProfile;
-  roadmap: Roadmap;
-  behavioral: BehavioralSnapshot;
-}
-
-export type AdaptResponseDifficultyAdjustment =
-  (typeof AdaptResponseDifficultyAdjustment)[keyof typeof AdaptResponseDifficultyAdjustment];
-
-export const AdaptResponseDifficultyAdjustment = {
-  easier: "easier",
-  same: "same",
-  harder: "harder",
+export const RoadmapEvolutionEntryTrigger = {
+  manual: "manual",
+  auto: "auto",
 } as const;
 
-export interface AdaptResponse {
-  difficultyAdjustment: AdaptResponseDifficultyAdjustment;
-  adjustments: string[];
-  encouragement: string;
+export type PhaseChangeType =
+  (typeof PhaseChangeType)[keyof typeof PhaseChangeType];
+
+export const PhaseChangeType = {
+  added: "added",
+  removed: "removed",
+  modified: "modified",
+  unchanged: "unchanged",
+} as const;
+
+/**
+ * Structured per-phase summary of how the roadmap changed.
+ */
+export interface PhaseChange {
+  phaseId: string;
+  phaseTitle: string;
+  changeType: PhaseChangeType;
+  /** One sentence explaining what changed for this phase, in plain language. */
+  summary: string;
+}
+
+/**
+ * One historical roadmap evolution. The mobile app stores up to 10 of these per goal.
+ */
+export interface RoadmapEvolutionEntry {
+  evolvedAt: string;
+  trigger: RoadmapEvolutionEntryTrigger;
+  changeSummary: string;
+  rationale: string;
+  phaseChanges: PhaseChange[];
+}
+
+/**
+ * A read-only snapshot of which roadmap phase the user is currently in.
+ */
+export interface CurrentPhaseSnapshot {
+  id: string;
+  title: string;
+  focus: string;
+  startWeek: number;
+  endWeek: number;
+  /** 1-indexed week number within this phase. */
+  weekIntoPhase: number;
+}
+
+/**
+ * Long-term memory the coach maintains across conversations. Persists past the chat history cap.
+ */
+export interface CoachMemory {
+  /** A 1-3 sentence rolling summary of what we've talked about and what matters to this user. */
+  summary: string;
+  /** Durable personal facts the user has shared (e.g. "has a knee injury", "works night shifts"). Capped at 20. */
+  facts: string[];
+  updatedAt: string | null;
+}
+
+export type CoachActionSuggestionKind =
+  (typeof CoachActionSuggestionKind)[keyof typeof CoachActionSuggestionKind];
+
+export const CoachActionSuggestionKind = {
+  evolve_roadmap: "evolve_roadmap",
+  refresh_insights: "refresh_insights",
+  reflect_on_task: "reflect_on_task",
+  none: "none",
+} as const;
+
+/**
+ * An optional one-tap action the coach is recommending alongside the reply.
+ */
+export interface CoachActionSuggestion {
+  kind: CoachActionSuggestionKind;
+  /** Button text shown to the user (e.g. "Evolve roadmap now"). */
+  label: string;
+  /** One-sentence why, shown next to the button. */
+  rationale: string;
+}
+
+/**
+ * An optional patch the coach proposes to its long-term memory. Only included when something durable was learned this turn.
+ */
+export interface CoachMemoryUpdate {
+  /** New rolling summary that replaces the previous one. */
+  summary: string;
+  /** Brand-new facts to append to the facts list. Should not duplicate existing facts. */
+  newFacts: string[];
 }
 
 export type ReflectionReasonTag =
@@ -307,6 +366,58 @@ export interface ReflectionEntry {
   reflectedAt: string;
 }
 
+export interface CoachRequest {
+  profile: UserProfile;
+  roadmap: Roadmap;
+  todayPlan?: DailyPlan;
+  behavioral: BehavioralSnapshot;
+  /** Cumulative behavioural identity model. Optional. */
+  learnedProfile?: BehavioralProfile | null;
+  /** Which week of the journey the user is currently in (1-indexed). Optional. */
+  currentWeek?: number;
+  /** The roadmap phase the user is currently inside. Optional. */
+  currentPhase?: CurrentPhaseSnapshot | null;
+  /** Last few reflections the user submitted. Used to ground tone and advice. */
+  recentReflections?: ReflectionEntry[];
+  /** Last 1-3 roadmap evolutions, most recent first. */
+  recentEvolutions?: RoadmapEvolutionEntry[];
+  /** Long-term coach memory persisted across sessions. Optional. */
+  coachMemory?: CoachMemory | null;
+  history: ChatMessage[];
+  message: string;
+}
+
+export interface CoachResponse {
+  reply: string;
+  /** 0-3 short tappable follow-up prompts the user can send back. Each must be <= 50 chars and reference real context. */
+  suggestedReplies: string[];
+  /** Optional CTA for a concrete app action. Use kind=none (or null) when no action fits. */
+  actionSuggestion: CoachActionSuggestion | null;
+  /** Optional update to long-term coach memory. Only set when the user revealed something durable this turn. */
+  memoryUpdate: CoachMemoryUpdate | null;
+}
+
+export interface AdaptRequest {
+  profile: UserProfile;
+  roadmap: Roadmap;
+  behavioral: BehavioralSnapshot;
+}
+
+export type AdaptResponseDifficultyAdjustment =
+  (typeof AdaptResponseDifficultyAdjustment)[keyof typeof AdaptResponseDifficultyAdjustment];
+
+export const AdaptResponseDifficultyAdjustment = {
+  easier: "easier",
+  same: "same",
+  harder: "harder",
+} as const;
+
+export interface AdaptResponse {
+  difficultyAdjustment: AdaptResponseDifficultyAdjustment;
+  adjustments: string[];
+  encouragement: string;
+}
+
 export type BehavioralProfileRequestRecentHistoryItem = {
   taskId: string;
   taskTitle: string;
@@ -328,27 +439,6 @@ export interface BehavioralProfileResponse {
   profile: BehavioralProfile;
   /** One short sentence the user sees as a fresh insight after a refresh. */
   aiInsight: string;
-}
-
-export type PhaseChangeType =
-  (typeof PhaseChangeType)[keyof typeof PhaseChangeType];
-
-export const PhaseChangeType = {
-  added: "added",
-  removed: "removed",
-  modified: "modified",
-  unchanged: "unchanged",
-} as const;
-
-/**
- * Structured per-phase summary of how the roadmap changed.
- */
-export interface PhaseChange {
-  phaseId: string;
-  phaseTitle: string;
-  changeType: PhaseChangeType;
-  /** One sentence explaining what changed for this phase, in plain language. */
-  summary: string;
 }
 
 /**

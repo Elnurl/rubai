@@ -1,6 +1,7 @@
 import type {
   BehavioralProfile,
   ChatMessage,
+  CoachMemory,
   DailyPlan,
   GoalType,
   IntakeAnswer,
@@ -38,6 +39,7 @@ export type Goal = {
   behavioralProfile: BehavioralProfile | null;
   roadmapEvolutions: RoadmapEvolutionEntry[];
   lastEvolvedAt: string | null;
+  coachMemory: CoachMemory | null;
 };
 
 export type SubscriptionTier = "free" | "pro" | "premium";

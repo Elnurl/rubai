@@ -409,36 +409,274 @@ Rules:
   }
 });
 
+type CoachContextInput = {
+  profile: { goalType: string; goalStatement: string; availableTimePerDayMinutes: number };
+  roadmap: { headline: string; strategy: string; totalWeeks: number };
+  todayPlan?: { date: string; focusOfTheDay: string; tasks: { title: string }[] } | undefined;
+  behavioral: {
+    currentStreakDays: number;
+    completionRate: number;
+    completedTaskTitles: string[];
+    missedTaskTitles: string[];
+  };
+  learnedProfile?: unknown;
+  currentWeek?: number | undefined;
+  currentPhase?: {
+    title: string;
+    focus: string;
+    startWeek: number;
+    endWeek: number;
+    weekIntoPhase: number;
+  } | null | undefined;
+  recentReflections?: {
+    taskTitle: string;
+    date: string;
+    completed: boolean;
+    reasonTag?: string | null;
+    note?: string | null;
+  }[];
+  recentEvolutions?: {
+    evolvedAt: string;
+    trigger: string;
+    changeSummary: string;
+  }[];
+  coachMemory?: { summary: string; facts: string[] } | null | undefined;
+};
+
+function buildCoachContext(input: CoachContextInput): string {
+  const {
+    profile,
+    roadmap,
+    todayPlan,
+    behavioral,
+    learnedProfile,
+    currentWeek,
+    currentPhase,
+    recentReflections = [],
+    recentEvolutions = [],
+    coachMemory,
+  } = input;
+
+  const blocks: string[] = [];
+
+  blocks.push(
+    `GOAL: ${profile.goalStatement} (${profile.goalType}). Daily budget: ${profile.availableTimePerDayMinutes} min.`,
+  );
+
+  blocks.push(
+    `ROADMAP: "${roadmap.headline}" — ${roadmap.totalWeeks}-week plan. Strategy: ${roadmap.strategy}`,
+  );
+
+  if (currentPhase) {
+    blocks.push(
+      `CURRENT PHASE: "${currentPhase.title}" (weeks ${currentPhase.startWeek}–${currentPhase.endWeek}, week ${currentPhase.weekIntoPhase} into this phase). Focus: ${currentPhase.focus}.${currentWeek ? ` Overall: week ${currentWeek} of ${roadmap.totalWeeks}.` : ""}`,
+    );
+  } else if (currentWeek) {
+    blocks.push(`CURRENT WEEK: ${currentWeek} of ${roadmap.totalWeeks}.`);
+  }
+
+  if (todayPlan) {
+    blocks.push(
+      `TODAY (${todayPlan.date}) — focus: ${todayPlan.focusOfTheDay}. Tasks: ${todayPlan.tasks.map((t) => t.title).join(" | ") || "none"}.`,
+    );
+  } else {
+    blocks.push("TODAY: no daily plan generated yet.");
+  }
+
+  blocks.push(
+    `RECENT BEHAVIOUR: ${behavioral.currentStreakDays}-day streak, ${(behavioral.completionRate * 100).toFixed(0)}% completion. Recently completed: ${behavioral.completedTaskTitles.slice(0, 5).join("; ") || "none"}. Recently missed: ${behavioral.missedTaskTitles.slice(0, 5).join("; ") || "none"}.`,
+  );
+
+  if (recentReflections.length > 0) {
+    const lines = recentReflections
+      .slice(0, 5)
+      .map((r) => {
+        const status = r.completed ? "DID" : "SKIPPED";
+        const reason = r.reasonTag ? ` [${r.reasonTag}]` : "";
+        const note = r.note ? ` — "${r.note}"` : "";
+        return `  • ${r.date} ${status} "${r.taskTitle}"${reason}${note}`;
+      })
+      .join("\n");
+    blocks.push(`RECENT REFLECTIONS (most recent last):\n${lines}`);
+  }
+
+  if (recentEvolutions.length > 0) {
+    const lines = recentEvolutions
+      .slice(0, 3)
+      .map((e) => `  • ${e.evolvedAt} (${e.trigger}): ${e.changeSummary}`)
+      .join("\n");
+    blocks.push(`RECENT ROADMAP EVOLUTIONS:\n${lines}`);
+  }
+
+  const learnedSummary = summarizeLearnedProfile(learnedProfile);
+  if (learnedSummary) {
+    blocks.push(`LEARNED PROFILE:\n${learnedSummary}`);
+  }
+
+  if (coachMemory && (coachMemory.summary || coachMemory.facts.length > 0)) {
+    const factLines =
+      coachMemory.facts.length > 0
+        ? `\nFACTS YOU KNOW:\n${coachMemory.facts.map((f) => `  • ${f}`).join("\n")}`
+        : "";
+    blocks.push(
+      `LONG-TERM COACH MEMORY:\n${coachMemory.summary || "(no summary yet)"}${factLines}`,
+    );
+  }
+
+  return blocks.join("\n\n");
+}
+
+const coachResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    reply: {
+      type: "string",
+      description:
+        "The coach's reply in plain prose. Under 110 words unless the user explicitly asked for detail. No markdown, headings, bullets, or emojis.",
+    },
+    suggestedReplies: {
+      type: "array",
+      maxItems: 3,
+      description:
+        "0-3 short follow-up prompts the user can tap to send back. Each MUST be <= 50 chars and reference real context (a phase, a reflection, a fact). Empty array when nothing fits.",
+      items: { type: "string", maxLength: 50 },
+    },
+    actionSuggestion: {
+      anyOf: [
+        {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            kind: {
+              type: "string",
+              // "none" is accepted from the model (matches the OpenAPI enum)
+              // and normalized to null below so the client only ever sees a
+              // concrete actionable kind or null.
+              enum: [
+                "evolve_roadmap",
+                "refresh_insights",
+                "reflect_on_task",
+                "none",
+              ],
+            },
+            label: { type: "string" },
+            rationale: { type: "string" },
+          },
+          required: ["kind", "label", "rationale"],
+        },
+        { type: "null" },
+      ],
+      description:
+        "Set to a non-null object only when the conversation makes one of these app actions clearly relevant. Otherwise null.",
+    },
+    memoryUpdate: {
+      anyOf: [
+        {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            summary: {
+              type: "string",
+              description:
+                "1-3 sentence rolling summary of what we've discussed and what matters to this user.",
+            },
+            newFacts: {
+              type: "array",
+              description:
+                "Brand-new durable facts the user revealed THIS turn (e.g. 'has a knee injury'). Do not repeat existing facts.",
+              items: { type: "string" },
+            },
+          },
+          required: ["summary", "newFacts"],
+        },
+        { type: "null" },
+      ],
+      description:
+        "Set ONLY when the user revealed something durable this turn. Otherwise null.",
+    },
+  },
+  required: ["reply", "suggestedReplies", "actionSuggestion", "memoryUpdate"],
+} as const;
+
 router.post("/coach", async (req, res) => {
   const parsed = atlasCoachBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { profile, roadmap, todayPlan, behavioral, learnedProfile, history, message } = parsed.data;
-  const learnedSummary = summarizeLearnedProfile(learnedProfile);
+  const {
+    profile,
+    roadmap,
+    todayPlan,
+    behavioral,
+    learnedProfile,
+    currentWeek,
+    currentPhase,
+    recentReflections,
+    recentEvolutions,
+    coachMemory,
+    history,
+    message,
+  } = parsed.data;
 
   try {
+    const contextBlock = buildCoachContext({
+      profile: {
+        goalType: profile.goalType,
+        goalStatement: profile.goalStatement,
+        availableTimePerDayMinutes: profile.availableTimePerDayMinutes,
+      },
+      roadmap: {
+        headline: roadmap.headline,
+        strategy: roadmap.strategy,
+        totalWeeks: roadmap.totalWeeks,
+      },
+      todayPlan: todayPlan
+        ? {
+            date: todayPlan.date,
+            focusOfTheDay: todayPlan.focusOfTheDay,
+            tasks: todayPlan.tasks.map((t) => ({ title: t.title })),
+          }
+        : undefined,
+      behavioral,
+      learnedProfile,
+      currentWeek,
+      currentPhase,
+      recentReflections,
+      recentEvolutions,
+      coachMemory,
+    });
+
     const systemContext = `You are RubAI — a strategic AI execution coach inside a mobile app. The user has come to you for guidance.
 
-Speak conversationally, with warmth and precision. Reference their actual plan, today's tasks, recent behaviour and learned behavioural profile. Be concrete, not generic. Suggest next steps when relevant. Push back gently when they make excuses, celebrate small wins, identify patterns.
+Speak conversationally, with warmth and precision. EVERY reply must ground itself in the real context below — reference the current phase, today's tasks, a recent reflection, a learned trait, or a known fact, not generic advice. Push back gently when they make excuses, celebrate small wins, name the pattern you see.
 
 Hard rules:
-- Reply in plain prose. No markdown, no headings, no bullets, no emojis.
-- Keep replies under 110 words unless explicitly asked for detail.
-- If the user asks something off-topic, gently steer back to their goal.
-- When a LEARNED PROFILE is provided, treat it as your living understanding of this person — let it shape tone, pacing advice, and the kind of next step you suggest.
+- "reply" is plain prose. No markdown, headings, bullets, or emojis. Under 110 words unless they explicitly ask for detail.
+- "suggestedReplies": 0-3 short follow-ups (<= 50 chars each) that THIS user would plausibly want to send next given THIS context. Each must reference something concrete (a phase name, a reflection reason, a fact). If nothing fits, return [].
+- "actionSuggestion": include only when one of these app actions is genuinely warranted right now:
+    • evolve_roadmap — they have ≥3 reflections since the last evolution AND the conversation surfaces a real mismatch with the plan.
+    • refresh_insights — they're asking about themselves / patterns / "what should I focus on" and the learned profile feels stale.
+    • reflect_on_task — they mentioned a specific task they did or skipped and haven't reflected on it.
+  Otherwise return null. Don't suggest the same action two turns in a row.
+- "memoryUpdate": include ONLY when the user revealed something durable in THIS message (a constraint, preference, life event, identity statement). Otherwise null. The summary you write replaces the prior summary; keep it ≤ 3 sentences. newFacts must not duplicate existing facts.
+- If the user goes off-topic, steer back to their goal in one sentence.
 
-Context:
-PROFILE: ${JSON.stringify(profile)}
-ROADMAP HEADLINE: ${roadmap.headline}
-ACTIVE STRATEGY: ${roadmap.strategy}
-${todayPlan ? `TODAY (${todayPlan.date}) — focus: ${todayPlan.focusOfTheDay} — tasks: ${JSON.stringify(todayPlan.tasks.map((t: { title: string }) => t.title))}` : "No daily plan generated yet."}
-RECENT BEHAVIOUR: streak ${behavioral.currentStreakDays} days, completion rate ${(behavioral.completionRate * 100).toFixed(0)}%, recently completed: ${behavioral.completedTaskTitles.join("; ") || "none"}; missed: ${behavioral.missedTaskTitles.join("; ") || "none"}${learnedSummary ? `\n\nLEARNED PROFILE:\n${learnedSummary}` : ""}`;
+CONTEXT:
+${contextBlock}`;
 
     const completion = await openai.chat.completions.create({
       model: MODEL,
-      max_completion_tokens: 600,
+      max_completion_tokens: 1200,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "coach_reply",
+          strict: true,
+          schema: coachResponseSchema,
+        },
+      },
       messages: [
         { role: "system", content: systemContext },
         ...history.map((m: { role: string; content: string }) => ({
@@ -449,8 +687,54 @@ RECENT BEHAVIOUR: streak ${behavioral.currentStreakDays} days, completion rate $
       ],
     });
 
-    const reply = completion.choices[0]?.message?.content?.trim() ?? "";
-    res.json({ reply });
+    const raw = completion.choices[0]?.message?.content ?? "{}";
+    const parsedJson = JSON.parse(raw) as {
+      reply: string;
+      suggestedReplies: string[];
+      actionSuggestion: { kind: string; label: string; rationale: string } | null;
+      memoryUpdate: { summary: string; newFacts: string[] } | null;
+    };
+
+    // Defensive clamps so the AI can't blow our UI budgets even if it tries.
+    // Length matches the prompt + OpenAPI description (<=50 chars per chip).
+    const suggestedReplies = (parsedJson.suggestedReplies ?? [])
+      .slice(0, 3)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0 && s.length <= 50);
+
+    // Whitelist actionable kinds; "none" is accepted from the model but
+    // normalized to null so the client UI has a single null-or-concrete check.
+    const actionSuggestion =
+      parsedJson.actionSuggestion &&
+      ["evolve_roadmap", "refresh_insights", "reflect_on_task"].includes(
+        parsedJson.actionSuggestion.kind,
+      )
+        ? parsedJson.actionSuggestion
+        : null;
+
+    const memoryUpdate = parsedJson.memoryUpdate
+      ? {
+          summary: (parsedJson.memoryUpdate.summary ?? "").slice(0, 600),
+          newFacts: (parsedJson.memoryUpdate.newFacts ?? [])
+            .slice(0, 5)
+            .map((f) => f.trim())
+            .filter((f) => f.length > 0 && f.length <= 140),
+        }
+      : null;
+
+    // Defensive fallback: a missing/empty reply from a malformed model output
+    // would otherwise crash on .trim() or render an empty bubble.
+    const reply =
+      typeof parsedJson.reply === "string" && parsedJson.reply.trim().length > 0
+        ? parsedJson.reply.trim()
+        : "I'm here. Tell me a bit more about what you want to tackle next.";
+
+    res.json({
+      reply,
+      suggestedReplies,
+      actionSuggestion,
+      memoryUpdate,
+    });
   } catch (err) {
     req.log.error({ err }, "coach request failed");
     res.status(500).json({ error: "AI request failed" });

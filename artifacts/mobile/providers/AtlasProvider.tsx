@@ -11,6 +11,8 @@ import type {
   BehavioralProfile,
   BehavioralSnapshot,
   ChatMessage,
+  CoachMemory,
+  CurrentPhaseSnapshot,
   DailyPlan,
   IntakeAnswer,
   IntakeQuestion,
@@ -73,8 +75,10 @@ type AtlasContextValue = AtlasState & {
   activeBehavioralProfile: BehavioralProfile | null;
   activeRoadmapEvolutions: RoadmapEvolutionEntry[];
   activeLastEvolvedAt: string | null;
+  activeCoachMemory: CoachMemory | null;
   activeBehavioral: BehavioralSnapshot;
   activeCurrentWeek: number;
+  activeCurrentPhase: CurrentPhaseSnapshot | null;
   goalLimit: number;
   canAddMoreGoals: boolean;
 
@@ -97,6 +101,11 @@ type AtlasContextValue = AtlasState & {
   ) => Promise<void>;
   setActiveCoachHistory: (history: ChatMessage[]) => Promise<void>;
   appendActiveCoachMessage: (msg: ChatMessage) => Promise<void>;
+  setActiveCoachMemory: (memory: CoachMemory | null) => Promise<void>;
+  applyCoachMemoryUpdate: (update: {
+    summary: string;
+    newFacts: string[];
+  }) => Promise<void>;
 
   setPendingDraft: (draft: IntakeDraft | null) => Promise<void>;
   updatePendingAnswers: (answers: IntakeAnswer[]) => Promise<void>;
@@ -185,6 +194,7 @@ async function migrateV1ToGoal(): Promise<Goal | null> {
     behavioralProfile: null,
     roadmapEvolutions: [],
     lastEvolvedAt: null,
+    coachMemory: null,
   };
   await clearV1Storage();
   return goal;
@@ -197,13 +207,15 @@ function ensureGoalShape(goal: Goal): Goal {
     !goal.reflections || goal.behavioralProfile === undefined;
   const needsPhase2 =
     !goal.roadmapEvolutions || goal.lastEvolvedAt === undefined;
-  if (!needsPhase1 && !needsPhase2) return goal;
+  const needsPhase3 = goal.coachMemory === undefined;
+  if (!needsPhase1 && !needsPhase2 && !needsPhase3) return goal;
   return {
     ...goal,
     reflections: goal.reflections ?? [],
     behavioralProfile: goal.behavioralProfile ?? null,
     roadmapEvolutions: goal.roadmapEvolutions ?? [],
     lastEvolvedAt: goal.lastEvolvedAt ?? null,
+    coachMemory: goal.coachMemory ?? null,
   };
 }
 
@@ -308,6 +320,27 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     [activeGoal],
   );
 
+  // Locate the phase whose week range contains the current week. Phases are
+  // 1-indexed and inclusive on both ends; weeks beyond the final phase clamp
+  // to the last phase so the coach still has a "where am I" anchor.
+  const activeCurrentPhase = useMemo<CurrentPhaseSnapshot | null>(() => {
+    const phases = activeGoal?.roadmap?.phases;
+    if (!phases || phases.length === 0) return null;
+    const week = activeCurrentWeek;
+    const found =
+      phases.find((p) => week >= p.startWeek && week <= p.endWeek) ??
+      phases[phases.length - 1];
+    if (!found) return null;
+    return {
+      id: found.id,
+      title: found.title,
+      focus: found.focus,
+      startWeek: found.startWeek,
+      endWeek: found.endWeek,
+      weekIntoPhase: Math.max(1, week - found.startWeek + 1),
+    };
+  }, [activeGoal, activeCurrentWeek]);
+
   const goalLimit = tierGoalLimit(subscription.tier);
   const canAddMoreGoals = goals.length < goalLimit;
 
@@ -332,6 +365,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
         behavioralProfile: null,
         roadmapEvolutions: [],
         lastEvolvedAt: null,
+        coachMemory: null,
       };
       const next = [...currentGoals, goal];
       await persistGoals(next);
@@ -488,6 +522,42 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     [updateActiveGoal],
   );
 
+  const setActiveCoachMemory = useCallback(
+    async (memory: CoachMemory | null) => {
+      await updateActiveGoal((g) => ({ ...g, coachMemory: memory }));
+    },
+    [updateActiveGoal],
+  );
+
+  const applyCoachMemoryUpdate = useCallback(
+    async (update: { summary: string; newFacts: string[] }) => {
+      await updateActiveGoal((g) => {
+        const existing = g.coachMemory;
+        const existingFacts = existing?.facts ?? [];
+        // Dedupe new facts case-insensitively against what we already know,
+        // then keep the most recent 20 across the merged list.
+        const seen = new Set(existingFacts.map((f) => f.toLowerCase()));
+        const incoming = (update.newFacts ?? [])
+          .map((f) => f.trim())
+          .filter((f) => f.length > 0)
+          .filter((f) => {
+            const k = f.toLowerCase();
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+          });
+        const facts = [...existingFacts, ...incoming].slice(-20);
+        const merged: CoachMemory = {
+          summary: update.summary,
+          facts,
+          updatedAt: new Date().toISOString(),
+        };
+        return { ...g, coachMemory: merged };
+      });
+    },
+    [updateActiveGoal],
+  );
+
   const setPendingDraft = useCallback(async (draft: IntakeDraft | null) => {
     setPendingDraftState(draft);
     if (draft) await saveJson(STORAGE_KEYS.pendingDraft, draft);
@@ -581,8 +651,10 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     activeBehavioralProfile: activeGoal?.behavioralProfile ?? null,
     activeRoadmapEvolutions: activeGoal?.roadmapEvolutions ?? [],
     activeLastEvolvedAt: activeGoal?.lastEvolvedAt ?? null,
+    activeCoachMemory: activeGoal?.coachMemory ?? null,
     activeBehavioral,
     activeCurrentWeek,
+    activeCurrentPhase,
     goalLimit,
     canAddMoreGoals,
     createGoal,
@@ -599,6 +671,8 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     applyRoadmapEvolution,
     setActiveCoachHistory,
     appendActiveCoachMessage,
+    setActiveCoachMemory,
+    applyCoachMemoryUpdate,
     setPendingDraft,
     updatePendingAnswers,
     attachPendingQuestions,

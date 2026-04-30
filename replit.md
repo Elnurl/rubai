@@ -81,6 +81,23 @@ Auto-trigger is self-driven by a `useEffect` inside the hook keyed on `(activeGo
 
 The endpoint preserves progress: it keeps phase ids stable, only restructures upcoming phases, stays within ±2 weeks of the original total duration, and respects the learned profile's peak hours, workload tolerance and recommended adjustments.
 
+### Context-aware coach with memory (Phase 3)
+
+The coach grounds every reply in the user's current situation and remembers what matters across sessions instead of treating every chat as a blank slate.
+
+`Goal` carries one more field, backfilled by `ensureGoalShape()`:
+- `coachMemory: CoachMemory | null` — `{ summary, facts[], updatedAt }`. The summary is a rolling paragraph the coach replaces each turn it learns something; facts is an append-only list (deduped, capped at 20) of durable signals (injuries, schedule constraints, triggers).
+
+The provider exposes `activeCoachMemory`, `setActiveCoachMemory(memory)`, `applyCoachMemoryUpdate({ summary, newFacts })` (merges with case-insensitive dedupe and a 20-fact cap), plus a memoized `activeCurrentPhase: CurrentPhaseSnapshot | null` selector that finds the phase whose `[startWeek, endWeek]` contains `activeCurrentWeek` and reports `weekIntoPhase`.
+
+Server `/atlas/coach` (`artifacts/api-server/src/routes/atlas.ts`) is a strict `json_schema` call. `buildCoachContext()` assembles labelled blocks for GOAL, ROADMAP, CURRENT PHASE, TODAY, BEHAVIOUR, REFLECTIONS, EVOLUTIONS, LEARNED PROFILE, and COACH MEMORY. The system prompt forces the model to ground replies in those blocks, propose a `memoryUpdate` only when something durable was revealed, and emit 1–3 short context-specific `suggestedReplies`. Defensive clamps keep `suggestedReplies` ≤3 (each ≤80 chars), restrict `actionSuggestion.kind` to `evolve_roadmap | refresh_insights | reflect_on_task | none`, and bound `memoryUpdate.summary` (≤600 chars) and `newFacts` (≤5, each ≤140 chars).
+
+Mobile coach UX (`app/(tabs)/coach.tsx`):
+- Each request now ships `currentWeek`, `currentPhase`, last 5 reflections, last 2 evolutions, and `coachMemory`.
+- After each turn the screen appends the assistant reply, calls `applyCoachMemoryUpdate` if the response includes one, and stores `suggestedReplies` + `actionSuggestion` in ephemeral state cleared on the next turn.
+- A footer below the chat list renders an `ActionCard` (when `actionSuggestion.kind !== "none"`) and a row of suggested-reply chips. The CTA dispatches to `useEvolveRoadmap().evolve("manual")` for `evolve_roadmap`, navigates to `/account` for `refresh_insights`, or `/` for `reflect_on_task`.
+- A collapsible "What RubAI remembers" banner sits at the top of the screen showing the rolling summary, expandable into facts pills + a "Forget everything" button that calls `setActiveCoachMemory(null)`.
+
 ### Storage migration
 
 On first load, the provider reads any pre-existing `atlas:v1:*` keys (the legacy single-goal layout) and migrates them into the new `atlas:v2:goals` array as a single goal with active focus. A `migrated` flag is set so the migration only runs once.

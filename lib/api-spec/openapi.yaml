@@ -545,6 +545,91 @@ components:
             $ref: "#/components/schemas/DailyTask"
       required: [date, focusOfTheDay, coachNote, tasks]
 
+    RoadmapEvolutionEntry:
+      type: object
+      description: One historical roadmap evolution. The mobile app stores up to 10 of these per goal.
+      properties:
+        evolvedAt:
+          type: string
+        trigger:
+          type: string
+          enum: [manual, auto]
+        changeSummary:
+          type: string
+        rationale:
+          type: string
+        phaseChanges:
+          type: array
+          items:
+            $ref: "#/components/schemas/PhaseChange"
+      required: [evolvedAt, trigger, changeSummary, rationale, phaseChanges]
+
+    CurrentPhaseSnapshot:
+      type: object
+      description: A read-only snapshot of which roadmap phase the user is currently in.
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        focus:
+          type: string
+        startWeek:
+          type: integer
+        endWeek:
+          type: integer
+        weekIntoPhase:
+          type: integer
+          description: 1-indexed week number within this phase.
+      required: [id, title, focus, startWeek, endWeek, weekIntoPhase]
+
+    CoachMemory:
+      type: object
+      description: Long-term memory the coach maintains across conversations. Persists past the chat history cap.
+      properties:
+        summary:
+          type: string
+          description: A 1-3 sentence rolling summary of what we've talked about and what matters to this user.
+        facts:
+          type: array
+          description: Durable personal facts the user has shared (e.g. "has a knee injury", "works night shifts"). Capped at 20.
+          items:
+            type: string
+        updatedAt:
+          oneOf:
+            - type: string
+            - type: "null"
+      required: [summary, facts, updatedAt]
+
+    CoachActionSuggestion:
+      type: object
+      description: An optional one-tap action the coach is recommending alongside the reply.
+      properties:
+        kind:
+          type: string
+          enum: [evolve_roadmap, refresh_insights, reflect_on_task, none]
+        label:
+          type: string
+          description: Button text shown to the user (e.g. "Evolve roadmap now").
+        rationale:
+          type: string
+          description: One-sentence why, shown next to the button.
+      required: [kind, label, rationale]
+
+    CoachMemoryUpdate:
+      type: object
+      description: An optional patch the coach proposes to its long-term memory. Only included when something durable was learned this turn.
+      properties:
+        summary:
+          type: string
+          description: New rolling summary that replaces the previous one.
+        newFacts:
+          type: array
+          description: Brand-new facts to append to the facts list. Should not duplicate existing facts.
+          items:
+            type: string
+      required: [summary, newFacts]
+
     CoachRequest:
       type: object
       properties:
@@ -561,6 +646,29 @@ components:
             - $ref: "#/components/schemas/BehavioralProfile"
             - type: "null"
           description: Cumulative behavioural identity model. Optional.
+        currentWeek:
+          type: integer
+          description: Which week of the journey the user is currently in (1-indexed). Optional.
+        currentPhase:
+          oneOf:
+            - $ref: "#/components/schemas/CurrentPhaseSnapshot"
+            - type: "null"
+          description: The roadmap phase the user is currently inside. Optional.
+        recentReflections:
+          type: array
+          description: Last few reflections the user submitted. Used to ground tone and advice.
+          items:
+            $ref: "#/components/schemas/ReflectionEntry"
+        recentEvolutions:
+          type: array
+          description: Last 1-3 roadmap evolutions, most recent first.
+          items:
+            $ref: "#/components/schemas/RoadmapEvolutionEntry"
+        coachMemory:
+          oneOf:
+            - $ref: "#/components/schemas/CoachMemory"
+            - type: "null"
+          description: Long-term coach memory persisted across sessions. Optional.
         history:
           type: array
           items:
@@ -574,7 +682,22 @@ components:
       properties:
         reply:
           type: string
-      required: [reply]
+        suggestedReplies:
+          type: array
+          description: 0-3 short tappable follow-up prompts the user can send back. Each must be <= 50 chars and reference real context.
+          items:
+            type: string
+        actionSuggestion:
+          oneOf:
+            - $ref: "#/components/schemas/CoachActionSuggestion"
+            - type: "null"
+          description: Optional CTA for a concrete app action. Use kind=none (or null) when no action fits.
+        memoryUpdate:
+          oneOf:
+            - $ref: "#/components/schemas/CoachMemoryUpdate"
+            - type: "null"
+          description: Optional update to long-term coach memory. Only set when the user revealed something durable this turn.
+      required: [reply, suggestedReplies, actionSuggestion, memoryUpdate]
 
     AdaptRequest:
       type: object

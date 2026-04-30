@@ -8,8 +8,12 @@
 import type { BehavioralProfile } from "./behavioralProfile";
 import type { BehavioralSnapshot } from "./behavioralSnapshot";
 import type { ChatMessage } from "./chatMessage";
+import type { CoachMemory } from "./coachMemory";
+import type { CurrentPhaseSnapshot } from "./currentPhaseSnapshot";
 import type { DailyPlan } from "./dailyPlan";
+import type { ReflectionEntry } from "./reflectionEntry";
 import type { Roadmap } from "./roadmap";
+import type { RoadmapEvolutionEntry } from "./roadmapEvolutionEntry";
 import type { UserProfile } from "./userProfile";
 
 export interface CoachRequest {
@@ -19,6 +23,16 @@ export interface CoachRequest {
   behavioral: BehavioralSnapshot;
   /** Cumulative behavioural identity model. Optional. */
   learnedProfile?: BehavioralProfile | null;
+  /** Which week of the journey the user is currently in (1-indexed). Optional. */
+  currentWeek?: number;
+  /** The roadmap phase the user is currently inside. Optional. */
+  currentPhase?: CurrentPhaseSnapshot | null;
+  /** Last few reflections the user submitted. Used to ground tone and advice. */
+  recentReflections?: ReflectionEntry[];
+  /** Last 1-3 roadmap evolutions, most recent first. */
+  recentEvolutions?: RoadmapEvolutionEntry[];
+  /** Long-term coach memory persisted across sessions. Optional. */
+  coachMemory?: CoachMemory | null;
   history: ChatMessage[];
   message: string;
 }

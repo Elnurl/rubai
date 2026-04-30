@@ -563,6 +563,120 @@ export const AtlasCoachBody = zod.object({
     ])
     .optional()
     .describe("Cumulative behavioural identity model. Optional."),
+  currentWeek: zod
+    .number()
+    .optional()
+    .describe(
+      "Which week of the journey the user is currently in (1-indexed). Optional.",
+    ),
+  currentPhase: zod
+    .union([
+      zod
+        .object({
+          id: zod.string(),
+          title: zod.string(),
+          focus: zod.string(),
+          startWeek: zod.number(),
+          endWeek: zod.number(),
+          weekIntoPhase: zod
+            .number()
+            .describe("1-indexed week number within this phase."),
+        })
+        .describe(
+          "A read-only snapshot of which roadmap phase the user is currently in.",
+        ),
+      zod.null(),
+    ])
+    .optional()
+    .describe("The roadmap phase the user is currently inside. Optional."),
+  recentReflections: zod
+    .array(
+      zod.object({
+        taskId: zod.string(),
+        taskTitle: zod.string(),
+        date: zod.string(),
+        completed: zod.boolean(),
+        reasonTag: zod
+          .enum([
+            "easy",
+            "just_right",
+            "tough",
+            "skipped",
+            "energized",
+            "tired",
+            "distracted",
+            "focused",
+            "no_time",
+            "blocked",
+          ])
+          .optional(),
+        note: zod.string().optional(),
+        reflectedAt: zod.string(),
+      }),
+    )
+    .optional()
+    .describe(
+      "Last few reflections the user submitted. Used to ground tone and advice.",
+    ),
+  recentEvolutions: zod
+    .array(
+      zod
+        .object({
+          evolvedAt: zod.string(),
+          trigger: zod.enum(["manual", "auto"]),
+          changeSummary: zod.string(),
+          rationale: zod.string(),
+          phaseChanges: zod.array(
+            zod
+              .object({
+                phaseId: zod.string(),
+                phaseTitle: zod.string(),
+                changeType: zod.enum([
+                  "added",
+                  "removed",
+                  "modified",
+                  "unchanged",
+                ]),
+                summary: zod
+                  .string()
+                  .describe(
+                    "One sentence explaining what changed for this phase, in plain language.",
+                  ),
+              })
+              .describe(
+                "Structured per-phase summary of how the roadmap changed.",
+              ),
+          ),
+        })
+        .describe(
+          "One historical roadmap evolution. The mobile app stores up to 10 of these per goal.",
+        ),
+    )
+    .optional()
+    .describe("Last 1-3 roadmap evolutions, most recent first."),
+  coachMemory: zod
+    .union([
+      zod
+        .object({
+          summary: zod
+            .string()
+            .describe(
+              "A 1-3 sentence rolling summary of what we've talked about and what matters to this user.",
+            ),
+          facts: zod
+            .array(zod.string())
+            .describe(
+              'Durable personal facts the user has shared (e.g. \"has a knee injury\", \"works night shifts\"). Capped at 20.',
+            ),
+          updatedAt: zod.union([zod.string(), zod.null()]),
+        })
+        .describe(
+          "Long-term memory the coach maintains across conversations. Persists past the chat history cap.",
+        ),
+      zod.null(),
+    ])
+    .optional()
+    .describe("Long-term coach memory persisted across sessions. Optional."),
   history: zod.array(
     zod.object({
       role: zod.enum(["user", "assistant"]),
@@ -574,6 +688,59 @@ export const AtlasCoachBody = zod.object({
 
 export const AtlasCoachResponse = zod.object({
   reply: zod.string(),
+  suggestedReplies: zod
+    .array(zod.string())
+    .describe(
+      "0-3 short tappable follow-up prompts the user can send back. Each must be <= 50 chars and reference real context.",
+    ),
+  actionSuggestion: zod
+    .union([
+      zod
+        .object({
+          kind: zod.enum([
+            "evolve_roadmap",
+            "refresh_insights",
+            "reflect_on_task",
+            "none",
+          ]),
+          label: zod
+            .string()
+            .describe(
+              'Button text shown to the user (e.g. \"Evolve roadmap now\").',
+            ),
+          rationale: zod
+            .string()
+            .describe("One-sentence why, shown next to the button."),
+        })
+        .describe(
+          "An optional one-tap action the coach is recommending alongside the reply.",
+        ),
+      zod.null(),
+    ])
+    .describe(
+      "Optional CTA for a concrete app action. Use kind=none (or null) when no action fits.",
+    ),
+  memoryUpdate: zod
+    .union([
+      zod
+        .object({
+          summary: zod
+            .string()
+            .describe("New rolling summary that replaces the previous one."),
+          newFacts: zod
+            .array(zod.string())
+            .describe(
+              "Brand-new facts to append to the facts list. Should not duplicate existing facts.",
+            ),
+        })
+        .describe(
+          "An optional patch the coach proposes to its long-term memory. Only included when something durable was learned this turn.",
+        ),
+      zod.null(),
+    ])
+    .describe(
+      "Optional update to long-term coach memory. Only set when the user revealed something durable this turn.",
+    ),
 });
 
 /**
