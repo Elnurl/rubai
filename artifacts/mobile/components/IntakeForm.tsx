@@ -211,41 +211,33 @@ function FieldRenderer({
           ]}
         />
       );
-    case "number":
+    case "number": {
+      const unitHint = question.unit ? ` (${question.unit})` : "";
+      const placeholder =
+        question.placeholder ||
+        (question.unit
+          ? `e.g. about 30 ${question.unit}`
+          : "Type your answer");
       return (
-        <View
+        <TextInput
+          value={value}
+          onChangeText={onChange}
+          placeholder={`${placeholder}${question.placeholder ? unitHint : ""}`}
+          placeholderTextColor={colors.mutedForeground}
+          multiline
           style={[
-            styles.numberRow,
+            styles.textArea,
             {
+              color: colors.foreground,
               borderColor: colors.border,
               backgroundColor: colors.background,
-              borderRadius: 12,
+              fontFamily: "Inter_400Regular",
+              minHeight: 60,
             },
           ]}
-        >
-          <TextInput
-            value={value}
-            onChangeText={(t) => onChange(t.replace(/[^0-9]/g, ""))}
-            placeholder={question.placeholder || "0"}
-            placeholderTextColor={colors.mutedForeground}
-            keyboardType="number-pad"
-            style={[
-              styles.numberInput,
-              { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
-            ]}
-          />
-          {question.unit ? (
-            <Text
-              style={[
-                styles.unitText,
-                { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
-              ]}
-            >
-              {question.unit}
-            </Text>
-          ) : null}
-        </View>
+        />
       );
+    }
     case "single_select": {
       const otherSelected = isOtherEntry(value);
       const builtIn = (question.options ?? []).filter(
