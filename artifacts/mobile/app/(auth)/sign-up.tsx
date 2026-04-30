@@ -17,6 +17,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AtlasLogo } from "@/components/AtlasLogo";
+
 WebBrowser.maybeCompleteAuthSession();
 
 const BRAND = {
@@ -136,7 +138,9 @@ export default function SignUpScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <Text style={styles.brand}>RubAI</Text>
+            <View style={styles.brandWrap}>
+              <AtlasLogo size="lg" />
+            </View>
             <Text style={styles.title}>
               {needsVerification ? "Check your email" : "Create your account"}
             </Text>
@@ -304,11 +308,8 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BRAND.bg },
   container: { padding: 24, paddingTop: 32, gap: 4 },
   header: { marginBottom: 24, gap: 6 },
-  brand: {
-    fontFamily: "Inter_700Bold",
-    color: BRAND.primary,
-    fontSize: 22,
-    letterSpacing: 0.5,
+  brandWrap: {
+    marginBottom: 4,
   },
   title: {
     fontFamily: "Inter_700Bold",
