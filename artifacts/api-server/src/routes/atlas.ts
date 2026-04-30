@@ -8,7 +8,42 @@ import {
   AtlasAdaptPlanBody as atlasAdaptPlanBody,
   AtlasIntakeQuestionsBody as atlasIntakeQuestionsBody,
   AtlasIntakeSubmitBody as atlasIntakeSubmitBody,
+  AtlasBehavioralProfileBody as atlasBehavioralProfileBody,
 } from "@workspace/api-zod";
+
+function summarizeLearnedProfile(p: unknown): string {
+  if (!p || typeof p !== "object") return "";
+  const lp = p as {
+    summary?: string;
+    consistencyLevel?: string;
+    workloadTolerance?: string;
+    motivationTrend?: string;
+    focusStyle?: string;
+    learningPreference?: string;
+    peakHours?: string[];
+    failurePatterns?: string[];
+    strengths?: string[];
+    recommendedAdjustments?: string[];
+  };
+  const lines: string[] = [];
+  if (lp.summary) lines.push(`Summary: ${lp.summary}`);
+  const traits: string[] = [];
+  if (lp.consistencyLevel) traits.push(`consistency=${lp.consistencyLevel}`);
+  if (lp.workloadTolerance) traits.push(`workload=${lp.workloadTolerance}`);
+  if (lp.motivationTrend) traits.push(`motivation=${lp.motivationTrend}`);
+  if (lp.focusStyle) traits.push(`focus=${lp.focusStyle}`);
+  if (lp.learningPreference) traits.push(`learning=${lp.learningPreference}`);
+  if (traits.length > 0) lines.push(`Traits: ${traits.join(", ")}`);
+  if (lp.peakHours && lp.peakHours.length > 0)
+    lines.push(`Peak hours: ${lp.peakHours.join(", ")}`);
+  if (lp.strengths && lp.strengths.length > 0)
+    lines.push(`Strengths: ${lp.strengths.join("; ")}`);
+  if (lp.failurePatterns && lp.failurePatterns.length > 0)
+    lines.push(`Failure patterns to avoid: ${lp.failurePatterns.join("; ")}`);
+  if (lp.recommendedAdjustments && lp.recommendedAdjustments.length > 0)
+    lines.push(`Recommended adjustments: ${lp.recommendedAdjustments.join("; ")}`);
+  return lines.join("\n");
+}
 
 const router: IRouter = Router();
 
@@ -326,7 +361,8 @@ router.post("/daily-plan", async (req, res) => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { profile, roadmap, behavioral, date, currentWeek } = parsed.data;
+  const { profile, roadmap, behavioral, learnedProfile, date, currentWeek } = parsed.data;
+  const learnedSummary = summarizeLearnedProfile(learnedProfile);
 
   try {
     const completion = await openai.chat.completions.create({
@@ -350,14 +386,15 @@ Rules:
 - Total duration must respect availableTimePerDayMinutes (be realistic, leave buffer).
 - Match tasks to the active roadmap phase for week ${currentWeek}.
 - Adapt difficulty using the behavioral data — if completionRate is below 0.5 or streak is 0, simplify and use shorter tasks.
+- If a LEARNED PROFILE block is provided, weight it heavily: respect the user's peak hours when ordering, calibrate intensity to workloadTolerance and consistencyLevel, lean into known strengths, and structure tasks to avoid the listed failure patterns. Apply any recommendedAdjustments unless they conflict with safety or the active phase.
 - Task ids must be unique and short (e.g. "t-1", "t-2").
 - focusOfTheDay: 5-9 word headline.
-- coachNote: 1-2 sentence personal nudge from RubAI referencing the user's recent behaviour.
+- coachNote: 1-2 sentence personal nudge from RubAI referencing the user's recent behaviour or learned profile.
 - No emojis. No markdown.`,
         },
         {
           role: "user",
-          content: `Date: ${date}\nProfile: ${JSON.stringify(profile)}\nRoadmap: ${JSON.stringify(roadmap)}\nBehavioral snapshot: ${JSON.stringify(behavioral)}`,
+          content: `Date: ${date}\nProfile: ${JSON.stringify(profile)}\nRoadmap: ${JSON.stringify(roadmap)}\nBehavioral snapshot: ${JSON.stringify(behavioral)}${learnedSummary ? `\n\nLEARNED PROFILE:\n${learnedSummary}` : ""}`,
         },
       ],
     });
@@ -377,24 +414,26 @@ router.post("/coach", async (req, res) => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { profile, roadmap, todayPlan, behavioral, history, message } = parsed.data;
+  const { profile, roadmap, todayPlan, behavioral, learnedProfile, history, message } = parsed.data;
+  const learnedSummary = summarizeLearnedProfile(learnedProfile);
 
   try {
     const systemContext = `You are RubAI — a strategic AI execution coach inside a mobile app. The user has come to you for guidance.
 
-Speak conversationally, with warmth and precision. Reference their actual plan, today's tasks, and recent behaviour. Be concrete, not generic. Suggest next steps when relevant. Push back gently when they make excuses, celebrate small wins, identify patterns.
+Speak conversationally, with warmth and precision. Reference their actual plan, today's tasks, recent behaviour and learned behavioural profile. Be concrete, not generic. Suggest next steps when relevant. Push back gently when they make excuses, celebrate small wins, identify patterns.
 
 Hard rules:
 - Reply in plain prose. No markdown, no headings, no bullets, no emojis.
 - Keep replies under 110 words unless explicitly asked for detail.
 - If the user asks something off-topic, gently steer back to their goal.
+- When a LEARNED PROFILE is provided, treat it as your living understanding of this person — let it shape tone, pacing advice, and the kind of next step you suggest.
 
 Context:
 PROFILE: ${JSON.stringify(profile)}
 ROADMAP HEADLINE: ${roadmap.headline}
 ACTIVE STRATEGY: ${roadmap.strategy}
 ${todayPlan ? `TODAY (${todayPlan.date}) — focus: ${todayPlan.focusOfTheDay} — tasks: ${JSON.stringify(todayPlan.tasks.map((t: { title: string }) => t.title))}` : "No daily plan generated yet."}
-RECENT BEHAVIOUR: streak ${behavioral.currentStreakDays} days, completion rate ${(behavioral.completionRate * 100).toFixed(0)}%, recently completed: ${behavioral.completedTaskTitles.join("; ") || "none"}; missed: ${behavioral.missedTaskTitles.join("; ") || "none"}`;
+RECENT BEHAVIOUR: streak ${behavioral.currentStreakDays} days, completion rate ${(behavioral.completionRate * 100).toFixed(0)}%, recently completed: ${behavioral.completedTaskTitles.join("; ") || "none"}; missed: ${behavioral.missedTaskTitles.join("; ") || "none"}${learnedSummary ? `\n\nLEARNED PROFILE:\n${learnedSummary}` : ""}`;
 
     const completion = await openai.chat.completions.create({
       model: MODEL,
@@ -660,6 +699,157 @@ Rules:
     res.json(data);
   } catch (err) {
     req.log.error({ err }, "intake-submit request failed");
+    res.status(500).json({ error: "AI request failed" });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Behavioral profile builder.
+// Takes recent task history + reflections + previous profile and returns the
+// updated cumulative behavioural identity model the AI uses to personalize
+// every roadmap, daily plan, and coaching reply.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const behavioralProfileSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    profile: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        summary: { type: "string" },
+        consistencyLevel: {
+          type: "string",
+          enum: ["very_low", "low", "moderate", "high", "very_high"],
+        },
+        workloadTolerance: {
+          type: "string",
+          enum: ["light", "moderate", "heavy"],
+        },
+        motivationTrend: {
+          type: "string",
+          enum: ["rising", "steady", "declining"],
+        },
+        focusStyle: { type: "string" },
+        learningPreference: { type: "string" },
+        peakHours: { type: "array", items: { type: "string" } },
+        failurePatterns: { type: "array", items: { type: "string" } },
+        strengths: { type: "array", items: { type: "string" } },
+        recommendedAdjustments: { type: "array", items: { type: "string" } },
+      },
+      required: [
+        "summary",
+        "consistencyLevel",
+        "workloadTolerance",
+        "motivationTrend",
+        "focusStyle",
+        "learningPreference",
+        "peakHours",
+        "failurePatterns",
+        "strengths",
+        "recommendedAdjustments",
+      ],
+    },
+    aiInsight: { type: "string" },
+  },
+  required: ["profile", "aiInsight"],
+} as const;
+
+router.post("/behavioral-profile", async (req, res) => {
+  const parsed = atlasBehavioralProfileBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const { profile, recentHistory, reflections, previous } = parsed.data;
+
+  // Compact a quick stats snapshot for the prompt.
+  const completed = recentHistory.filter((h) => h.completed).length;
+  const total = recentHistory.length;
+  const completionRate = total > 0 ? completed / total : 0;
+  const reflectionLines = reflections
+    .slice(-12)
+    .map(
+      (r) =>
+        `- ${r.date} • ${r.completed ? "done" : "skipped"} • ${r.taskTitle}${
+          r.reasonTag ? ` [${r.reasonTag}]` : ""
+        }${r.note ? ` — "${r.note}"` : ""}`,
+    )
+    .join("\n");
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: MODEL,
+      max_completion_tokens: 1500,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "behavioral_profile",
+          strict: true,
+          schema: behavioralProfileSchema,
+        },
+      },
+      messages: [
+        {
+          role: "system",
+          content: `You are RubAI's behavioural analyst. Your job is to model how this specific human functions psychologically and operationally so the planner can adapt the roadmap, tasks, and coaching style to them.
+
+You will be given:
+- the user's stated UserProfile (their self-description),
+- recent TASK HISTORY (which tasks were done or missed, with dates),
+- recent REFLECTIONS (the user's own short notes on how tasks went, plus optional reasonTag),
+- the PREVIOUS behavioural profile if any (so you EVOLVE it rather than overwrite it).
+
+Produce an updated BehavioralProfile that captures:
+- summary: 2-3 plain sentences describing how this user actually executes (not what they wish — what the data shows). If data is thin, say so honestly and lean on the stated profile.
+- consistencyLevel: very_low | low | moderate | high | very_high — based on real completion rate and streak shape.
+- workloadTolerance: light | moderate | heavy.
+- motivationTrend: rising | steady | declining — compare recent reflections / completion rate to earlier ones.
+- focusStyle: short phrase (e.g. "deep blocks", "short sprints", "context-switcher", "morning bursts").
+- learningPreference: short phrase (e.g. "practical-first", "theoretical-then-practice", "mixed").
+- peakHours: best-guess time windows (HH:MM-HH:MM) inferred from stated productivityPattern + reflections; empty array if unknown.
+- failurePatterns: 2-4 concrete recurring reasons tasks fail (e.g. "low energy after work", "skips weekends", "starts strong, fades by Wednesday"). Empty array only if truly nothing observed.
+- strengths: 2-4 things this user is reliably good at.
+- recommendedAdjustments: 2-4 short imperatives the planner should apply (e.g. "front-load deep work before 10am", "cap evening sessions at 25 minutes").
+- aiInsight: ONE warm, plain-English sentence the user will see as a fresh insight after this refresh. Reference real data. No emojis, no markdown.
+
+Hard rules:
+- No emojis, no markdown anywhere.
+- Be evidence-based. Do not invent failure patterns or peak hours when there is no signal — return empty arrays instead.
+- Evolve the previous profile incrementally; preserve anything still true.`,
+        },
+        {
+          role: "user",
+          content: `STATED PROFILE: ${JSON.stringify(profile)}
+
+PREVIOUS BEHAVIORAL PROFILE: ${previous ? JSON.stringify(previous) : "(none yet)"}
+
+RECENT STATS: ${total} task entries in history, ${completed} completed (${(completionRate * 100).toFixed(0)}%).
+
+RECENT TASK HISTORY (most recent last):
+${recentHistory
+  .slice(-30)
+  .map((h) => `- ${h.date} • ${h.completed ? "done" : "missed"} • ${h.taskTitle}`)
+  .join("\n") || "(none)"}
+
+RECENT REFLECTIONS:
+${reflectionLines || "(none yet)"}`,
+        },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content ?? "{}";
+    const data = JSON.parse(raw) as {
+      profile: Record<string, unknown>;
+      aiInsight: string;
+    };
+    res.json({
+      profile: { ...data.profile, updatedAt: new Date().toISOString() },
+      aiInsight: data.aiInsight,
+    });
+  } catch (err) {
+    req.log.error({ err }, "behavioral-profile request failed");
     res.status(500).json({ error: "AI request failed" });
   }
 });

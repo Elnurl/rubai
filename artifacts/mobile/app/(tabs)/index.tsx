@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -16,13 +16,19 @@ import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { AtlasButton } from "@/components/AtlasButton";
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { EmptyState } from "@/components/EmptyState";
+import { ReflectionSheet } from "@/components/ReflectionSheet";
 import { SectionHeader } from "@/components/SectionHeader";
 import { TaskCard } from "@/components/TaskCard";
 import { profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { todayISO } from "@/lib/storage";
 import { useAtlas } from "@/providers/AtlasProvider";
-import { useAtlasGenerateDailyPlan } from "@workspace/api-client-react";
+import {
+  useAtlasBehavioralProfile,
+  useAtlasGenerateDailyPlan,
+  type DailyTask,
+  type ReflectionEntry,
+} from "@workspace/api-client-react";
 
 export default function TodayScreen() {
   const colors = useColors();
@@ -37,15 +43,25 @@ export default function TodayScreen() {
     activeRoadmap,
     activeDailyPlan,
     activeBehavioral,
+    activeBehavioralProfile,
     activeCurrentWeek,
     activeTaskHistory,
+    activeReflections,
     setActiveDailyPlan,
     recordActiveTask,
+    recordActiveReflection,
+    setActiveBehavioralProfile,
   } = useAtlas();
 
   const generate = useAtlasGenerateDailyPlan();
+  const refreshProfile = useAtlasBehavioralProfile();
   const today = todayISO();
   const requestedRef = useRef<string | null>(null);
+
+  const [reflectTarget, setReflectTarget] = useState<{
+    task: DailyTask;
+    completed: boolean;
+  } | null>(null);
 
   const planIsForToday = activeDailyPlan && activeDailyPlan.plan.date === today;
 
@@ -68,6 +84,9 @@ export default function TodayScreen() {
           behavioral: activeBehavioral,
           date: today,
           currentWeek: activeCurrentWeek,
+          ...(activeBehavioralProfile
+            ? { learnedProfile: activeBehavioralProfile }
+            : {}),
         },
       })
       .then((plan) => {
@@ -90,6 +109,9 @@ export default function TodayScreen() {
           behavioral: activeBehavioral,
           date: today,
           currentWeek: activeCurrentWeek,
+          ...(activeBehavioralProfile
+            ? { learnedProfile: activeBehavioralProfile }
+            : {}),
         },
       });
       await setActiveDailyPlan(plan);
@@ -114,6 +136,50 @@ export default function TodayScreen() {
   const totalCount = activeDailyPlan?.plan.tasks.length ?? 0;
   const progressPct = totalCount > 0 ? completedCount / totalCount : 0;
   const goalLabel = activeProfile ? profileGoalLabel(activeProfile) : "";
+
+  const todaysReflectionMap = useMemo(() => {
+    const map = new Map<string, ReflectionEntry>();
+    for (const r of activeReflections) {
+      if (r.date === today) map.set(r.taskId, r);
+    }
+    return map;
+  }, [activeReflections, today]);
+
+  const handleSubmitReflection = async (entry: ReflectionEntry) => {
+    await recordActiveReflection(entry);
+    if (!activeProfile) return;
+    const recent = activeTaskHistory.slice(-60).map((e) => ({
+      taskId: e.taskId,
+      taskTitle: e.taskTitle,
+      date: e.date,
+      completed: e.completed,
+    }));
+    // Include the just-submitted reflection explicitly so the request never
+    // misses it due to closure timing on the activeReflections state update.
+    const reflectionsForProfile = [
+      ...activeReflections.filter(
+        (r) => !(r.taskId === entry.taskId && r.date === entry.date),
+      ),
+      entry,
+    ].slice(-20);
+    refreshProfile
+      .mutateAsync({
+        data: {
+          profile: activeProfile,
+          recentHistory: recent,
+          reflections: reflectionsForProfile,
+          ...(activeBehavioralProfile
+            ? { previous: activeBehavioralProfile }
+            : {}),
+        },
+      })
+      .then((res) => {
+        void setActiveBehavioralProfile(res.profile);
+      })
+      .catch(() => {
+        // Silent — background refresh; user keeps the app running.
+      });
+  };
 
   const heroDate = new Date().toLocaleDateString(undefined, {
     weekday: "long",
@@ -262,23 +328,29 @@ export default function TodayScreen() {
               </Text>
             </View>
           ) : activeDailyPlan ? (
-            activeDailyPlan.plan.tasks.map((task, i) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                completed={todaysCompletions.get(task.id) === true}
-                index={i}
-                onToggle={() => {
-                  const wasCompleted = todaysCompletions.get(task.id) === true;
-                  recordActiveTask({
-                    taskId: task.id,
-                    taskTitle: task.title,
-                    date: today,
-                    completed: !wasCompleted,
-                  });
-                }}
-              />
-            ))
+            activeDailyPlan.plan.tasks.map((task, i) => {
+              const isCompleted = todaysCompletions.get(task.id) === true;
+              return (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  completed={isCompleted}
+                  index={i}
+                  hasReflection={todaysReflectionMap.has(task.id)}
+                  onReflect={() =>
+                    setReflectTarget({ task, completed: isCompleted })
+                  }
+                  onToggle={() => {
+                    recordActiveTask({
+                      taskId: task.id,
+                      taskTitle: task.title,
+                      date: today,
+                      completed: !isCompleted,
+                    });
+                  }}
+                />
+              );
+            })
           ) : (
             <EmptyState
               icon="cloud-off"
@@ -302,6 +374,22 @@ export default function TodayScreen() {
           )}
         </View>
       </ScrollView>
+
+      {reflectTarget && (
+        <ReflectionSheet
+          visible={true}
+          taskId={reflectTarget.task.id}
+          taskTitle={reflectTarget.task.title}
+          date={today}
+          completed={reflectTarget.completed}
+          initialReasonTag={
+            todaysReflectionMap.get(reflectTarget.task.id)?.reasonTag
+          }
+          initialNote={todaysReflectionMap.get(reflectTarget.task.id)?.note}
+          onClose={() => setReflectTarget(null)}
+          onSubmit={handleSubmitReflection}
+        />
+      )}
     </View>
   );
 }

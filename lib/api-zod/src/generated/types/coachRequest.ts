@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { BehavioralProfile } from "./behavioralProfile";
 import type { BehavioralSnapshot } from "./behavioralSnapshot";
 import type { ChatMessage } from "./chatMessage";
 import type { DailyPlan } from "./dailyPlan";
@@ -16,6 +17,8 @@ export interface CoachRequest {
   roadmap: Roadmap;
   todayPlan?: DailyPlan;
   behavioral: BehavioralSnapshot;
+  /** Cumulative behavioural identity model. Optional. */
+  learnedProfile?: BehavioralProfile | null;
   history: ChatMessage[];
   message: string;
 }

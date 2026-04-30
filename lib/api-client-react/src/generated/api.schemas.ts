@@ -157,10 +157,65 @@ export interface BehavioralSnapshot {
   recentNotes: string[];
 }
 
+export type BehavioralProfileConsistencyLevel =
+  (typeof BehavioralProfileConsistencyLevel)[keyof typeof BehavioralProfileConsistencyLevel];
+
+export const BehavioralProfileConsistencyLevel = {
+  very_low: "very_low",
+  low: "low",
+  moderate: "moderate",
+  high: "high",
+  very_high: "very_high",
+} as const;
+
+export type BehavioralProfileWorkloadTolerance =
+  (typeof BehavioralProfileWorkloadTolerance)[keyof typeof BehavioralProfileWorkloadTolerance];
+
+export const BehavioralProfileWorkloadTolerance = {
+  light: "light",
+  moderate: "moderate",
+  heavy: "heavy",
+} as const;
+
+export type BehavioralProfileMotivationTrend =
+  (typeof BehavioralProfileMotivationTrend)[keyof typeof BehavioralProfileMotivationTrend];
+
+export const BehavioralProfileMotivationTrend = {
+  rising: "rising",
+  steady: "steady",
+  declining: "declining",
+} as const;
+
+/**
+ * Cumulative behavioural identity model the AI builds over time from history and reflections.
+ */
+export interface BehavioralProfile {
+  /** 2-3 sentence narrative description of how this user functions psychologically and operationally. */
+  summary: string;
+  consistencyLevel: BehavioralProfileConsistencyLevel;
+  workloadTolerance: BehavioralProfileWorkloadTolerance;
+  motivationTrend: BehavioralProfileMotivationTrend;
+  /** e.g. "deep blocks", "short sprints", "context-switcher" */
+  focusStyle: string;
+  /** e.g. "practical-first", "theoretical-then-practice", "mixed" */
+  learningPreference: string;
+  /** Time windows when the user is most productive, e.g. ["07:00-09:00", "20:00-22:00"]. */
+  peakHours: string[];
+  /** Recurring reasons tasks get missed, e.g. "low energy after work". */
+  failurePatterns: string[];
+  /** What this user is reliably good at, e.g. "morning execution", "short focused sessions". */
+  strengths: string[];
+  /** Concrete short imperatives the planner should apply. */
+  recommendedAdjustments: string[];
+  updatedAt: string;
+}
+
 export interface DailyPlanRequest {
   profile: UserProfile;
   roadmap: Roadmap;
   behavioral: BehavioralSnapshot;
+  /** Cumulative behavioural identity model. Optional — sent when the user has accumulated reflections. */
+  learnedProfile?: BehavioralProfile | null;
   date: string;
   currentWeek: number;
 }
@@ -195,6 +250,8 @@ export interface CoachRequest {
   roadmap: Roadmap;
   todayPlan?: DailyPlan;
   behavioral: BehavioralSnapshot;
+  /** Cumulative behavioural identity model. Optional. */
+  learnedProfile?: BehavioralProfile | null;
   history: ChatMessage[];
   message: string;
 }
@@ -222,4 +279,53 @@ export interface AdaptResponse {
   difficultyAdjustment: AdaptResponseDifficultyAdjustment;
   adjustments: string[];
   encouragement: string;
+}
+
+export type ReflectionReasonTag =
+  (typeof ReflectionReasonTag)[keyof typeof ReflectionReasonTag];
+
+export const ReflectionReasonTag = {
+  easy: "easy",
+  just_right: "just_right",
+  tough: "tough",
+  skipped: "skipped",
+  energized: "energized",
+  tired: "tired",
+  distracted: "distracted",
+  focused: "focused",
+  no_time: "no_time",
+  blocked: "blocked",
+} as const;
+
+export interface ReflectionEntry {
+  taskId: string;
+  taskTitle: string;
+  date: string;
+  completed: boolean;
+  reasonTag?: ReflectionReasonTag;
+  note?: string;
+  reflectedAt: string;
+}
+
+export type BehavioralProfileRequestRecentHistoryItem = {
+  taskId: string;
+  taskTitle: string;
+  date: string;
+  completed: boolean;
+};
+
+export interface BehavioralProfileRequest {
+  profile: UserProfile;
+  /** Last ~60 task history entries (taskTitle, date, completed). */
+  recentHistory: BehavioralProfileRequestRecentHistoryItem[];
+  /** Last ~20 reflection entries. */
+  reflections: ReflectionEntry[];
+  /** Existing behavioural profile, if any, to evolve from. */
+  previous?: BehavioralProfile | null;
+}
+
+export interface BehavioralProfileResponse {
+  profile: BehavioralProfile;
+  /** One short sentence the user sees as a fresh insight after a refresh. */
+  aiInsight: string;
 }

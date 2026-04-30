@@ -64,6 +64,9 @@ export type TaskHistoryEntry = {
   taskTitle: string;
   date: string;
   completed: boolean;
+  reasonTag?: string;
+  note?: string;
+  reflectedAt?: string;
 };
 
 export function todayISO(): string {

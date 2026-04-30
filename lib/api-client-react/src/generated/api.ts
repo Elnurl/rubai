@@ -19,6 +19,8 @@ import type {
 import type {
   AdaptRequest,
   AdaptResponse,
+  BehavioralProfileRequest,
+  BehavioralProfileResponse,
   CoachRequest,
   CoachResponse,
   DailyPlan,
@@ -719,4 +721,94 @@ export const useAtlasAdaptPlan = <
   TContext
 > => {
   return useMutation(getAtlasAdaptPlanMutationOptions(options));
+};
+
+/**
+ * @summary Build or update the cumulative behavioural identity profile from history and reflections
+ */
+export const getAtlasBehavioralProfileUrl = () => {
+  return `/api/atlas/behavioral-profile`;
+};
+
+export const atlasBehavioralProfile = async (
+  behavioralProfileRequest: BehavioralProfileRequest,
+  options?: RequestInit,
+): Promise<BehavioralProfileResponse> => {
+  return customFetch<BehavioralProfileResponse>(
+    getAtlasBehavioralProfileUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(behavioralProfileRequest),
+    },
+  );
+};
+
+export const getAtlasBehavioralProfileMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasBehavioralProfile>>,
+    TError,
+    { data: BodyType<BehavioralProfileRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof atlasBehavioralProfile>>,
+  TError,
+  { data: BodyType<BehavioralProfileRequest> },
+  TContext
+> => {
+  const mutationKey = ["atlasBehavioralProfile"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof atlasBehavioralProfile>>,
+    { data: BodyType<BehavioralProfileRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return atlasBehavioralProfile(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AtlasBehavioralProfileMutationResult = NonNullable<
+  Awaited<ReturnType<typeof atlasBehavioralProfile>>
+>;
+export type AtlasBehavioralProfileMutationBody =
+  BodyType<BehavioralProfileRequest>;
+export type AtlasBehavioralProfileMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Build or update the cumulative behavioural identity profile from history and reflections
+ */
+export const useAtlasBehavioralProfile = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasBehavioralProfile>>,
+    TError,
+    { data: BodyType<BehavioralProfileRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof atlasBehavioralProfile>>,
+  TError,
+  { data: BodyType<BehavioralProfileRequest> },
+  TContext
+> => {
+  return useMutation(getAtlasBehavioralProfileMutationOptions(options));
 };

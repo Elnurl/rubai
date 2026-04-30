@@ -346,6 +346,63 @@ export const AtlasGenerateDailyPlanBody = zod.object({
     completionRate: zod.number(),
     recentNotes: zod.array(zod.string()),
   }),
+  learnedProfile: zod
+    .union([
+      zod
+        .object({
+          summary: zod
+            .string()
+            .describe(
+              "2-3 sentence narrative description of how this user functions psychologically and operationally.",
+            ),
+          consistencyLevel: zod.enum([
+            "very_low",
+            "low",
+            "moderate",
+            "high",
+            "very_high",
+          ]),
+          workloadTolerance: zod.enum(["light", "moderate", "heavy"]),
+          motivationTrend: zod.enum(["rising", "steady", "declining"]),
+          focusStyle: zod
+            .string()
+            .describe(
+              'e.g. \"deep blocks\", \"short sprints\", \"context-switcher\"',
+            ),
+          learningPreference: zod
+            .string()
+            .describe(
+              'e.g. \"practical-first\", \"theoretical-then-practice\", \"mixed\"',
+            ),
+          peakHours: zod
+            .array(zod.string())
+            .describe(
+              'Time windows when the user is most productive, e.g. [\"07:00-09:00\", \"20:00-22:00\"].',
+            ),
+          failurePatterns: zod
+            .array(zod.string())
+            .describe(
+              'Recurring reasons tasks get missed, e.g. \"low energy after work\".',
+            ),
+          strengths: zod
+            .array(zod.string())
+            .describe(
+              'What this user is reliably good at, e.g. \"morning execution\", \"short focused sessions\".',
+            ),
+          recommendedAdjustments: zod
+            .array(zod.string())
+            .describe("Concrete short imperatives the planner should apply."),
+          updatedAt: zod.string(),
+        })
+        .describe(
+          "Cumulative behavioural identity model the AI builds over time from history and reflections.",
+        ),
+      zod.null(),
+    ])
+    .optional()
+    .describe(
+      "Cumulative behavioural identity model. Optional — sent when the user has accumulated reflections.",
+    ),
   date: zod.string(),
   currentWeek: zod.number(),
 });
@@ -451,6 +508,61 @@ export const AtlasCoachBody = zod.object({
     completionRate: zod.number(),
     recentNotes: zod.array(zod.string()),
   }),
+  learnedProfile: zod
+    .union([
+      zod
+        .object({
+          summary: zod
+            .string()
+            .describe(
+              "2-3 sentence narrative description of how this user functions psychologically and operationally.",
+            ),
+          consistencyLevel: zod.enum([
+            "very_low",
+            "low",
+            "moderate",
+            "high",
+            "very_high",
+          ]),
+          workloadTolerance: zod.enum(["light", "moderate", "heavy"]),
+          motivationTrend: zod.enum(["rising", "steady", "declining"]),
+          focusStyle: zod
+            .string()
+            .describe(
+              'e.g. \"deep blocks\", \"short sprints\", \"context-switcher\"',
+            ),
+          learningPreference: zod
+            .string()
+            .describe(
+              'e.g. \"practical-first\", \"theoretical-then-practice\", \"mixed\"',
+            ),
+          peakHours: zod
+            .array(zod.string())
+            .describe(
+              'Time windows when the user is most productive, e.g. [\"07:00-09:00\", \"20:00-22:00\"].',
+            ),
+          failurePatterns: zod
+            .array(zod.string())
+            .describe(
+              'Recurring reasons tasks get missed, e.g. \"low energy after work\".',
+            ),
+          strengths: zod
+            .array(zod.string())
+            .describe(
+              'What this user is reliably good at, e.g. \"morning execution\", \"short focused sessions\".',
+            ),
+          recommendedAdjustments: zod
+            .array(zod.string())
+            .describe("Concrete short imperatives the planner should apply."),
+          updatedAt: zod.string(),
+        })
+        .describe(
+          "Cumulative behavioural identity model the AI builds over time from history and reflections.",
+        ),
+      zod.null(),
+    ])
+    .optional()
+    .describe("Cumulative behavioural identity model. Optional."),
   history: zod.array(
     zod.object({
       role: zod.enum(["user", "assistant"]),
@@ -538,4 +650,183 @@ export const AtlasAdaptPlanResponse = zod.object({
   difficultyAdjustment: zod.enum(["easier", "same", "harder"]),
   adjustments: zod.array(zod.string()),
   encouragement: zod.string(),
+});
+
+/**
+ * @summary Build or update the cumulative behavioural identity profile from history and reflections
+ */
+export const AtlasBehavioralProfileBody = zod.object({
+  profile: zod.object({
+    goalType: zod.enum([
+      "ielts",
+      "car",
+      "programming",
+      "fitness",
+      "finance",
+      "custom",
+    ]),
+    customGoalTitle: zod
+      .string()
+      .optional()
+      .describe(
+        'User-supplied goal title; only set when goalType is \"custom\".',
+      ),
+    goalStatement: zod.string(),
+    currentLevel: zod.string(),
+    availableTimePerDayMinutes: zod.number(),
+    financialCondition: zod.string(),
+    productivityPattern: zod.string(),
+    consistencyLevel: zod.string(),
+    constraints: zod.array(zod.string()),
+    targetTimelineWeeks: zod.number(),
+    notes: zod.string(),
+  }),
+  recentHistory: zod
+    .array(
+      zod.object({
+        taskId: zod.string(),
+        taskTitle: zod.string(),
+        date: zod.string(),
+        completed: zod.boolean(),
+      }),
+    )
+    .describe("Last ~60 task history entries (taskTitle, date, completed)."),
+  reflections: zod
+    .array(
+      zod.object({
+        taskId: zod.string(),
+        taskTitle: zod.string(),
+        date: zod.string(),
+        completed: zod.boolean(),
+        reasonTag: zod
+          .enum([
+            "easy",
+            "just_right",
+            "tough",
+            "skipped",
+            "energized",
+            "tired",
+            "distracted",
+            "focused",
+            "no_time",
+            "blocked",
+          ])
+          .optional(),
+        note: zod.string().optional(),
+        reflectedAt: zod.string(),
+      }),
+    )
+    .describe("Last ~20 reflection entries."),
+  previous: zod
+    .union([
+      zod
+        .object({
+          summary: zod
+            .string()
+            .describe(
+              "2-3 sentence narrative description of how this user functions psychologically and operationally.",
+            ),
+          consistencyLevel: zod.enum([
+            "very_low",
+            "low",
+            "moderate",
+            "high",
+            "very_high",
+          ]),
+          workloadTolerance: zod.enum(["light", "moderate", "heavy"]),
+          motivationTrend: zod.enum(["rising", "steady", "declining"]),
+          focusStyle: zod
+            .string()
+            .describe(
+              'e.g. \"deep blocks\", \"short sprints\", \"context-switcher\"',
+            ),
+          learningPreference: zod
+            .string()
+            .describe(
+              'e.g. \"practical-first\", \"theoretical-then-practice\", \"mixed\"',
+            ),
+          peakHours: zod
+            .array(zod.string())
+            .describe(
+              'Time windows when the user is most productive, e.g. [\"07:00-09:00\", \"20:00-22:00\"].',
+            ),
+          failurePatterns: zod
+            .array(zod.string())
+            .describe(
+              'Recurring reasons tasks get missed, e.g. \"low energy after work\".',
+            ),
+          strengths: zod
+            .array(zod.string())
+            .describe(
+              'What this user is reliably good at, e.g. \"morning execution\", \"short focused sessions\".',
+            ),
+          recommendedAdjustments: zod
+            .array(zod.string())
+            .describe("Concrete short imperatives the planner should apply."),
+          updatedAt: zod.string(),
+        })
+        .describe(
+          "Cumulative behavioural identity model the AI builds over time from history and reflections.",
+        ),
+      zod.null(),
+    ])
+    .optional()
+    .describe("Existing behavioural profile, if any, to evolve from."),
+});
+
+export const AtlasBehavioralProfileResponse = zod.object({
+  profile: zod
+    .object({
+      summary: zod
+        .string()
+        .describe(
+          "2-3 sentence narrative description of how this user functions psychologically and operationally.",
+        ),
+      consistencyLevel: zod.enum([
+        "very_low",
+        "low",
+        "moderate",
+        "high",
+        "very_high",
+      ]),
+      workloadTolerance: zod.enum(["light", "moderate", "heavy"]),
+      motivationTrend: zod.enum(["rising", "steady", "declining"]),
+      focusStyle: zod
+        .string()
+        .describe(
+          'e.g. \"deep blocks\", \"short sprints\", \"context-switcher\"',
+        ),
+      learningPreference: zod
+        .string()
+        .describe(
+          'e.g. \"practical-first\", \"theoretical-then-practice\", \"mixed\"',
+        ),
+      peakHours: zod
+        .array(zod.string())
+        .describe(
+          'Time windows when the user is most productive, e.g. [\"07:00-09:00\", \"20:00-22:00\"].',
+        ),
+      failurePatterns: zod
+        .array(zod.string())
+        .describe(
+          'Recurring reasons tasks get missed, e.g. \"low energy after work\".',
+        ),
+      strengths: zod
+        .array(zod.string())
+        .describe(
+          'What this user is reliably good at, e.g. \"morning execution\", \"short focused sessions\".',
+        ),
+      recommendedAdjustments: zod
+        .array(zod.string())
+        .describe("Concrete short imperatives the planner should apply."),
+      updatedAt: zod.string(),
+    })
+    .describe(
+      "Cumulative behavioural identity model the AI builds over time from history and reflections.",
+    ),
+  aiInsight: zod
+    .string()
+    .describe(
+      "One short sentence the user sees as a fresh insight after a refresh.",
+    ),
 });

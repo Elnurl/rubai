@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { BehavioralProfile } from "./behavioralProfile";
 import type { BehavioralSnapshot } from "./behavioralSnapshot";
 import type { Roadmap } from "./roadmap";
 import type { UserProfile } from "./userProfile";
@@ -13,6 +14,8 @@ export interface DailyPlanRequest {
   profile: UserProfile;
   roadmap: Roadmap;
   behavioral: BehavioralSnapshot;
+  /** Cumulative behavioural identity model. Optional — sent when the user has accumulated reflections. */
+  learnedProfile?: BehavioralProfile | null;
   date: string;
   currentWeek: number;
 }

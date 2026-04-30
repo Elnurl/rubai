@@ -29,6 +29,9 @@ API contract lives in `lib/api-spec/openapi.yaml`; running `pnpm --filter @works
 - `POST /daily-plan` — given the profile + roadmap + behavioural snapshot, returns today's 3–5 tasks tuned to recent behaviour and the active phase.
 - `POST /coach` — free-form coach chat with full plan + behavioural context.
 - `POST /adapt` — runs the adaptive engine: returns `easier | same | harder` plus concrete adjustments.
+- `POST /behavioral-profile` — builds or evolves the cumulative `BehavioralProfile` (summary, consistency, workload tolerance, motivation trend, focus/learning style, peak hours, failure patterns, strengths, recommended adjustments) from recent task history + reflections + the previous profile. Returns `{ profile, aiInsight }`.
+
+The `daily-plan` and `coach` requests both accept an optional `learnedProfile: BehavioralProfile` field; when present, it is summarised into the system prompt so the AI plans/responds in line with the user's learned patterns (respect peak hours, honour workload tolerance, avoid known failure patterns).
 
 The legacy `POST /onboarding-chat` endpoint is retained for backwards compatibility but no longer used by the app.
 
@@ -48,6 +51,18 @@ State lives in `providers/AtlasProvider.tsx` and is persisted to AsyncStorage wi
 The provider uses **refs** (`goalsRef`, `activeIdRef`, `subscriptionRef`) alongside React state so chained async callbacks always see the latest values — this prevents stale-closure bugs when, e.g., creating a goal and immediately attaching a roadmap.
 
 The `BehavioralSnapshot` (streak, completion rate, recent completed/missed task titles) is computed per-active-goal from local task history.
+
+### Reflections + behavioural profile (Phase 1)
+
+Each `Goal` carries two extra fields persisted in AsyncStorage:
+- `reflections: ReflectionEntry[]` — capped at the last 50 entries (`taskId`, `taskTitle`, `date`, `completed`, optional `reasonTag` and free-text `note`, `reflectedAt`).
+- `behavioralProfile: BehavioralProfile | null` — the cumulative learned profile, evolved over time.
+
+`TaskCard` exposes a "Reflect" pill (also accessible via long-press) that opens `ReflectionSheet`, a modal with reason chips (Easy / Just right / Tough / No time / Distracted / Blocked / etc.) plus an optional note field. Submission calls `recordActiveReflection(entry)` on the provider, which both appends the reflection and mirrors `reasonTag` / `note` onto the matching `TaskHistoryEntry`. Submission then fires a background `useAtlasBehavioralProfile` mutation and stores the returned profile via `setActiveBehavioralProfile`.
+
+The Account tab shows an Insights section: profile summary, trait grid (consistency / workload tolerance / motivation trend / focus style), peak hours, strengths, watch-outs, and the last three reflections. A "Refresh insights" button calls the same endpoint manually and surfaces `aiInsight` as a small banner.
+
+`Goal`s stored before this layer are backfilled at load time via `ensureGoalShape()` so the new fields are always defined.
 
 ### Storage migration
 
@@ -81,3 +96,4 @@ Warm cream + emerald + amber palette; Inter for typography. `constants/colors.ts
 - `artifacts/mobile/components/SubscriptionCard.tsx` — shows current tier, usage bar, and tier switcher.
 - `artifacts/mobile/components/GoalListItem.tsx` — row in the Goals tab with active/switch/delete actions.
 - `artifacts/mobile/components/ActiveGoalChip.tsx` — header chip showing which goal a tab is currently viewing.
+- `artifacts/mobile/components/ReflectionSheet.tsx` — modal sheet for capturing a reflection (reason chips + note) on any task.

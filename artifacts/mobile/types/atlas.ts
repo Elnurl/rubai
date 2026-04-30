@@ -1,9 +1,11 @@
 import type {
+  BehavioralProfile,
   ChatMessage,
   DailyPlan,
   GoalType,
   IntakeAnswer,
   IntakeQuestion,
+  ReflectionEntry,
   Roadmap,
   UserProfile,
 } from "@workspace/api-client-react";
@@ -23,6 +25,8 @@ export type Goal = {
   dailyPlan: StoredDailyPlan | null;
   coachHistory: ChatMessage[];
   taskHistory: TaskHistoryEntry[];
+  reflections: ReflectionEntry[];
+  behavioralProfile: BehavioralProfile | null;
 };
 
 export type SubscriptionTier = "free" | "pro" | "premium";

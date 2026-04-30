@@ -21,8 +21,30 @@ import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import {
   useAtlasAdaptPlan,
+  useAtlasBehavioralProfile,
   type AdaptResponse,
+  type BehavioralProfile,
 } from "@workspace/api-client-react";
+
+const consistencyCopy: Record<BehavioralProfile["consistencyLevel"], string> = {
+  very_low: "Very low",
+  low: "Low",
+  moderate: "Moderate",
+  high: "High",
+  very_high: "Very high",
+};
+
+const workloadCopy: Record<BehavioralProfile["workloadTolerance"], string> = {
+  light: "Light",
+  moderate: "Moderate",
+  heavy: "Heavy",
+};
+
+const motivationCopy: Record<BehavioralProfile["motivationTrend"], string> = {
+  rising: "Rising",
+  steady: "Steady",
+  declining: "Declining",
+};
 
 export default function AccountScreen() {
   const colors = useColors();
@@ -40,13 +62,44 @@ export default function AccountScreen() {
     activeProfile,
     activeRoadmap,
     activeBehavioral,
+    activeBehavioralProfile,
+    activeReflections,
+    activeTaskHistory,
+    setActiveBehavioralProfile,
     updateSubscription,
     updateAccount,
     resetAll,
   } = useAtlas();
 
   const adapt = useAtlasAdaptPlan();
+  const refreshProfile = useAtlasBehavioralProfile();
   const [adaptResult, setAdaptResult] = useState<AdaptResponse | null>(null);
+  const [insightMsg, setInsightMsg] = useState<string | null>(null);
+
+  const onRefreshInsights = async () => {
+    if (!activeProfile) return;
+    setInsightMsg(null);
+    try {
+      const recent = activeTaskHistory.slice(-60).map((e) => ({
+        taskId: e.taskId,
+        taskTitle: e.taskTitle,
+        date: e.date,
+        completed: e.completed,
+      }));
+      const res = await refreshProfile.mutateAsync({
+        data: {
+          profile: activeProfile,
+          recentHistory: recent,
+          reflections: activeReflections.slice(-20),
+          ...(activeBehavioralProfile ? { previous: activeBehavioralProfile } : {}),
+        },
+      });
+      await setActiveBehavioralProfile(res.profile);
+      setInsightMsg(res.aiInsight);
+    } catch {
+      setInsightMsg("Couldn't refresh insights. Try again in a moment.");
+    }
+  };
 
   const onReset = () => {
     const doReset = async () => {
@@ -141,6 +194,195 @@ export default function AccountScreen() {
 
         {activeGoal && activeProfile ? (
           <>
+            <SectionHeader
+              eyebrow="INSIGHTS"
+              title="What RubAI has learned"
+              subtitle="Built from your reflections and history."
+            />
+
+            <View
+              style={[
+                styles.insightsCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  borderRadius: colors.radius,
+                },
+              ]}
+            >
+              {activeBehavioralProfile ? (
+                <>
+                  <Text
+                    style={[
+                      styles.insightsSummary,
+                      { color: colors.foreground, fontFamily: "Inter_400Regular" },
+                    ]}
+                  >
+                    {activeBehavioralProfile.summary}
+                  </Text>
+
+                  <View style={styles.traitGrid}>
+                    <Trait
+                      label="Consistency"
+                      value={consistencyCopy[activeBehavioralProfile.consistencyLevel]}
+                    />
+                    <Trait
+                      label="Workload"
+                      value={workloadCopy[activeBehavioralProfile.workloadTolerance]}
+                    />
+                    <Trait
+                      label="Trend"
+                      value={motivationCopy[activeBehavioralProfile.motivationTrend]}
+                    />
+                    <Trait
+                      label="Focus"
+                      value={activeBehavioralProfile.focusStyle}
+                    />
+                  </View>
+
+                  {activeBehavioralProfile.peakHours.length > 0 && (
+                    <InsightRow
+                      icon="sun"
+                      label="Peak hours"
+                      items={activeBehavioralProfile.peakHours}
+                    />
+                  )}
+                  {activeBehavioralProfile.strengths.length > 0 && (
+                    <InsightRow
+                      icon="award"
+                      label="Strengths"
+                      items={activeBehavioralProfile.strengths}
+                    />
+                  )}
+                  {activeBehavioralProfile.failurePatterns.length > 0 && (
+                    <InsightRow
+                      icon="alert-triangle"
+                      label="Watch outs"
+                      items={activeBehavioralProfile.failurePatterns}
+                    />
+                  )}
+                </>
+              ) : (
+                <Text
+                  style={[
+                    styles.insightsEmpty,
+                    { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
+                  ]}
+                >
+                  No insights yet. Long-press a task on Today and add a quick
+                  reflection — RubAI will start building your profile after the
+                  first refresh.
+                </Text>
+              )}
+
+              {insightMsg && (
+                <View
+                  style={[
+                    styles.insightBanner,
+                    {
+                      backgroundColor: colors.primary + "14",
+                      borderRadius: colors.radius,
+                    },
+                  ]}
+                >
+                  <Feather name="zap" size={13} color={colors.primary} />
+                  <Text
+                    style={[
+                      styles.insightBannerText,
+                      { color: colors.primary, fontFamily: "Inter_500Medium" },
+                    ]}
+                  >
+                    {insightMsg}
+                  </Text>
+                </View>
+              )}
+
+              <AtlasButton
+                label={refreshProfile.isPending ? "Refreshing" : "Refresh insights"}
+                variant="secondary"
+                onPress={onRefreshInsights}
+                loading={refreshProfile.isPending}
+                disabled={refreshProfile.isPending}
+                icon={
+                  <Feather name="refresh-cw" size={16} color={colors.foreground} />
+                }
+              />
+            </View>
+
+            {activeReflections.length > 0 && (
+              <View
+                style={[
+                  styles.reflectionList,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderRadius: colors.radius,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.reflectionTitle,
+                    { color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
+                  ]}
+                >
+                  RECENT REFLECTIONS
+                </Text>
+                {[...activeReflections]
+                  .slice(-3)
+                  .reverse()
+                  .map((r, i, arr) => (
+                    <View
+                      key={`${r.taskId}-${r.date}-${i}`}
+                      style={[
+                        styles.reflectionRow,
+                        i < arr.length - 1
+                          ? { borderBottomColor: colors.border, borderBottomWidth: 1 }
+                          : null,
+                      ]}
+                    >
+                      <Feather
+                        name={r.completed ? "check-circle" : "x-circle"}
+                        size={14}
+                        color={r.completed ? colors.primary : colors.mutedForeground}
+                        style={{ marginTop: 2 }}
+                      />
+                      <View style={{ flex: 1, gap: 3 }}>
+                        <Text
+                          style={[
+                            styles.reflectionTask,
+                            { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {r.taskTitle}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.reflectionMeta,
+                            { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
+                          ]}
+                        >
+                          {r.date}
+                          {r.reasonTag ? ` • ${r.reasonTag.replace(/_/g, " ")}` : ""}
+                        </Text>
+                        {r.note ? (
+                          <Text
+                            style={[
+                              styles.reflectionNote,
+                              { color: colors.foreground, fontFamily: "Inter_400Regular" },
+                            ]}
+                            numberOfLines={3}
+                          >
+                            “{r.note}”
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                  ))}
+              </View>
+            )}
+
             <SectionHeader
               eyebrow="ACTIVE GOAL"
               title={profileGoalLabel(activeProfile)}
@@ -400,6 +642,68 @@ function Divider() {
   return <View style={[statStyles.divider, { backgroundColor: colors.border }]} />;
 }
 
+function Trait({ label, value }: { label: string; value: string }) {
+  const colors = useColors();
+  return (
+    <View style={traitStyles.cell}>
+      <Text
+        style={[
+          traitStyles.label,
+          { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
+        ]}
+      >
+        {label.toUpperCase()}
+      </Text>
+      <Text
+        style={[
+          traitStyles.value,
+          { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
+        ]}
+        numberOfLines={2}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function InsightRow({
+  icon,
+  label,
+  items,
+}: {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  label: string;
+  items: string[];
+}) {
+  const colors = useColors();
+  return (
+    <View style={insightRowStyles.row}>
+      <View style={[insightRowStyles.icon, { backgroundColor: colors.muted }]}>
+        <Feather name={icon} size={13} color={colors.foreground} />
+      </View>
+      <View style={{ flex: 1, gap: 4 }}>
+        <Text
+          style={[
+            insightRowStyles.label,
+            { color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
+          ]}
+        >
+          {label.toUpperCase()}
+        </Text>
+        <Text
+          style={[
+            insightRowStyles.value,
+            { color: colors.foreground, fontFamily: "Inter_400Regular" },
+          ]}
+        >
+          {items.join(" · ")}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: {
@@ -505,6 +809,106 @@ const styles = StyleSheet.create({
   resetText: {
     fontSize: 14.5,
     letterSpacing: 0.2,
+  },
+  insightsCard: {
+    padding: 18,
+    borderWidth: 1,
+    gap: 16,
+  },
+  insightsSummary: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  insightsEmpty: {
+    fontSize: 13.5,
+    lineHeight: 19,
+  },
+  traitGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    rowGap: 14,
+    columnGap: 12,
+  },
+  insightBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  insightBannerText: {
+    flex: 1,
+    fontSize: 12.5,
+    lineHeight: 17,
+  },
+  reflectionList: {
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  reflectionTitle: {
+    fontSize: 10.5,
+    letterSpacing: 1.4,
+    paddingBottom: 6,
+  },
+  reflectionRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingVertical: 12,
+    alignItems: "flex-start",
+  },
+  reflectionTask: {
+    fontSize: 13.5,
+  },
+  reflectionMeta: {
+    fontSize: 11.5,
+    letterSpacing: 0.3,
+    textTransform: "capitalize",
+  },
+  reflectionNote: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontStyle: "italic",
+  },
+});
+
+const traitStyles = StyleSheet.create({
+  cell: {
+    width: "47%",
+    gap: 4,
+  },
+  label: {
+    fontSize: 10,
+    letterSpacing: 1.4,
+  },
+  value: {
+    fontSize: 14,
+    lineHeight: 18,
+    textTransform: "capitalize",
+  },
+});
+
+const insightRowStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "flex-start",
+  },
+  icon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  label: {
+    fontSize: 10.5,
+    letterSpacing: 1.3,
+  },
+  value: {
+    fontSize: 13.5,
+    lineHeight: 19,
   },
 });
 

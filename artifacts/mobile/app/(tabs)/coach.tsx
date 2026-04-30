@@ -43,6 +43,7 @@ export default function CoachScreen() {
     activeRoadmap,
     activeDailyPlan,
     activeBehavioral,
+    activeBehavioralProfile,
     activeCoachHistory,
     setActiveCoachHistory,
   } = useAtlas();
@@ -79,6 +80,9 @@ export default function CoachScreen() {
           behavioral: activeBehavioral,
           history: activeCoachHistory.slice(-10),
           message,
+          ...(activeBehavioralProfile
+            ? { learnedProfile: activeBehavioralProfile }
+            : {}),
         },
       });
       const assistantMsg: ChatMessage = { role: "assistant", content: res.reply };

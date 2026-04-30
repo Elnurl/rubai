@@ -8,11 +8,13 @@ import React, {
   useState,
 } from "react";
 import type {
+  BehavioralProfile,
   BehavioralSnapshot,
   ChatMessage,
   DailyPlan,
   IntakeAnswer,
   IntakeQuestion,
+  ReflectionEntry,
   Roadmap,
   UserProfile,
 } from "@workspace/api-client-react";
@@ -66,6 +68,8 @@ type AtlasContextValue = AtlasState & {
   activeDailyPlan: StoredDailyPlan | null;
   activeCoachHistory: ChatMessage[];
   activeTaskHistory: TaskHistoryEntry[];
+  activeReflections: ReflectionEntry[];
+  activeBehavioralProfile: BehavioralProfile | null;
   activeBehavioral: BehavioralSnapshot;
   activeCurrentWeek: number;
   goalLimit: number;
@@ -81,6 +85,8 @@ type AtlasContextValue = AtlasState & {
   setRoadmapForGoal: (goalId: string, roadmap: Roadmap | null) => Promise<void>;
   setActiveDailyPlan: (plan: DailyPlan | null) => Promise<void>;
   recordActiveTask: (entry: TaskHistoryEntry) => Promise<void>;
+  recordActiveReflection: (entry: ReflectionEntry) => Promise<void>;
+  setActiveBehavioralProfile: (profile: BehavioralProfile | null) => Promise<void>;
   setActiveCoachHistory: (history: ChatMessage[]) => Promise<void>;
   appendActiveCoachMessage: (msg: ChatMessage) => Promise<void>;
 
@@ -167,9 +173,22 @@ async function migrateV1ToGoal(): Promise<Goal | null> {
     dailyPlan: (v1.dailyPlan as StoredDailyPlan | null) ?? null,
     coachHistory: (v1.coachHistory as ChatMessage[] | null) ?? [],
     taskHistory: (v1.taskHistory as TaskHistoryEntry[] | null) ?? [],
+    reflections: [],
+    behavioralProfile: null,
   };
   await clearV1Storage();
   return goal;
+}
+
+// Backfill the new Phase 1 fields on goals stored before this update so the
+// rest of the provider can rely on them being defined.
+function ensureGoalShape(goal: Goal): Goal {
+  if (goal.reflections && goal.behavioralProfile !== undefined) return goal;
+  return {
+    ...goal,
+    reflections: goal.reflections ?? [],
+    behavioralProfile: goal.behavioralProfile ?? null,
+  };
 }
 
 export function AtlasProvider({ children }: { children: React.ReactNode }) {
@@ -199,7 +218,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
           loadJson<boolean>(STORAGE_KEYS.migrated),
         ]);
 
-      let goalsList = storedGoals ?? [];
+      let goalsList = (storedGoals ?? []).map(ensureGoalShape);
       let active = storedActive ?? null;
 
       if (goalsList.length === 0 && !migratedFlag) {
@@ -293,6 +312,8 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
         dailyPlan: null,
         coachHistory: [],
         taskHistory: [],
+        reflections: [],
+        behavioralProfile: null,
       };
       const next = [...currentGoals, goal];
       await persistGoals(next);
@@ -372,6 +393,42 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
         );
         return { ...g, taskHistory: [...filtered, entry].slice(-200) };
       });
+    },
+    [updateActiveGoal],
+  );
+
+  const recordActiveReflection = useCallback(
+    async (entry: ReflectionEntry) => {
+      await updateActiveGoal((g) => {
+        // Replace any existing reflection for the same task on the same day,
+        // and mirror reasonTag/note onto the matching task history entry so
+        // the AI sees both signals together.
+        const reflections = g.reflections.filter(
+          (r) => !(r.taskId === entry.taskId && r.date === entry.date),
+        );
+        const taskHistory = g.taskHistory.map((e) =>
+          e.taskId === entry.taskId && e.date === entry.date
+            ? {
+                ...e,
+                reasonTag: entry.reasonTag ?? e.reasonTag,
+                note: entry.note ?? e.note,
+                reflectedAt: entry.reflectedAt,
+              }
+            : e,
+        );
+        return {
+          ...g,
+          reflections: [...reflections, entry].slice(-50),
+          taskHistory,
+        };
+      });
+    },
+    [updateActiveGoal],
+  );
+
+  const setActiveBehavioralProfile = useCallback(
+    async (profile: BehavioralProfile | null) => {
+      await updateActiveGoal((g) => ({ ...g, behavioralProfile: profile }));
     },
     [updateActiveGoal],
   );
@@ -482,6 +539,8 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     activeDailyPlan: activeGoal?.dailyPlan ?? null,
     activeCoachHistory: activeGoal?.coachHistory ?? [],
     activeTaskHistory: activeGoal?.taskHistory ?? [],
+    activeReflections: activeGoal?.reflections ?? [],
+    activeBehavioralProfile: activeGoal?.behavioralProfile ?? null,
     activeBehavioral,
     activeCurrentWeek,
     goalLimit,
@@ -495,6 +554,8 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     setRoadmapForGoal,
     setActiveDailyPlan,
     recordActiveTask,
+    recordActiveReflection,
+    setActiveBehavioralProfile,
     setActiveCoachHistory,
     appendActiveCoachMessage,
     setPendingDraft,

@@ -11,10 +11,19 @@ type Props = {
   task: DailyTask;
   completed: boolean;
   onToggle: () => void;
+  onReflect?: () => void;
+  hasReflection?: boolean;
   index: number;
 };
 
-export function TaskCard({ task, completed, onToggle, index }: Props) {
+export function TaskCard({
+  task,
+  completed,
+  onToggle,
+  onReflect,
+  hasReflection,
+  index,
+}: Props) {
   const colors = useColors();
 
   const handlePress = () => {
@@ -24,6 +33,14 @@ export function TaskCard({ task, completed, onToggle, index }: Props) {
       ).catch(() => {});
     }
     onToggle();
+  };
+
+  const handleLongPress = () => {
+    if (!onReflect) return;
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    }
+    onReflect();
   };
 
   const priorityBadge = (() => {
@@ -38,6 +55,8 @@ export function TaskCard({ task, completed, onToggle, index }: Props) {
     <Animated.View entering={FadeIn.delay(index * 60).duration(280)}>
       <Pressable
         onPress={handlePress}
+        onLongPress={onReflect ? handleLongPress : undefined}
+        delayLongPress={350}
         style={({ pressed }) => [
           styles.card,
           {
@@ -128,6 +147,39 @@ export function TaskCard({ task, completed, onToggle, index }: Props) {
                   {priorityBadge.text}
                 </Text>
               </View>
+            )}
+            {onReflect && (
+              <Pressable
+                onPress={onReflect}
+                hitSlop={6}
+                style={[
+                  styles.metaPill,
+                  {
+                    backgroundColor: hasReflection
+                      ? colors.primary + "1A"
+                      : "transparent",
+                    borderWidth: 1,
+                    borderColor: hasReflection ? colors.primary + "55" : colors.border,
+                  },
+                ]}
+              >
+                <Feather
+                  name={hasReflection ? "message-circle" : "edit-3"}
+                  size={11}
+                  color={hasReflection ? colors.primary : colors.mutedForeground}
+                />
+                <Text
+                  style={[
+                    styles.metaText,
+                    {
+                      color: hasReflection ? colors.primary : colors.mutedForeground,
+                      fontFamily: "Inter_600SemiBold",
+                    },
+                  ]}
+                >
+                  {hasReflection ? "Reflected" : "Reflect"}
+                </Text>
+              </Pressable>
             )}
           </View>
         </View>
