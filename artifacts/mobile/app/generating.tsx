@@ -2,10 +2,13 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { Feather } from "@expo/vector-icons";
+
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { GOAL_META, profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { GoalLimitError, useAtlas } from "@/providers/AtlasProvider";
+import { TIER_INFO } from "@/types/atlas";
 import {
   useAtlasGenerateRoadmap,
   type UserProfile,
@@ -32,6 +35,7 @@ export default function GeneratingScreen() {
     goals,
     canAddMoreGoals,
     goalLimit,
+    subscription,
   } = useAtlas();
   const generate = useAtlasGenerateRoadmap();
   const [stepIndex, setStepIndex] = React.useState(0);
@@ -171,6 +175,17 @@ export default function GeneratingScreen() {
     router.replace("/(tabs)/goals");
   }, [router]);
 
+  const handleReplaceGoal = useCallback(() => {
+    router.replace("/replace-goal");
+  }, [router]);
+
+  const handleUpgrade = useCallback(() => {
+    router.replace("/(tabs)/account");
+  }, [router]);
+
+  const planLabel = TIER_INFO[subscription.tier].label;
+  const usedSlots = goals.filter((g) => g.roadmap !== null).length;
+
   const meta = profile ? GOAL_META[profile.goalType] : null;
   const displayLabel = profile ? profileGoalLabel(profile) : "";
   const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.18] });
@@ -209,7 +224,7 @@ export default function GeneratingScreen() {
         >
           {errorState
             ? errorState.kind === "limit"
-              ? "You're at your goal limit."
+              ? "Plan limit reached."
               : "Hit a snag."
             : "Engineering your roadmap."}
         </Text>
@@ -221,12 +236,12 @@ export default function GeneratingScreen() {
         >
           {errorState
             ? errorState.kind === "limit"
-              ? "Plan limit reached"
+              ? `You're on the ${planLabel} plan`
               : "Couldn't reach the server"
             : STEPS[stepIndex]}
         </Text>
 
-        {errorState && (
+        {errorState?.kind === "network" && (
           <>
             <Text
               style={[
@@ -236,48 +251,25 @@ export default function GeneratingScreen() {
             >
               {errorState.message}
             </Text>
-
             <View style={styles.actions}>
-              {errorState.kind === "network" ? (
-                <Pressable
-                  onPress={handleRetry}
-                  style={({ pressed }) => [
-                    styles.primaryBtn,
-                    { backgroundColor: colors.primary },
-                    pressed && { opacity: 0.85 },
+              <Pressable
+                onPress={handleRetry}
+                style={({ pressed }) => [
+                  styles.primaryBtn,
+                  { backgroundColor: colors.primary },
+                  pressed && { opacity: 0.85 },
+                ]}
+                accessibilityRole="button"
+              >
+                <Text
+                  style={[
+                    styles.primaryBtnText,
+                    { fontFamily: "Inter_700Bold" },
                   ]}
-                  accessibilityRole="button"
                 >
-                  <Text
-                    style={[
-                      styles.primaryBtnText,
-                      { fontFamily: "Inter_700Bold" },
-                    ]}
-                  >
-                    Try again
-                  </Text>
-                </Pressable>
-              ) : (
-                <Pressable
-                  onPress={handleManageGoals}
-                  style={({ pressed }) => [
-                    styles.primaryBtn,
-                    { backgroundColor: colors.primary },
-                    pressed && { opacity: 0.85 },
-                  ]}
-                  accessibilityRole="button"
-                >
-                  <Text
-                    style={[
-                      styles.primaryBtnText,
-                      { fontFamily: "Inter_700Bold" },
-                    ]}
-                  >
-                    Manage my goals
-                  </Text>
-                </Pressable>
-              )}
-
+                  Try again
+                </Text>
+              </Pressable>
               <Pressable
                 onPress={handleBack}
                 style={({ pressed }) => [
@@ -301,6 +293,153 @@ export default function GeneratingScreen() {
               </Pressable>
             </View>
           </>
+        )}
+
+        {errorState?.kind === "limit" && (
+          <View style={styles.limitWrap}>
+            <View
+              style={[
+                styles.usageCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  borderRadius: colors.radius,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.usageEyebrow,
+                  {
+                    color: colors.mutedForeground,
+                    fontFamily: "Inter_600SemiBold",
+                  },
+                ]}
+              >
+                GOALS USED
+              </Text>
+              <Text
+                style={[
+                  styles.usageNumber,
+                  { color: colors.foreground, fontFamily: "Inter_700Bold" },
+                ]}
+              >
+                {usedSlots}
+                <Text
+                  style={[
+                    styles.usageDenom,
+                    {
+                      color: colors.mutedForeground,
+                      fontFamily: "Inter_500Medium",
+                    },
+                  ]}
+                >
+                  {" "}
+                  / {goalLimit}
+                </Text>
+              </Text>
+              <Text
+                style={[
+                  styles.usageHint,
+                  {
+                    color: colors.mutedForeground,
+                    fontFamily: "Inter_400Regular",
+                  },
+                ]}
+              >
+                {errorState.message}
+              </Text>
+            </View>
+
+            <View style={styles.actions}>
+              <Pressable
+                onPress={handleReplaceGoal}
+                style={({ pressed }) => [
+                  styles.primaryBtn,
+                  { backgroundColor: colors.primary },
+                  pressed && { opacity: 0.85 },
+                ]}
+                accessibilityRole="button"
+              >
+                <Feather
+                  name="refresh-ccw"
+                  size={15}
+                  color={colors.primaryForeground}
+                />
+                <Text
+                  style={[
+                    styles.primaryBtnText,
+                    { fontFamily: "Inter_700Bold" },
+                  ]}
+                >
+                  Replace a goal
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleManageGoals}
+                style={({ pressed }) => [
+                  styles.secondaryBtn,
+                  { borderColor: colors.border },
+                  pressed && { opacity: 0.7 },
+                ]}
+                accessibilityRole="button"
+              >
+                <Feather name="list" size={14} color={colors.foreground} />
+                <Text
+                  style={[
+                    styles.secondaryBtnText,
+                    {
+                      color: colors.foreground,
+                      fontFamily: "Inter_600SemiBold",
+                    },
+                  ]}
+                >
+                  View my goals
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleUpgrade}
+                style={({ pressed }) => [
+                  styles.tertiaryBtn,
+                  pressed && { opacity: 0.7 },
+                ]}
+                accessibilityRole="button"
+              >
+                <Feather name="arrow-up-right" size={14} color={colors.accent} />
+                <Text
+                  style={[
+                    styles.tertiaryBtnText,
+                    { color: colors.accent, fontFamily: "Inter_600SemiBold" },
+                  ]}
+                >
+                  Upgrade plan
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleBack}
+                style={({ pressed }) => [
+                  styles.tertiaryBtn,
+                  pressed && { opacity: 0.6 },
+                ]}
+                accessibilityRole="button"
+              >
+                <Text
+                  style={[
+                    styles.tertiaryBtnText,
+                    {
+                      color: colors.mutedForeground,
+                      fontFamily: "Inter_500Medium",
+                    },
+                  ]}
+                >
+                  Back to start
+                </Text>
+              </Pressable>
+            </View>
+          </View>
         )}
       </View>
     </View>
@@ -359,11 +498,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   primaryBtn: {
+    flexDirection: "row",
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    gap: 8,
   },
   primaryBtnText: {
     color: "#fff",
@@ -371,6 +512,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   secondaryBtn: {
+    flexDirection: "row",
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 12,
@@ -378,9 +520,52 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "transparent",
+    gap: 8,
   },
   secondaryBtnText: {
     fontSize: 14,
     letterSpacing: 0.2,
+  },
+  tertiaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+  },
+  tertiaryBtnText: {
+    fontSize: 13.5,
+    letterSpacing: 0.2,
+  },
+  limitWrap: {
+    width: "100%",
+    marginTop: 18,
+    gap: 14,
+  },
+  usageCard: {
+    width: "100%",
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    alignItems: "center",
+    gap: 4,
+  },
+  usageEyebrow: {
+    fontSize: 11,
+    letterSpacing: 1.4,
+  },
+  usageNumber: {
+    fontSize: 36,
+    lineHeight: 42,
+    marginTop: 2,
+  },
+  usageDenom: {
+    fontSize: 18,
+  },
+  usageHint: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: "center",
   },
 });

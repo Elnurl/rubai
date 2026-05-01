@@ -32,15 +32,10 @@ export default function GoalsScreen() {
 
   const onAdd = () => {
     if (!canAddMoreGoals) {
-      const message = `You're at your ${TIER_INFO[subscription.tier].label} plan limit of ${goalLimit} active goal${goalLimit === 1 ? "" : "s"}. Upgrade in Account or remove a goal first.`;
-      if (Platform.OS === "web") {
-        if (typeof window !== "undefined") window.alert(message);
-      } else {
-        Alert.alert("Plan limit reached", message, [
-          { text: "OK" },
-          { text: "Open Account", onPress: () => router.navigate("/account") },
-        ]);
-      }
+      // Route to the replace flow rather than a dead-end alert — this keeps
+      // the user moving forward (pick a goal to swap out) instead of just
+      // telling them they can't proceed.
+      router.push("/replace-goal");
       return;
     }
     router.push("/new-goal");
@@ -126,30 +121,28 @@ export default function GoalsScreen() {
             style={({ pressed }) => [
               styles.addBtn,
               {
-                borderColor: canAddMoreGoals ? colors.primary : colors.border,
+                borderColor: colors.primary,
                 borderRadius: colors.radius,
                 opacity: pressed ? 0.85 : 1,
-                backgroundColor: canAddMoreGoals ? colors.primary + "0F" : colors.card,
+                backgroundColor: colors.primary + "0F",
               },
             ]}
           >
             <Feather
-              name={canAddMoreGoals ? "plus-circle" : "lock"}
+              name={canAddMoreGoals ? "plus-circle" : "refresh-ccw"}
               size={18}
-              color={canAddMoreGoals ? colors.primary : colors.mutedForeground}
+              color={colors.primary}
             />
             <Text
               style={[
                 styles.addBtnText,
                 {
-                  color: canAddMoreGoals ? colors.primary : colors.mutedForeground,
+                  color: colors.primary,
                   fontFamily: "Inter_600SemiBold",
                 },
               ]}
             >
-              {canAddMoreGoals
-                ? "Add another goal"
-                : `Plan limit reached (${goalLimit})`}
+              {canAddMoreGoals ? "Add another goal" : "Replace a goal"}
             </Text>
           </Pressable>
         )}
