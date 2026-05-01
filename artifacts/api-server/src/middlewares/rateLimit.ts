@@ -1,0 +1,41 @@
+import type { Request } from "express";
+import rateLimit, {
+  ipKeyGenerator,
+  type RateLimitRequestHandler,
+} from "express-rate-limit";
+
+/**
+ * Per-user rate limit for AI endpoints.
+ *
+ * Keys by the authenticated Clerk user id when present (so multiple
+ * devices for the same user share a budget) and falls back to the IP
+ * address for unauthenticated callers — though in practice /atlas is
+ * mounted behind requireAuth so the IP fallback should rarely be hit.
+ *
+ * The limit is generous enough not to interrupt normal usage but tight
+ * enough to make a runaway loop or abusive script obvious.
+ *
+ * NOTE (scaling caveat): the default in-memory store is per-process.
+ * If/when this service is scaled horizontally (multiple instances), the
+ * limit becomes per-instance rather than global. At that point switch
+ * to a shared store (e.g. `rate-limit-redis` against Upstash, or a
+ * Postgres-backed store) so the budget is enforced across all replicas.
+ */
+export const aiRateLimiter: RateLimitRequestHandler = rateLimit({
+  windowMs: 60_000, // 1 minute
+  limit: 60, // 60 requests / user / minute across all /atlas/* routes
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => {
+    // Prefer the resolved local user id (set by requireAuth); fall back to
+    // the Clerk user id from session claims, then to a (IPv6-safe) IP key.
+    if (typeof req.userId === "number") return `user:${req.userId}`;
+    if (typeof req.clerkUserId === "string") return `clerk:${req.clerkUserId}`;
+    return `ip:${ipKeyGenerator(req.ip ?? "unknown")}`;
+  },
+  message: {
+    error: "Rate limit exceeded",
+    detail:
+      "Too many AI requests in a short window. Please wait a minute and try again.",
+  },
+});

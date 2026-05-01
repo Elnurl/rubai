@@ -18,6 +18,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AtlasLogo } from "@/components/AtlasLogo";
+import { friendlyAuthError } from "@/lib/authErrors";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -58,7 +59,7 @@ export default function SignInScreen() {
     try {
       const { error } = await signIn.password({ emailAddress, password });
       if (error) {
-        setSubmitError(error.message ?? "Sign-in failed.");
+        setSubmitError(friendlyAuthError(error));
         return;
       }
       if (signIn.status === "complete") {
@@ -68,11 +69,33 @@ export default function SignInScreen() {
             router.replace("/");
           },
         });
-      } else {
-        setSubmitError(`Sign-in not complete (${signIn.status ?? "unknown"}).`);
+        return;
       }
+      // Account requires 2FA — route to the verify screen and let it pick
+      // the right strategy from signIn.supportedSecondFactors.
+      if (signIn.status === "needs_second_factor") {
+        const factors = signIn.supportedSecondFactors ?? [];
+        // Prefer authenticator app, then SMS, then backup.
+        const preferred =
+          factors.find((f) => f.strategy === "totp")?.strategy ??
+          factors.find((f) => f.strategy === "phone_code")?.strategy ??
+          factors.find((f) => f.strategy === "backup_code")?.strategy ??
+          "totp";
+        router.push({
+          pathname: "/verify",
+          params: { strategy: preferred },
+        });
+        return;
+      }
+      // Unverified email or other intermediate states — show a clear,
+      // user-readable message instead of the raw status code.
+      setSubmitError(
+        signIn.status === "needs_first_factor"
+          ? "We need to verify your identity again. Check your email for a code, then try signing in."
+          : `Sign-in didn't complete. Please try again.`,
+      );
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Sign-in failed.");
+      setSubmitError(friendlyAuthError(err));
     }
   }, [signIn, emailAddress, password, router]);
 
@@ -94,9 +117,7 @@ export default function SignInScreen() {
         });
       }
     } catch (err) {
-      setSubmitError(
-        err instanceof Error ? err.message : "Google sign-in failed.",
-      );
+      setSubmitError(friendlyAuthError(err));
     } finally {
       setOauthLoading(false);
     }

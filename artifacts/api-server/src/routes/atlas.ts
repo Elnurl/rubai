@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { openai } from "@workspace/integrations-openai-ai-server";
+import { trackedCreate } from "../lib/aiUsage";
 import {
   AtlasOnboardingChatBody as atlasOnboardingChatBody,
   AtlasGenerateRoadmapBody as atlasGenerateRoadmapBody,
@@ -150,7 +150,7 @@ router.post("/onboarding-chat", async (req, res) => {
     ];
 
     // First — generate the next conversational reply
-    const conversational = await openai.chat.completions.create({
+    const conversational = await trackedCreate(req, {
       model: MODEL,
       max_completion_tokens: 400,
       messages,
@@ -166,7 +166,7 @@ router.post("/onboarding-chat", async (req, res) => {
       return;
     }
 
-    const extraction = await openai.chat.completions.create({
+    const extraction = await trackedCreate(req, {
       model: MODEL,
       max_completion_tokens: 1500,
       response_format: {
@@ -284,7 +284,7 @@ router.post("/roadmap", async (req, res) => {
   const { profile } = parsed.data;
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await trackedCreate(req, {
       model: MODEL,
       max_completion_tokens: 4000,
       response_format: {
@@ -366,7 +366,7 @@ router.post("/daily-plan", async (req, res) => {
   const learnedSummary = summarizeLearnedProfile(learnedProfile);
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await trackedCreate(req, {
       model: MODEL,
       max_completion_tokens: 2500,
       response_format: {
@@ -666,7 +666,7 @@ Hard rules:
 CONTEXT:
 ${contextBlock}`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await trackedCreate(req, {
       model: MODEL,
       max_completion_tokens: 1200,
       response_format: {
@@ -764,7 +764,7 @@ router.post("/adapt", async (req, res) => {
   const { profile, roadmap, behavioral } = parsed.data;
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await trackedCreate(req, {
       model: MODEL,
       max_completion_tokens: 700,
       response_format: {
@@ -879,7 +879,7 @@ router.post("/intake-questions", async (req, res) => {
   const label = resolveGoalLabel(goalType, goalType === "custom" ? goalTitle : undefined);
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await trackedCreate(req, {
       model: MODEL,
       response_format: {
         type: "json_schema",
@@ -950,7 +950,7 @@ router.post("/intake-submit", async (req, res) => {
     .join("\n\n");
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await trackedCreate(req, {
       model: MODEL,
       response_format: {
         type: "json_schema",
@@ -1064,7 +1064,7 @@ router.post("/behavioral-profile", async (req, res) => {
     .join("\n");
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await trackedCreate(req, {
       model: MODEL,
       max_completion_tokens: 1500,
       response_format: {
@@ -1202,7 +1202,7 @@ router.post("/evolve-roadmap", async (req, res) => {
     .join("\n");
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await trackedCreate(req, {
       model: MODEL,
       max_completion_tokens: 4500,
       response_format: {

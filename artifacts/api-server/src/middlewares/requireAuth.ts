@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { getAuth } from "@clerk/express";
 import { eq } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, analyticsEventsTable } from "@workspace/db";
 
 declare global {
   namespace Express {
@@ -49,6 +49,18 @@ export async function requireAuth(
         .returning();
       row = created;
       req.log.info({ clerkUserId, userId: row.id }, "Provisioned new user");
+      // Best-effort: log a sign-up event for product analytics. A failure
+      // here must never block the auth flow.
+      void db
+        .insert(analyticsEventsTable)
+        .values({
+          userId: row.id,
+          eventType: "user.signed_up",
+          payload: { clerkUserId, email: email ?? null },
+        })
+        .catch((err) =>
+          req.log.warn({ err }, "Failed to record user.signed_up event"),
+        );
     } else if (email && email !== row.email) {
       const [updated] = await db
         .update(usersTable)

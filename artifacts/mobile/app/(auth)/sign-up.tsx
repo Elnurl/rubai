@@ -18,6 +18,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AtlasLogo } from "@/components/AtlasLogo";
+import { friendlyAuthError } from "@/lib/authErrors";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -57,15 +58,19 @@ export default function SignUpScreen() {
 
   const handleSubmit = useCallback(async () => {
     setSubmitError(null);
+    if (password.length < 8) {
+      setSubmitError("Password must be at least 8 characters long.");
+      return;
+    }
     try {
       const { error } = await signUp.password({ emailAddress, password });
       if (error) {
-        setSubmitError(error.message ?? "Sign-up failed.");
+        setSubmitError(friendlyAuthError(error));
         return;
       }
       await signUp.verifications.sendEmailCode();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Sign-up failed.");
+      setSubmitError(friendlyAuthError(err));
     }
   }, [signUp, emailAddress, password]);
 
@@ -81,10 +86,12 @@ export default function SignUpScreen() {
           },
         });
       } else {
-        setSubmitError(`Verification not complete (${signUp.status ?? "unknown"}).`);
+        setSubmitError(
+          "We couldn't finish creating your account. Please request a new code and try again.",
+        );
       }
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Verification failed.");
+      setSubmitError(friendlyAuthError(err));
     }
   }, [signUp, code, router]);
 
@@ -106,9 +113,7 @@ export default function SignUpScreen() {
         });
       }
     } catch (err) {
-      setSubmitError(
-        err instanceof Error ? err.message : "Google sign-up failed.",
-      );
+      setSubmitError(friendlyAuthError(err));
     } finally {
       setOauthLoading(false);
     }

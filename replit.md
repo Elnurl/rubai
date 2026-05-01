@@ -174,3 +174,55 @@ Warm cream + emerald + amber palette; Inter for typography. `constants/colors.ts
 - `artifacts/mobile/components/GoalListItem.tsx` — row in the Goals tab with active/switch/delete actions.
 - `artifacts/mobile/components/ActiveGoalChip.tsx` — header chip showing which goal a tab is currently viewing.
 - `artifacts/mobile/components/ReflectionSheet.tsx` — modal sheet for capturing a reflection (reason chips + note) on any task.
+
+## Production architecture (plain language)
+
+This is the simplest reliable shape for shipping RubAI. Everything runs on Replit so you have one bill, one dashboard, and one place to look when something breaks.
+
+### Where each piece lives
+
+- **Mobile app (Expo / React Native).** Built and distributed through Expo. In development it runs from the Replit dev server; for production you build native binaries with EAS and ship them to the App Store / Play Store. The compiled app talks to the backend over HTTPS — it does NOT need to be redeployed when you change the server.
+- **Backend API (`artifacts/api-server`).** A small Express service. Recommended deployment: **Replit Autoscale Deployment**. It scales to zero when idle (cheap), wakes on traffic, and serves over HTTPS at your `*.replit.app` (or a custom) domain. The mobile app points to this URL via `EXPO_PUBLIC_DOMAIN`.
+- **Database (Postgres).** Replit Postgres. The same `DATABASE_URL` is used in development and production — for production set it as a secret on the deployment so it points at a separate prod database. Drizzle manages the schema: run `pnpm --filter @workspace/db run push` to apply schema changes.
+- **Auth (Clerk).** Hosted by Clerk; we never store passwords. The mobile app gets a session token from Clerk; the backend verifies that token on every request via `requireAuth`, then looks up (or auto-creates) the matching row in our `users` table.
+- **AI (OpenAI).** Calls go through Replit's OpenAI integration. Keys live in Replit Secrets — they are never in code, never in git.
+
+### Secrets
+
+All secrets are managed in **Replit Secrets** (one set for development, a separate set on the deployment). Required:
+
+- `DATABASE_URL` — Postgres connection string.
+- `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY` — from the Clerk integration.
+- `AI_INTEGRATIONS_OPENAI_API_KEY`, `AI_INTEGRATIONS_OPENAI_BASE_URL` — from the OpenAI integration.
+- `SESSION_SECRET` — used for cookie signing.
+
+Never read or print secret values from chat or logs.
+
+### Database tables (one line each)
+
+- `users` — one row per Clerk user. Stores `clerkUserId`, `email`, and `tier` (free / pro / etc).
+- `user_state` — the entire app state for one user (goals, account, draft) as a single JSON blob, plus a `version` integer used for optimistic concurrency so two devices can't silently overwrite each other.
+- `conversations` / `messages` — per-goal coach chat history, kept server-side so it persists across devices.
+- `subscriptions` — *future-ready, not yet wired.* One row per paid subscription per user, with provider (`revenuecat` / `stripe`), product id, status, period end, store transaction id, and the raw webhook payload.
+- `analytics_events` — lightweight product analytics (`user.signed_up`, future events). `payload` is JSONB so you can add fields without migrations.
+- `ai_usage` — every AI call: which user, which route, which model, input/output tokens, latency, and ok/error status. This is your cost dashboard and your abuse early-warning system.
+
+You can browse all of these in the Replit Database pane (development) or via `psql $DATABASE_URL` against the production instance.
+
+### Operational guardrails already in place
+
+- **Per-user rate limiting** on all `/atlas/*` AI endpoints (60 requests/minute/user). Stops runaway loops and abusive scripts before they generate a surprise OpenAI bill.
+- **AI usage logging** writes a row to `ai_usage` for every OpenAI call. Failures to log are swallowed so they never break a user's request.
+- **Optimistic concurrency** on `user_state` means a stale device gets a `409` and resyncs instead of clobbering newer data.
+- **Pino structured logs** on every request (`req.log.info(...)` / `req.log.error(...)`). Visible in the Replit logs pane.
+
+### When you're ready for payments
+
+You do not need to migrate any existing data — the `subscriptions` table is already there. To switch payments on:
+
+1. Pick a provider — **RevenueCat** (recommended for mobile) or **Stripe**.
+2. Add the provider's webhook endpoint to the API server (e.g. `POST /api/webhooks/revenuecat`). On every webhook, upsert a row in `subscriptions` keyed by `(provider, store_transaction_id)`.
+3. In `requireAuth` (or a small helper), read the latest active row for the user and resolve `users.tier` from it (e.g. active `pro_monthly` → tier `pro`).
+4. The mobile app already reads the tier returned by the server and gates features accordingly — no client changes required for the basic flow.
+
+Read `.local/skills/revenuecat/SKILL.md` (mobile in-app purchase) or `.local/skills/stripe/SKILL.md` (web checkout) when you start that work.
