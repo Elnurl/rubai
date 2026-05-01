@@ -657,14 +657,22 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
   );
 
   const goalLimit = tierGoalLimit(subscription.tier);
-  const canAddMoreGoals = goals.length < goalLimit;
+  // Only count fully-formed goals (with a roadmap) toward the tier limit.
+  // Orphan goals — created locally but whose roadmap generation failed
+  // (e.g. network outage) — should not block the user from trying again.
+  const activeGoalCount = goals.filter((g) => g.roadmap !== null).length;
+  const canAddMoreGoals = activeGoalCount < goalLimit;
 
   const createGoal = useCallback(
     async (profile: UserProfile): Promise<Goal> => {
       // Provider-level limit guard (defense-in-depth on top of UI gating).
+      // Mirror the orphan-aware count used by canAddMoreGoals.
       const currentGoals = goalsRef.current;
       const currentLimit = tierGoalLimit(tierToSubscription(tier).tier);
-      if (currentGoals.length >= currentLimit) {
+      const completedCount = currentGoals.filter(
+        (g) => g.roadmap !== null,
+      ).length;
+      if (completedCount >= currentLimit) {
         throw new GoalLimitError(currentLimit);
       }
       const goal: Goal = {

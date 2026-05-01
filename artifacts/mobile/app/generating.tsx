@@ -24,15 +24,21 @@ export default function GeneratingScreen() {
   const colors = useColors();
   const router = useRouter();
   const params = useLocalSearchParams<{ profile?: string }>();
-  const { createGoal, setRoadmapForGoal, setPendingDraft, pendingDraft } = useAtlas();
+  const {
+    createGoal,
+    setRoadmapForGoal,
+    setPendingDraft,
+    pendingDraft,
+    goals,
+  } = useAtlas();
   const generate = useAtlasGenerateRoadmap();
   const [stepIndex, setStepIndex] = React.useState(0);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [retryToken, setRetryToken] = React.useState(0);
   const startedRef = useRef(false);
-  // Persist the created goal across retries so a roadmap-step failure doesn't
-  // spawn a duplicate goal each time the user taps "Try again".
-  const createdGoalIdRef = useRef<string | null>(null);
+  // Snapshot of `goals` for the effect to read without re-firing on changes.
+  const goalsRef = useRef(goals);
+  goalsRef.current = goals;
   const pulse = useRef(new Animated.Value(0)).current;
 
   // Decode profile from route params, falling back to the pendingDraft's
@@ -83,17 +89,23 @@ export default function GeneratingScreen() {
     setErrorMessage(null);
     (async () => {
       try {
-        // Create the goal first (returns its id so we can attach the roadmap
-        // back to the exact goal without relying on async-state propagation).
-        // Reuse the previously-created goal on retry to avoid orphan goals
-        // when only the AI roadmap step failed.
-        let goalId = createdGoalIdRef.current;
-        if (!goalId) {
+        // Generate the roadmap FIRST. We only persist a goal once the
+        // expensive/external AI call has succeeded — that way a network or
+        // server failure cannot leave behind an "orphan" goal that wastes
+        // the user's tier slot.
+        const roadmap = await generate.mutateAsync({ data: { profile } });
+
+        // If a previous failed attempt left an orphan goal lying around
+        // (created locally before this safer ordering existed), reuse it
+        // instead of creating yet another goal record.
+        const orphan = goalsRef.current.find((g) => g.roadmap === null);
+        let goalId: string;
+        if (orphan) {
+          goalId = orphan.id;
+        } else {
           const newGoal = await createGoal(profile);
           goalId = newGoal.id;
-          createdGoalIdRef.current = goalId;
         }
-        const roadmap = await generate.mutateAsync({ data: { profile } });
         await setRoadmapForGoal(goalId, roadmap);
         await setPendingDraft(null);
         setStepIndex(STEPS.length - 1);
