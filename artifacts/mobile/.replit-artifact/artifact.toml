@@ -1,6 +1,6 @@
 kind = "mobile"
 previewPath = "/"
-title = "RubAI - AI Goal Coach"
+title = "rubai - AI Goal Coach"
 version = "1.0.0"
 id = "artifacts/mobile"
 router = "expo-domain"

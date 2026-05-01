@@ -1,8 +1,8 @@
-# RubAI — AI Goal Coach
+# rubai — AI Goal Coach
 
 ## Overview
 
-RubAI is an AI-driven mobile (Expo) execution coach designed to help users achieve any goal. It offers tailored intake forms, synthesizes `UserProfile`s, builds multi-phase roadmaps, generates daily plans, and provides adaptive coaching. The app supports multiple concurrent goals, with the number gated by a server-controlled subscription tier (Free, Pro, Premium). The business vision is to provide a comprehensive, personalized coaching experience that adapts to user behavior and progress, making goal attainment more accessible and efficient.
+rubai is an AI-driven mobile (Expo) execution coach designed to help users achieve any goal. It offers tailored intake forms, synthesizes `UserProfile`s, builds multi-phase roadmaps, generates daily plans, and provides adaptive coaching. The app supports multiple concurrent goals, with the number gated by a server-controlled subscription tier (Free, Pro, Premium). The business vision is to provide a comprehensive, personalized coaching experience that adapts to user behavior and progress, making goal attainment more accessible and efficient.
 
 ## User Preferences
 
@@ -10,7 +10,7 @@ The user prefers an iterative development process, with a focus on delivering fu
 
 ## System Architecture
 
-RubAI is a monorepo (pnpm) with three main artifacts: `artifacts/mobile` (Expo React Native app), `artifacts/api-server` (Express server), and `artifacts/mockup-sandbox`. The server is the source of truth, using Clerk for authentication and Drizzle/Postgres for persistence. It integrates with OpenAI's `gpt-5.4` model for AI functionalities.
+rubai is a monorepo (pnpm) with three main artifacts: `artifacts/mobile` (Expo React Native app), `artifacts/api-server` (Express server), and `artifacts/mockup-sandbox`. The server is the source of truth, using Clerk for authentication and Drizzle/Postgres for persistence. It integrates with OpenAI's `gpt-5.4` model for AI functionalities.
 
 **UI/UX Decisions:**
 - The mobile app uses a warm cream, emerald, and amber palette with Inter typography.

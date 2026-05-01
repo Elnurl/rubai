@@ -161,7 +161,7 @@ export default function CoachScreen() {
               { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
             ]}
           >
-            RubAI is thinking
+            rubai is thinking
           </Text>
         </View>
       );
@@ -261,7 +261,7 @@ export default function CoachScreen() {
           <View style={{ flex: 1 }}>
             <SectionHeader
               eyebrow="COACH"
-              title="RubAI"
+              title="rubai"
               subtitle={`Working on: ${activeRoadmap.headline}`}
             />
           </View>

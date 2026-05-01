@@ -331,7 +331,7 @@ export default function TodayScreen() {
                   { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
                 ]}
               >
-                RubAI is preparing today's tasks
+                rubai is preparing today's tasks
               </Text>
             </View>
           ) : activeDailyPlan ? (
