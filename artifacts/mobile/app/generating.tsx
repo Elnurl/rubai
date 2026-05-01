@@ -5,7 +5,7 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-nativ
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { GOAL_META, profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
-import { useAtlas } from "@/providers/AtlasProvider";
+import { GoalLimitError, useAtlas } from "@/providers/AtlasProvider";
 import {
   useAtlasGenerateRoadmap,
   type UserProfile,
@@ -30,15 +30,24 @@ export default function GeneratingScreen() {
     setPendingDraft,
     pendingDraft,
     goals,
+    canAddMoreGoals,
+    goalLimit,
   } = useAtlas();
   const generate = useAtlasGenerateRoadmap();
   const [stepIndex, setStepIndex] = React.useState(0);
-  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  type ErrorState =
+    | { kind: "network"; message: string }
+    | { kind: "limit"; message: string; limit: number };
+  const [errorState, setErrorState] = React.useState<ErrorState | null>(null);
   const [retryToken, setRetryToken] = React.useState(0);
   const startedRef = useRef(false);
-  // Snapshot of `goals` for the effect to read without re-firing on changes.
+  // Snapshots for the effect to read without re-firing on changes.
   const goalsRef = useRef(goals);
   goalsRef.current = goals;
+  const canAddMoreGoalsRef = useRef(canAddMoreGoals);
+  canAddMoreGoalsRef.current = canAddMoreGoals;
+  const goalLimitRef = useRef(goalLimit);
+  goalLimitRef.current = goalLimit;
   const pulse = useRef(new Animated.Value(0)).current;
 
   // Decode profile from route params, falling back to the pendingDraft's
@@ -72,12 +81,12 @@ export default function GeneratingScreen() {
   }, [pulse]);
 
   useEffect(() => {
-    if (errorMessage) return;
+    if (errorState) return;
     const id = setInterval(() => {
       setStepIndex((i) => Math.min(i + 1, STEPS.length - 1));
     }, 1500);
     return () => clearInterval(id);
-  }, [errorMessage]);
+  }, [errorState]);
 
   useEffect(() => {
     if (!profile) {
@@ -86,9 +95,18 @@ export default function GeneratingScreen() {
     }
     if (startedRef.current) return;
     startedRef.current = true;
-    setErrorMessage(null);
+    setErrorState(null);
     (async () => {
       try {
+        // Pre-flight: if the user has no orphan to reuse AND is already at
+        // their tier limit on completed goals, surface the limit error up
+        // front instead of wasting a (slow, expensive) OpenAI roundtrip
+        // only to throw afterwards.
+        const orphan = goalsRef.current.find((g) => g.roadmap === null);
+        if (!orphan && !canAddMoreGoalsRef.current) {
+          throw new GoalLimitError(goalLimitRef.current);
+        }
+
         // Generate the roadmap FIRST. We only persist a goal once the
         // expensive/external AI call has succeeded — that way a network or
         // server failure cannot leave behind an "orphan" goal that wastes
@@ -98,10 +116,12 @@ export default function GeneratingScreen() {
         // If a previous failed attempt left an orphan goal lying around
         // (created locally before this safer ordering existed), reuse it
         // instead of creating yet another goal record.
-        const orphan = goalsRef.current.find((g) => g.roadmap === null);
+        const reusableOrphan = goalsRef.current.find(
+          (g) => g.roadmap === null,
+        );
         let goalId: string;
-        if (orphan) {
-          goalId = orphan.id;
+        if (reusableOrphan) {
+          goalId = reusableOrphan.id;
         } else {
           const newGoal = await createGoal(profile);
           goalId = newGoal.id;
@@ -111,15 +131,26 @@ export default function GeneratingScreen() {
         setStepIndex(STEPS.length - 1);
         setTimeout(() => router.replace("/(tabs)"), 700);
       } catch (err) {
-        // Surface the failure instead of looping silently. The user
-        // can either tap "Try again" (which re-arms this effect via
-        // retryToken) or back out to the welcome screen.
+        // Surface the failure instead of looping silently. We split errors
+        // into two flavors so we can offer the right next action:
+        //   - "limit": the user is at their tier's goal cap; retrying will
+        //     just hit the same wall, so we route them to manage existing
+        //     goals instead.
+        //   - "network": transient — Try again is the right move.
         startedRef.current = false;
-        const message =
-          err instanceof Error
-            ? err.message
-            : "Something went wrong building your roadmap.";
-        setErrorMessage(message);
+        if (err instanceof GoalLimitError) {
+          setErrorState({
+            kind: "limit",
+            message: `You've reached your plan's limit of ${err.limit} active goal${err.limit === 1 ? "" : "s"}. Free up a slot by removing or replacing an existing goal.`,
+            limit: err.limit,
+          });
+        } else {
+          const message =
+            err instanceof Error
+              ? err.message
+              : "Something went wrong building your roadmap.";
+          setErrorState({ kind: "network", message });
+        }
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -128,12 +159,16 @@ export default function GeneratingScreen() {
   const handleRetry = useCallback(() => {
     if (startedRef.current) return;
     setStepIndex(0);
-    setErrorMessage(null);
+    setErrorState(null);
     setRetryToken((t) => t + 1);
   }, []);
 
   const handleBack = useCallback(() => {
     router.replace("/welcome");
+  }, [router]);
+
+  const handleManageGoals = useCallback(() => {
+    router.replace("/(tabs)/goals");
   }, [router]);
 
   const meta = profile ? GOAL_META[profile.goalType] : null;
@@ -172,7 +207,11 @@ export default function GeneratingScreen() {
             { color: colors.foreground, fontFamily: "Inter_700Bold" },
           ]}
         >
-          {errorMessage ? "Hit a snag." : "Engineering your roadmap."}
+          {errorState
+            ? errorState.kind === "limit"
+              ? "You're at your goal limit."
+              : "Hit a snag."
+            : "Engineering your roadmap."}
         </Text>
         <Text
           style={[
@@ -180,10 +219,14 @@ export default function GeneratingScreen() {
             { color: colors.primary, fontFamily: "Inter_600SemiBold" },
           ]}
         >
-          {errorMessage ? "Couldn't reach the server" : STEPS[stepIndex]}
+          {errorState
+            ? errorState.kind === "limit"
+              ? "Plan limit reached"
+              : "Couldn't reach the server"
+            : STEPS[stepIndex]}
         </Text>
 
-        {errorMessage && (
+        {errorState && (
           <>
             <Text
               style={[
@@ -191,28 +234,49 @@ export default function GeneratingScreen() {
                 { color: colors.destructive, fontFamily: "Inter_500Medium" },
               ]}
             >
-              {errorMessage}
+              {errorState.message}
             </Text>
 
             <View style={styles.actions}>
-              <Pressable
-                onPress={handleRetry}
-                style={({ pressed }) => [
-                  styles.primaryBtn,
-                  { backgroundColor: colors.primary },
-                  pressed && { opacity: 0.85 },
-                ]}
-                accessibilityRole="button"
-              >
-                <Text
-                  style={[
-                    styles.primaryBtnText,
-                    { fontFamily: "Inter_700Bold" },
+              {errorState.kind === "network" ? (
+                <Pressable
+                  onPress={handleRetry}
+                  style={({ pressed }) => [
+                    styles.primaryBtn,
+                    { backgroundColor: colors.primary },
+                    pressed && { opacity: 0.85 },
                   ]}
+                  accessibilityRole="button"
                 >
-                  Try again
-                </Text>
-              </Pressable>
+                  <Text
+                    style={[
+                      styles.primaryBtnText,
+                      { fontFamily: "Inter_700Bold" },
+                    ]}
+                  >
+                    Try again
+                  </Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={handleManageGoals}
+                  style={({ pressed }) => [
+                    styles.primaryBtn,
+                    { backgroundColor: colors.primary },
+                    pressed && { opacity: 0.85 },
+                  ]}
+                  accessibilityRole="button"
+                >
+                  <Text
+                    style={[
+                      styles.primaryBtnText,
+                      { fontFamily: "Inter_700Bold" },
+                    ]}
+                  >
+                    Manage my goals
+                  </Text>
+                </Pressable>
+              )}
 
               <Pressable
                 onPress={handleBack}
