@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useAuth, useSignUp, useSSO } from "@clerk/expo";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
@@ -18,6 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AtlasLogo } from "@/components/AtlasLogo";
+import { GoogleGIcon } from "@/components/GoogleGIcon";
 import { friendlyAuthError } from "@/lib/authErrors";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -213,12 +213,14 @@ export default function SignUpScreen() {
                 ]}
                 onPress={handleGoogle}
                 disabled={oauthLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Sign up with Google"
               >
                 {oauthLoading ? (
                   <ActivityIndicator color={BRAND.fg} />
                 ) : (
                   <>
-                    <Ionicons name="logo-google" size={18} color={BRAND.fg} />
+                    <GoogleGIcon size={18} />
                     <Text style={styles.googleBtnText}>
                       Sign up with Google
                     </Text>

@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useSignIn, useSSO } from "@clerk/expo";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
@@ -18,6 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AtlasLogo } from "@/components/AtlasLogo";
+import { GoogleGIcon } from "@/components/GoogleGIcon";
 import { friendlyAuthError } from "@/lib/authErrors";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -75,9 +75,10 @@ export default function SignInScreen() {
       // the right strategy from signIn.supportedSecondFactors.
       if (signIn.status === "needs_second_factor") {
         const factors = signIn.supportedSecondFactors ?? [];
-        // Prefer authenticator app, then SMS, then backup.
+        // Prefer authenticator app, then email, then SMS, then backup.
         const preferred =
           factors.find((f) => f.strategy === "totp")?.strategy ??
+          factors.find((f) => f.strategy === "email_code")?.strategy ??
           factors.find((f) => f.strategy === "phone_code")?.strategy ??
           factors.find((f) => f.strategy === "backup_code")?.strategy ??
           "totp";
@@ -160,7 +161,7 @@ export default function SignInScreen() {
               <ActivityIndicator color={BRAND.fg} />
             ) : (
               <>
-                <Ionicons name="logo-google" size={18} color={BRAND.fg} />
+                <GoogleGIcon size={18} />
                 <Text style={styles.googleBtnText}>Continue with Google</Text>
               </>
             )}

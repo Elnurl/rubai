@@ -25,7 +25,7 @@ const BRAND = {
   danger: "#B43E3E",
 };
 
-type Strategy = "totp" | "phone_code" | "backup_code";
+type Strategy = "totp" | "phone_code" | "email_code" | "backup_code";
 
 const STRATEGY_COPY: Record<
   Strategy,
@@ -43,6 +43,12 @@ const STRATEGY_COPY: Record<
       "We sent a 6-digit code to your phone. Enter it below to finish signing in.",
     placeholder: "123 456",
   },
+  email_code: {
+    title: "Check your email",
+    subtitle:
+      "We sent a 6-digit code to your email. Enter it below to finish signing in. Don't see it? Check your spam folder.",
+    placeholder: "123 456",
+  },
   backup_code: {
     title: "Enter a backup code",
     subtitle:
@@ -52,7 +58,12 @@ const STRATEGY_COPY: Record<
 };
 
 function isStrategy(value: unknown): value is Strategy {
-  return value === "totp" || value === "phone_code" || value === "backup_code";
+  return (
+    value === "totp" ||
+    value === "phone_code" ||
+    value === "email_code" ||
+    value === "backup_code"
+  );
 }
 
 export default function VerifyScreen() {
@@ -74,6 +85,7 @@ export default function VerifyScreen() {
   const initialStrategy: Strategy = useMemo(() => {
     if (isStrategy(params.strategy)) return params.strategy;
     if (supported.includes("totp")) return "totp";
+    if (supported.includes("email_code")) return "email_code";
     if (supported.includes("phone_code")) return "phone_code";
     if (supported.includes("backup_code")) return "backup_code";
     return "totp";
@@ -112,12 +124,12 @@ export default function VerifyScreen() {
     }
   }, [supported, strategy]);
 
-  // For phone_code we ask Clerk to send the SMS as soon as the user
-  // lands on this strategy — without sending, there's nothing for them
-  // to type. The Future API returns `{ error }` instead of throwing.
+  // For phone_code and email_code we ask Clerk to send the code as soon
+  // as the user lands on this strategy — without sending, there's nothing
+  // for them to type. The Future API returns `{ error }` instead of throwing.
   useEffect(() => {
     if (!isLoaded || !signIn) return;
-    if (strategy !== "phone_code") return;
+    if (strategy !== "phone_code" && strategy !== "email_code") return;
 
     let cancelled = false;
     setPreparing(true);
@@ -125,22 +137,33 @@ export default function VerifyScreen() {
     setInfo(null);
     void (async () => {
       try {
-        const { error } = await signIn.mfa.sendPhoneCode();
+        const { error } =
+          strategy === "phone_code"
+            ? await signIn.mfa.sendPhoneCode()
+            : await signIn.mfa.sendEmailCode();
         if (cancelled) return;
         if (error) {
           setSubmitError(
             error.message ??
-              "We couldn't send the SMS code. Try again in a moment.",
+              (strategy === "phone_code"
+                ? "We couldn't send the SMS code. Try again in a moment."
+                : "We couldn't send the email code. Try again in a moment."),
           );
           return;
         }
-        setInfo("We just texted you a code.");
+        setInfo(
+          strategy === "phone_code"
+            ? "We just texted you a code."
+            : "We just emailed you a code. Check your inbox (and spam).",
+        );
       } catch (err) {
         if (cancelled) return;
         setSubmitError(
           err instanceof Error
             ? err.message
-            : "We couldn't send the SMS code. Try again.",
+            : strategy === "phone_code"
+              ? "We couldn't send the SMS code. Try again."
+              : "We couldn't send the email code. Try again.",
         );
       } finally {
         if (!cancelled) setPreparing(false);
@@ -170,7 +193,9 @@ export default function VerifyScreen() {
           ? await signIn.mfa.verifyTOTP({ code: trimmed })
           : strategy === "phone_code"
             ? await signIn.mfa.verifyPhoneCode({ code: trimmed })
-            : await signIn.mfa.verifyBackupCode({ code: trimmed });
+            : strategy === "email_code"
+              ? await signIn.mfa.verifyEmailCode({ code: trimmed })
+              : await signIn.mfa.verifyBackupCode({ code: trimmed });
 
       if (error) {
         setSubmitError(
@@ -250,7 +275,9 @@ export default function VerifyScreen() {
                       ? "Authenticator app"
                       : s === "phone_code"
                         ? "Text message"
-                        : "Backup code"}
+                        : s === "email_code"
+                          ? "Email"
+                          : "Backup code"}
                   </Text>
                 </Pressable>
               ))}
