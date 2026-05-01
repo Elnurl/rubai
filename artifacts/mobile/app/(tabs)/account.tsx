@@ -260,6 +260,33 @@ export default function AccountScreen() {
           >
             {tierInfo.tagline}
           </Text>
+
+          <Pressable
+            onPress={() => router.push("/plans")}
+            accessibilityRole="button"
+            accessibilityLabel="Change plan"
+            style={({ pressed }) => [
+              styles.changePlanBtn,
+              {
+                backgroundColor: colors.primary,
+                borderRadius: colors.radius,
+                opacity: pressed ? 0.85 : 1,
+              },
+            ]}
+          >
+            <Feather name="zap" size={14} color={colors.primaryForeground} />
+            <Text
+              style={[
+                styles.changePlanText,
+                {
+                  color: colors.primaryForeground,
+                  fontFamily: "Inter_600SemiBold",
+                },
+              ]}
+            >
+              Change plan
+            </Text>
+          </Pressable>
         </View>
 
         <Pressable
@@ -877,6 +904,19 @@ const styles = StyleSheet.create({
   planTagline: {
     fontSize: 13.5,
     lineHeight: 19,
+  },
+  changePlanBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    marginTop: 12,
+  },
+  changePlanText: {
+    fontSize: 14,
+    letterSpacing: 0.2,
   },
   signOutBtn: {
     flexDirection: "row",

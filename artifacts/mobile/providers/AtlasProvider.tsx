@@ -24,7 +24,12 @@ import type {
   Roadmap,
   UserProfile,
 } from "@workspace/api-client-react";
-import { ApiError, getMeState, putMeState } from "@workspace/api-client-react";
+import {
+  ApiError,
+  getMeState,
+  putMeState,
+  putMeTier,
+} from "@workspace/api-client-react";
 import {
   TaskHistoryEntry,
   clearAllAtlas,
@@ -140,6 +145,19 @@ export class GoalLimitError extends Error {
   constructor(public limit: number) {
     super(`Goal limit reached: ${limit}`);
     this.name = "GoalLimitError";
+  }
+}
+
+/**
+ * Thrown when a tier change is rejected — most commonly a downgrade that
+ * would leave the user with more active goals than the target tier permits.
+ * The server returns a 409 with a human-readable message; we surface that
+ * message verbatim so the UI can show it as-is.
+ */
+export class TierChangeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TierChangeError";
   }
 }
 
@@ -936,16 +954,31 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     [schedulePush],
   );
 
-  // Tier is now controlled by the server; local "upgrade" is a no-op so any
-  // legacy callers don't crash. Surface a dev-only warning once.
-  const updateSubscription = useCallback(async (_tier: SubscriptionTier) => {
-    if (__DEV__) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[atlas] updateSubscription is a no-op — tier is server-controlled.",
-      );
-    }
-  }, []);
+  // Switches the user's tier server-side and mirrors the new value into
+  // local React state on success. The server enforces the actual rules
+  // (valid tier, downgrade safety) — we just translate failures into a
+  // typed TierChangeError so callers can show the message.
+  const updateSubscription = useCallback(
+    async (nextTier: SubscriptionTier) => {
+      try {
+        const res = await putMeTier({ tier: nextTier });
+        setTier(res.tier);
+      } catch (err) {
+        if (err instanceof ApiError) {
+          // 409 = downgrade blocked, 400 = invalid tier, etc.
+          // The server returns a friendly `error` field — surface it.
+          const data = err.data as { error?: unknown } | null;
+          const msg =
+            typeof data?.error === "string"
+              ? data.error
+              : "Couldn't change your plan. Please try again.";
+          throw new TierChangeError(msg);
+        }
+        throw err;
+      }
+    },
+    [],
+  );
 
   const updateAccount = useCallback(
     async (prefs: Partial<AccountPrefs>) => {

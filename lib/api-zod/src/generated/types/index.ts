@@ -51,6 +51,8 @@ export * from "./onboardingChatRequest";
 export * from "./onboardingChatResponse";
 export * from "./phaseChange";
 export * from "./phaseChangeType";
+export * from "./putMeTierRequest";
+export * from "./putMeTierRequestTier";
 export * from "./reflectionEntry";
 export * from "./reflectionReasonTag";
 export * from "./roadmap";

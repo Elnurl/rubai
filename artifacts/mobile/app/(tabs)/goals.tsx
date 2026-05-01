@@ -149,7 +149,7 @@ export default function GoalsScreen() {
 
         {!canAddMoreGoals && goals.length > 0 && (
           <Pressable
-            onPress={() => router.navigate("/account")}
+            onPress={() => router.push("/plans")}
             style={({ pressed }) => [
               styles.upgradeRow,
               {

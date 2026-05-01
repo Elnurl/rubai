@@ -37,6 +37,7 @@ import type {
   MeStateResponse,
   OnboardingChatRequest,
   OnboardingChatResponse,
+  PutMeTierRequest,
   Roadmap,
   RoadmapEvolutionRequest,
   RoadmapEvolutionResponse,
@@ -190,6 +191,100 @@ export function useGetMe<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Manually sets the user's subscription tier. Today this is a self-serve
+switch with no payment validation — useful for development and beta
+testing. In production this endpoint should be replaced (or guarded)
+by a webhook handler from RevenueCat (mobile IAP) or Stripe (web
+subscriptions) that writes both `users.tier` and a row in
+`subscriptions`. The endpoint also refuses downgrades that would
+leave the account over the new tier's goal limit.
+
+ * @summary Update the signed-in user's subscription tier
+ */
+export const getPutMeTierUrl = () => {
+  return `/api/me/tier`;
+};
+
+export const putMeTier = async (
+  putMeTierRequest: PutMeTierRequest,
+  options?: RequestInit,
+): Promise<MeResponse> => {
+  return customFetch<MeResponse>(getPutMeTierUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(putMeTierRequest),
+  });
+};
+
+export const getPutMeTierMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putMeTier>>,
+    TError,
+    { data: BodyType<PutMeTierRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putMeTier>>,
+  TError,
+  { data: BodyType<PutMeTierRequest> },
+  TContext
+> => {
+  const mutationKey = ["putMeTier"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putMeTier>>,
+    { data: BodyType<PutMeTierRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return putMeTier(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PutMeTierMutationResult = NonNullable<
+  Awaited<ReturnType<typeof putMeTier>>
+>;
+export type PutMeTierMutationBody = BodyType<PutMeTierRequest>;
+export type PutMeTierMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update the signed-in user's subscription tier
+ */
+export const usePutMeTier = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putMeTier>>,
+    TError,
+    { data: BodyType<PutMeTierRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof putMeTier>>,
+  TError,
+  { data: BodyType<PutMeTierRequest> },
+  TContext
+> => {
+  return useMutation(getPutMeTierMutationOptions(options));
+};
 
 /**
  * @summary Full personal state for the signed-in user (goals, prefs, draft)

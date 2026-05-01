@@ -14,6 +14,26 @@ export interface ErrorResponse {
 }
 
 /**
+ * Target tier. Must be one of the known tiers.
+ */
+export type PutMeTierRequestTier =
+  (typeof PutMeTierRequestTier)[keyof typeof PutMeTierRequestTier];
+
+export const PutMeTierRequestTier = {
+  free: "free",
+  pro: "pro",
+  premium: "premium",
+} as const;
+
+/**
+ * Request body for switching the signed-in user's subscription tier.
+ */
+export interface PutMeTierRequest {
+  /** Target tier. Must be one of the known tiers. */
+  tier: PutMeTierRequestTier;
+}
+
+/**
  * Public-safe identity and tier for the signed-in user.
  */
 export interface MeResponse {
