@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef } from "react";
-import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { GOAL_META, profileGoalLabel } from "@/constants/atlas";
@@ -27,7 +27,12 @@ export default function GeneratingScreen() {
   const { createGoal, setRoadmapForGoal, setPendingDraft, pendingDraft } = useAtlas();
   const generate = useAtlasGenerateRoadmap();
   const [stepIndex, setStepIndex] = React.useState(0);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const [retryToken, setRetryToken] = React.useState(0);
   const startedRef = useRef(false);
+  // Persist the created goal across retries so a roadmap-step failure doesn't
+  // spawn a duplicate goal each time the user taps "Try again".
+  const createdGoalIdRef = useRef<string | null>(null);
   const pulse = useRef(new Animated.Value(0)).current;
 
   // Decode profile from route params, falling back to the pendingDraft's
@@ -61,11 +66,12 @@ export default function GeneratingScreen() {
   }, [pulse]);
 
   useEffect(() => {
+    if (errorMessage) return;
     const id = setInterval(() => {
       setStepIndex((i) => Math.min(i + 1, STEPS.length - 1));
     }, 1500);
     return () => clearInterval(id);
-  }, []);
+  }, [errorMessage]);
 
   useEffect(() => {
     if (!profile) {
@@ -74,22 +80,49 @@ export default function GeneratingScreen() {
     }
     if (startedRef.current) return;
     startedRef.current = true;
+    setErrorMessage(null);
     (async () => {
       try {
         // Create the goal first (returns its id so we can attach the roadmap
         // back to the exact goal without relying on async-state propagation).
-        const newGoal = await createGoal(profile);
+        // Reuse the previously-created goal on retry to avoid orphan goals
+        // when only the AI roadmap step failed.
+        let goalId = createdGoalIdRef.current;
+        if (!goalId) {
+          const newGoal = await createGoal(profile);
+          goalId = newGoal.id;
+          createdGoalIdRef.current = goalId;
+        }
         const roadmap = await generate.mutateAsync({ data: { profile } });
-        await setRoadmapForGoal(newGoal.id, roadmap);
+        await setRoadmapForGoal(goalId, roadmap);
         await setPendingDraft(null);
         setStepIndex(STEPS.length - 1);
         setTimeout(() => router.replace("/(tabs)"), 700);
-      } catch {
+      } catch (err) {
+        // Surface the failure instead of looping silently. The user
+        // can either tap "Try again" (which re-arms this effect via
+        // retryToken) or back out to the welcome screen.
         startedRef.current = false;
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Something went wrong building your roadmap.";
+        setErrorMessage(message);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile]);
+  }, [profile, retryToken]);
+
+  const handleRetry = useCallback(() => {
+    if (startedRef.current) return;
+    setStepIndex(0);
+    setErrorMessage(null);
+    setRetryToken((t) => t + 1);
+  }, []);
+
+  const handleBack = useCallback(() => {
+    router.replace("/welcome");
+  }, [router]);
 
   const meta = profile ? GOAL_META[profile.goalType] : null;
   const displayLabel = profile ? profileGoalLabel(profile) : "";
@@ -127,7 +160,7 @@ export default function GeneratingScreen() {
             { color: colors.foreground, fontFamily: "Inter_700Bold" },
           ]}
         >
-          {generate.isError ? "Hit a snag." : "Engineering your roadmap."}
+          {errorMessage ? "Hit a snag." : "Engineering your roadmap."}
         </Text>
         <Text
           style={[
@@ -135,18 +168,63 @@ export default function GeneratingScreen() {
             { color: colors.primary, fontFamily: "Inter_600SemiBold" },
           ]}
         >
-          {generate.isError ? "Retrying" : STEPS[stepIndex]}
+          {errorMessage ? "Couldn't reach the server" : STEPS[stepIndex]}
         </Text>
 
-        {generate.isError && (
-          <Text
-            style={[
-              styles.error,
-              { color: colors.destructive, fontFamily: "Inter_500Medium" },
-            ]}
-          >
-            Connection issue. We'll try again automatically.
-          </Text>
+        {errorMessage && (
+          <>
+            <Text
+              style={[
+                styles.error,
+                { color: colors.destructive, fontFamily: "Inter_500Medium" },
+              ]}
+            >
+              {errorMessage}
+            </Text>
+
+            <View style={styles.actions}>
+              <Pressable
+                onPress={handleRetry}
+                style={({ pressed }) => [
+                  styles.primaryBtn,
+                  { backgroundColor: colors.primary },
+                  pressed && { opacity: 0.85 },
+                ]}
+                accessibilityRole="button"
+              >
+                <Text
+                  style={[
+                    styles.primaryBtnText,
+                    { fontFamily: "Inter_700Bold" },
+                  ]}
+                >
+                  Try again
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleBack}
+                style={({ pressed }) => [
+                  styles.secondaryBtn,
+                  { borderColor: colors.border },
+                  pressed && { opacity: 0.7 },
+                ]}
+                accessibilityRole="button"
+              >
+                <Text
+                  style={[
+                    styles.secondaryBtnText,
+                    {
+                      color: colors.foreground,
+                      fontFamily: "Inter_600SemiBold",
+                    },
+                  ]}
+                >
+                  Back to start
+                </Text>
+              </Pressable>
+            </View>
+          </>
         )}
       </View>
     </View>
@@ -198,5 +276,35 @@ const styles = StyleSheet.create({
     marginTop: 14,
     fontSize: 13,
     textAlign: "center",
+  },
+  actions: {
+    marginTop: 24,
+    width: "100%",
+    gap: 10,
+  },
+  primaryBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    letterSpacing: 0.2,
+  },
+  secondaryBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+  },
+  secondaryBtnText: {
+    fontSize: 14,
+    letterSpacing: 0.2,
   },
 });
