@@ -1,0 +1,75 @@
+We currently have a working prototype of the application, but before moving toward launch and real users, I need the system to be transformed into a stable production-ready architecture.
+
+First, the authentication system must be fully fixed and stabilized. Right now, login and sign-up appear unreliable or partially broken. I need a complete authentication flow with proper user registration, login, logout, session/token handling, password validation, error handling, and persistent user accounts connected to the database. Users must remain authenticated correctly after reopening the app.
+
+Second, the application needs a real production database architecture. At the moment, I do not clearly understand where or how the data is being stored. I need a properly structured database system for:
+
+* user accounts
+* tasks/goals
+* AI-generated plans
+* progress tracking
+* subscription status
+* analytics/history
+
+Please establish and clearly explain the database structure, relationships, and storage flow in a simple understandable way inside the project.
+
+Third, I need a proper backend architecture instead of only frontend/prototype logic. The backend should:
+
+* expose secure APIs
+* manage authentication
+* communicate with the AI system
+* store/retrieve data from the database
+* manage subscriptions
+* support future scaling
+
+Use a clean and scalable architecture.
+
+Fourth, I need an admin/manager dashboard for managing the application as the owner/admin. The dashboard should allow me to:
+
+* see all users
+* monitor active users
+* manage subscriptions
+* monitor AI usage
+* view logs/errors
+* send announcements or notifications
+* monitor analytics and growth
+* possibly block/report users if needed
+
+Fifth, I need the cloud/deployment system to be clarified and implemented properly. I currently do not fully understand the cloud infrastructure. Please:
+
+* organize hosting/deployment
+* explain where backend runs
+* explain where database runs
+* explain how frontend connects to backend
+* explain environment variables/secrets
+* make the architecture production-ready
+
+Sixth, the AI integration architecture should be improved and structured correctly. I need:
+
+* stable AI request handling
+* scalable AI integration
+* user-context memory logic
+* recommendation/task generation flow
+* proper backend-AI communication
+
+Seventh, subscriptions/payment systems appear broken or incomplete. I need a fully functional subscription architecture for both Google Play and Apple App Store ecosystems. The system should:
+
+* support premium plans
+* correctly verify payments
+* update user premium status in database
+* unlock premium features automatically
+* handle failed/cancelled subscriptions
+* support future scaling
+
+Eighth, I need proper data management and system organization. Please improve:
+
+* project structure
+* API organization
+* data flow
+* logging
+* error handling
+* monitoring
+* scalability
+* security basics
+
+Finally, I want the whole project to evolve from a prototype/demo into a real SaaS-style production-ready application architecture that can support real users safely and reliably.
