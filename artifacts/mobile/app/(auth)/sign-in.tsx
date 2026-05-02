@@ -22,6 +22,20 @@ import { friendlyAuthError } from "@/lib/authErrors";
 
 WebBrowser.maybeCompleteAuthSession();
 
+// Detects when the web build is being rendered inside another window's iframe
+// (e.g. Replit's workspace preview). In that case, popup-based OAuth flows
+// frequently fail silently because third-party cookies / popups / postMessage
+// to the grandparent window are blocked. We surface a hint to the user.
+function isWebInIframe(): boolean {
+  if (Platform.OS !== "web") return false;
+  try {
+    return typeof window !== "undefined" && window.self !== window.top;
+  } catch {
+    // Cross-origin access threw — that means we're definitely framed.
+    return true;
+  }
+}
+
 const BRAND = {
   primary: "#0E7C5A",
   bg: "#FAF6EE",
@@ -148,9 +162,21 @@ export default function SignInScreen() {
           },
         });
       } else {
-        // No session was created. Most commonly this means the user closed
-        // the OAuth sheet — don't show an error, just let them try again.
+        // No session was created and no error was thrown. Two real causes:
+        //   1. The user closed the OAuth sheet — that's fine.
+        //   2. The OAuth popup was blocked or the redirect callback couldn't
+        //      reach the app (very common inside the workspace preview iframe).
+        // Either way, give the user actionable feedback rather than silence.
         debug("google sso cancelled or missing requirements");
+        if (isWebInIframe()) {
+          setSubmitError(
+            "Google sign-in didn't complete. Inside the workspace preview, OAuth popups can be blocked — open this page in a new browser tab and try again.",
+          );
+        } else {
+          setSubmitError(
+            "Google sign-in didn't complete. Please try again.",
+          );
+        }
       }
     } catch (err) {
       debug("google sso threw", err);
@@ -184,6 +210,15 @@ export default function SignInScreen() {
               Sign in to continue with your AI goal coach.
             </Text>
           </View>
+
+          {isWebInIframe() && (
+            <View style={styles.iframeNotice}>
+              <Text style={styles.iframeNoticeText} maxFontSizeMultiplier={1.3}>
+                Tip: Google sign-in opens a popup. To use it from the workspace
+                preview, open this page in a new browser tab first.
+              </Text>
+            </View>
+          )}
 
           <Pressable
             style={({ pressed }) => [
@@ -334,6 +369,21 @@ const styles = StyleSheet.create({
     color: BRAND.muted,
     fontSize: 15,
     lineHeight: 21,
+  },
+  iframeNotice: {
+    backgroundColor: "#FFF6E0",
+    borderColor: "#E8D08A",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  iframeNoticeText: {
+    color: "#6B4F1A",
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+    lineHeight: 17,
   },
   googleBtn: {
     flexDirection: "row",
