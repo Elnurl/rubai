@@ -268,6 +268,12 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
   // state doesn't immediately echo it back as a write.
   const suppressPushRef = useRef(true);
 
+  // Latest-tier ref so writeCacheSnapshot can stay reference-stable. If we
+  // closed over `tier` directly, the useCallback would change identity every
+  // time tier flipped, which would re-trigger the boot effect mid-flight,
+  // cancel the in-flight async work, and leave the user stuck on the splash.
+  const tierRef = useRef<string>(DEFAULT_SUBSCRIPTION.tier);
+
   // Keep refs in sync with state on every commit.
   useEffect(() => {
     goalsRef.current = goals;
@@ -281,6 +287,9 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     pendingDraftRef.current = pendingDraft;
   }, [pendingDraft]);
+  useEffect(() => {
+    tierRef.current = tier;
+  }, [tier]);
 
   // ----- Server adoption helpers ---------------------------------------
 
@@ -309,9 +318,9 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       accountPrefs: accountRef.current,
       pendingDraft: pendingDraftRef.current,
       version: versionRef.current,
-      tier,
+      tier: tierRef.current,
     });
-  }, [tier]);
+  }, []);
 
   // ----- Push loop ------------------------------------------------------
 
