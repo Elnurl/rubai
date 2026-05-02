@@ -1,0 +1,68 @@
+Title: Implement “Momentum + Adaptive Daily Task System + Real Image Attachments”
+We are upgrading an AI productivity mobile/web app. Implement the following features inside the existing system.
+________________________________________
+1. Momentum / Risk Status (Today Screen)
+Create a dynamic “Momentum Status” component on the Today screen.
+Goal:
+Show a simple behavioral insight message based on user activity patterns.
+Inputs (already available in system):
+•	daily task completion rate 
+•	streak length 
+•	recent activity (last 3–7 days) 
+•	engagement frequency 
+Output:
+A single dynamic status message such as:
+•	“You’re losing momentum — let’s get back on track.” 
+•	“Great consistency — keep it going.” 
+•	“High performance week — strong discipline detected.” 
+________________________________________
+2. AI Adaptive Daily Task System (Core Upgrade)
+This is the most important feature.
+Goal:
+Every day, AI must generate a personalized task plan based on:
+•	previous day performance 
+•	user behavior patterns 
+•	cognitive load (task difficulty balance) 
+•	user preference history 
+Behavior:
+At the start of each day:
+1.	Analyze previous day: 
+o	completed tasks 
+o	skipped tasks 
+o	timing behavior 
+2.	Identify pattern: 
+o	productivity peak time 
+o	weak areas 
+o	overload signs 
+3.	Generate next-day tasks: 
+o	adjust difficulty dynamically 
+o	balance workload (not too easy, not too hard) 
+o	continue unfinished tasks if relevant 
+o	introduce new tasks if user is stable 
+________________________________________
+3. Award System Enhancement (Layered on top of existing system)
+There is already an “award feature” in the app but it is not functional.
+Upgrade it:
+Awards should be triggered by:
+•	consecutive streaks 
+•	full task completion days 
+•	consistency over time 
+________________________________________
+4. Real Image Attachment Feature (IMPORTANT FIX)
+Currently the attachment feature is fake — replace it with a real implementation.
+Requirements:
+Implement real image upload pipeline:
+•	Mobile/web file picker (camera + gallery support) 
+•	Upload image to storage (S3 / Supabase / Firebase storage — choose existing stack) 
+•	Save URL in database 
+________________________________________
+5. AI Daily Push Message (Integration Requirement)
+After daily task generation:
+•	system must send push notification 
+•	message should be based on: 
+o	momentum status 
+o	task difficulty level 
+o	user behavior pattern 
+Example:
+•	“New plan ready. Today is a recovery day — let’s rebuild momentum.”
+
