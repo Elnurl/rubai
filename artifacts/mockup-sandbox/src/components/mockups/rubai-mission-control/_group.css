@@ -1,0 +1,29 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+.rubai-theme {
+  --page-bg: #11120E;
+  --elevated-card: #1A1B16;
+  --secondary: #232520;
+  --border: #2C2D27;
+  --text-primary: #F2EBDB;
+  --text-muted: #8E8772;
+  --primary-green: #2EAC7E;
+  --accent-gold: #E2A435;
+  --danger: #D26666;
+  
+  font-family: 'Inter', sans-serif;
+  color: var(--text-primary);
+}
+
+.rubai-theme * {
+  border-color: var(--border);
+}
+
+/* Custom Scrollbar for Carousel */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

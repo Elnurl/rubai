@@ -1,0 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+.rubai-ambient-thread {
+  font-family: 'Inter', sans-serif;
+  --page-bg: #11120E;
+  --elevated-card: #1A1B16;
+  --secondary: #232520;
+  --border: #2C2D27;
+  --text-primary: #F2EBDB;
+  --text-muted: #8E8772;
+  --primary-green: #2EAC7E;
+  --accent-gold: #E2A435;
+  --danger: #D26666;
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.3);
+    opacity: 0;
+  }
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+/* Hide scrollbar */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
