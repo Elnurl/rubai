@@ -792,6 +792,18 @@ export const AtlasCoachBody = zod.object({
     }),
   ),
   message: zod.string(),
+  modelChoice: zod
+    .enum(["smart", "fast"])
+    .optional()
+    .describe(
+      'Optional model preference. \"smart\" (default) uses the high-quality model; \"fast\" uses a lower-latency one.',
+    ),
+  attachmentNote: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional note about an attachment the user added this turn (e.g. an image filename). The reply should acknowledge it.",
+    ),
 });
 
 export const AtlasCoachResponse = zod.object({
@@ -849,6 +861,23 @@ export const AtlasCoachResponse = zod.object({
     .describe(
       "Optional update to long-term coach memory. Only set when the user revealed something durable this turn.",
     ),
+});
+
+/**
+ * @summary Transcribe a short voice clip into text via Whisper
+ */
+export const AtlasTranscribeBody = zod.object({
+  audio: zod
+    .instanceof(File)
+    .describe("Audio file (m4a \/ webm \/ wav \/ mp3). Should be under ~25MB."),
+  language: zod
+    .string()
+    .optional()
+    .describe("Optional ISO-639-1 hint to bias recognition."),
+});
+
+export const AtlasTranscribeResponse = zod.object({
+  text: zod.string(),
 });
 
 /**

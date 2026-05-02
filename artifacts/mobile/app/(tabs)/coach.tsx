@@ -1,8 +1,10 @@
 import { Feather } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Platform,
   Pressable,
@@ -20,8 +22,11 @@ import { EmptyState } from "@/components/EmptyState";
 import { SectionHeader } from "@/components/SectionHeader";
 import { useColors } from "@/hooks/useColors";
 import { useEvolveRoadmap } from "@/hooks/useEvolveRoadmap";
+import { useTextToSpeech } from "@/hooks/useTextToSpeech";
+import { useVoiceRecorder, type RecordedClip } from "@/hooks/useVoiceRecorder";
 import { useAtlas } from "@/providers/AtlasProvider";
 import {
+  customFetch,
   useAtlasCoach,
   type ChatMessage,
   type CoachActionSuggestion,
@@ -33,6 +38,14 @@ const COLD_START_SUGGESTIONS = [
   "Push me harder this week",
   "What should I focus on?",
 ];
+
+type ModelChoice = "smart" | "fast";
+
+type PendingAttachment = {
+  filename: string;
+  /** A short label we show in the input (e.g. "photo · 1.2MB"). */
+  label: string;
+};
 
 export default function CoachScreen() {
   const colors = useColors();
@@ -62,11 +75,20 @@ export default function CoachScreen() {
 
   const coach = useAtlasCoach();
   const { evolve, isEvolving } = useEvolveRoadmap();
+  const recorder = useVoiceRecorder();
+  const tts = useTextToSpeech();
   const [draft, setDraft] = useState("");
   const [lastSuggestedReplies, setLastSuggestedReplies] = useState<string[]>([]);
   const [lastAction, setLastAction] = useState<CoachActionSuggestion | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [modelChoice, setModelChoice] = useState<ModelChoice>("smart");
+  const [autoSpeak, setAutoSpeak] = useState(false);
+  const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
+  const [pendingAttachment, setPendingAttachment] =
+    useState<PendingAttachment | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  const lastSpokenIndexRef = useRef<number>(-1);
 
   useEffect(() => {
     if (activeCoachHistory.length === 0 && activeProfile && activeRoadmap) {
@@ -78,56 +100,127 @@ export default function CoachScreen() {
     }
   }, [activeCoachHistory.length, activeProfile, activeRoadmap, setActiveCoachHistory]);
 
-  const send = async (text: string) => {
-    const message = text.trim();
-    if (!message || !activeProfile || !activeRoadmap || coach.isPending) return;
-    setDraft("");
-    // Clear ephemeral per-turn UI as soon as the next turn starts.
-    setLastSuggestedReplies([]);
-    setLastAction(null);
+  // When TTS state flips off (utterance ended), clear the active speaker.
+  useEffect(() => {
+    if (!tts.isSpeaking) setSpeakingIndex(null);
+  }, [tts.isSpeaking]);
 
-    const userMsg: ChatMessage = { role: "user", content: message };
-    await appendActiveCoachMessage(userMsg);
-
-    try {
-      const res = await coach.mutateAsync({
-        data: {
-          profile: activeProfile,
-          roadmap: activeRoadmap,
-          todayPlan: activeDailyPlan?.plan,
-          behavioral: activeBehavioral,
-          history: activeCoachHistory.slice(-10),
-          message,
-          currentWeek: activeCurrentWeek,
-          recentReflections: activeReflections.slice(-5),
-          recentEvolutions: activeRoadmapEvolutions.slice(0, 2),
-          ...(activeBehavioralProfile
-            ? { learnedProfile: activeBehavioralProfile }
-            : {}),
-          ...(activeCurrentPhase ? { currentPhase: activeCurrentPhase } : {}),
-          ...(activeCoachMemory ? { coachMemory: activeCoachMemory } : {}),
-        },
-      });
-      const assistantMsg: ChatMessage = { role: "assistant", content: res.reply };
-      await appendActiveCoachMessage(assistantMsg);
-      setLastSuggestedReplies(res.suggestedReplies ?? []);
-      const action = res.actionSuggestion;
-      setLastAction(action && action.kind !== "none" ? action : null);
-      if (res.memoryUpdate) {
-        await applyCoachMemoryUpdate({
-          summary: res.memoryUpdate.summary,
-          newFacts: res.memoryUpdate.newFacts ?? [],
-        });
-      }
-    } catch {
-      const errMsg: ChatMessage = {
-        role: "assistant",
-        content:
-          "Lost the line for a moment. Send that again and we'll pick it back up.",
-      };
-      await appendActiveCoachMessage(errMsg);
+  // Surface recorder failures (mic permission denied, MediaRecorder
+  // unsupported, etc.) so the user knows why nothing happened.
+  useEffect(() => {
+    if (recorder.state !== "error" || !recorder.errorMessage) return;
+    const msg = recorder.errorMessage;
+    if (Platform.OS === "web") {
+      // eslint-disable-next-line no-alert
+      window.alert(msg);
+    } else {
+      Alert.alert("Voice", msg);
     }
-  };
+  }, [recorder.state, recorder.errorMessage]);
+
+  const speakMessage = useCallback(
+    async (text: string, index: number) => {
+      if (speakingIndex === index && tts.isSpeaking) {
+        await tts.stop();
+        setSpeakingIndex(null);
+        return;
+      }
+      setSpeakingIndex(index);
+      await tts.speak(text);
+    },
+    [tts, speakingIndex],
+  );
+
+  const send = useCallback(
+    async (text: string, opts?: { attachment?: PendingAttachment | null }) => {
+      const message = text.trim();
+      if (!message || !activeProfile || !activeRoadmap || coach.isPending) return;
+      const attachment = opts?.attachment ?? pendingAttachment;
+      setDraft("");
+      setPendingAttachment(null);
+      // Clear ephemeral per-turn UI as soon as the next turn starts.
+      setLastSuggestedReplies([]);
+      setLastAction(null);
+
+      const visibleContent = attachment
+        ? `${message}\n📎 ${attachment.label}`
+        : message;
+      const userMsg: ChatMessage = { role: "user", content: visibleContent };
+      await appendActiveCoachMessage(userMsg);
+
+      try {
+        const res = await coach.mutateAsync({
+          data: {
+            profile: activeProfile,
+            roadmap: activeRoadmap,
+            todayPlan: activeDailyPlan?.plan,
+            behavioral: activeBehavioral,
+            history: activeCoachHistory.slice(-10),
+            message,
+            modelChoice,
+            currentWeek: activeCurrentWeek,
+            recentReflections: activeReflections.slice(-5),
+            recentEvolutions: activeRoadmapEvolutions.slice(0, 2),
+            ...(activeBehavioralProfile
+              ? { learnedProfile: activeBehavioralProfile }
+              : {}),
+            ...(activeCurrentPhase ? { currentPhase: activeCurrentPhase } : {}),
+            ...(activeCoachMemory ? { coachMemory: activeCoachMemory } : {}),
+            ...(attachment ? { attachmentNote: attachment.filename } : {}),
+          },
+        });
+        const assistantMsg: ChatMessage = { role: "assistant", content: res.reply };
+        await appendActiveCoachMessage(assistantMsg);
+        setLastSuggestedReplies(res.suggestedReplies ?? []);
+        const action = res.actionSuggestion;
+        setLastAction(action && action.kind !== "none" ? action : null);
+        if (res.memoryUpdate) {
+          await applyCoachMemoryUpdate({
+            summary: res.memoryUpdate.summary,
+            newFacts: res.memoryUpdate.newFacts ?? [],
+          });
+        }
+        if (autoSpeak) {
+          // The new assistant message will be at history.length (after append).
+          const nextIndex = activeCoachHistory.length + 1;
+          if (lastSpokenIndexRef.current !== nextIndex) {
+            lastSpokenIndexRef.current = nextIndex;
+            void tts.speak(res.reply).then(() => {
+              setSpeakingIndex(nextIndex);
+            });
+            setSpeakingIndex(nextIndex);
+          }
+        }
+      } catch {
+        const errMsg: ChatMessage = {
+          role: "assistant",
+          content:
+            "Lost the line for a moment. Send that again and we'll pick it back up.",
+        };
+        await appendActiveCoachMessage(errMsg);
+      }
+    },
+    [
+      activeProfile,
+      activeRoadmap,
+      coach,
+      activeDailyPlan,
+      activeBehavioral,
+      activeCoachHistory,
+      activeBehavioralProfile,
+      activeCurrentWeek,
+      activeCurrentPhase,
+      activeCoachMemory,
+      activeReflections,
+      activeRoadmapEvolutions,
+      appendActiveCoachMessage,
+      applyCoachMemoryUpdate,
+      modelChoice,
+      pendingAttachment,
+      autoSpeak,
+      tts,
+    ],
+  );
 
   const onActionPress = async () => {
     if (!lastAction) return;
@@ -146,6 +239,61 @@ export default function CoachScreen() {
     await setActiveCoachMemory(null);
     setMemoryOpen(false);
   };
+
+  // ---- Voice input flow ----
+  const onMicPress = useCallback(async () => {
+    if (recorder.state === "recording") {
+      // Stop + transcribe + autosend.
+      const clip = await recorder.stop();
+      if (!clip) return;
+      try {
+        setTranscribing(true);
+        const text = await transcribeClip(clip);
+        if (text && text.trim().length > 0) {
+          await send(text.trim());
+        }
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Couldn't transcribe that clip.";
+        if (Platform.OS === "web") {
+          // eslint-disable-next-line no-alert
+          window.alert(message);
+        } else {
+          Alert.alert("Voice", message);
+        }
+      } finally {
+        setTranscribing(false);
+      }
+      return;
+    }
+    if (recorder.state === "processing" || transcribing) return;
+    await recorder.start();
+  }, [recorder, send, transcribing]);
+
+  const onAttachmentPress = useCallback(async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        if (Platform.OS !== "web") {
+          Alert.alert("Photos", "Allow photo access to attach an image.");
+        }
+        return;
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.7,
+        allowsMultipleSelection: false,
+      });
+      if (res.canceled || !res.assets?.[0]) return;
+      const asset = res.assets[0];
+      const filename = asset.fileName || "image";
+      const sizeKb = asset.fileSize ? Math.round(asset.fileSize / 1024) : null;
+      const label = sizeKb ? `${filename} · ${formatSize(sizeKb)}` : filename;
+      setPendingAttachment({ filename, label });
+    } catch {
+      // ignore — picker errors are usually permission cancellations
+    }
+  }, []);
 
   // Footer below the chat list: typing indicator, then per-turn suggestions
   // and action card so they always appear right under the latest assistant
@@ -249,6 +397,8 @@ export default function CoachScreen() {
   }
 
   const memoryFacts = activeCoachMemory?.facts ?? [];
+  const isRecording = recorder.state === "recording";
+  const recordingSeconds = Math.floor(recorder.durationMs / 1000);
 
   return (
     <KeyboardAvoidingView
@@ -362,7 +512,18 @@ export default function CoachScreen() {
         data={activeCoachHistory}
         keyExtractor={(_, i) => String(i)}
         contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8 }}
-        renderItem={({ item }) => <ChatBubble role={item.role} content={item.content} />}
+        renderItem={({ item, index }) => (
+          <ChatBubble
+            role={item.role}
+            content={item.content}
+            onSpeak={
+              item.role === "assistant"
+                ? () => void speakMessage(item.content, index)
+                : undefined
+            }
+            isSpeaking={speakingIndex === index && tts.isSpeaking}
+          />
+        )}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
         ListFooterComponent={footer}
@@ -406,47 +567,270 @@ export default function CoachScreen() {
             ))}
           </View>
         )}
+
+        {/* Quick actions row: model toggle + auto-speak toggle. Sits above the
+            input wrap so it doesn't disrupt the existing send/text affordance. */}
+        <View style={styles.quickActionsRow}>
+          <Pressable
+            onPress={() =>
+              setModelChoice((v) => (v === "smart" ? "fast" : "smart"))
+            }
+            style={[
+              styles.quickActionPill,
+              {
+                borderColor: colors.border,
+                backgroundColor:
+                  modelChoice === "fast" ? colors.primary : colors.card,
+              },
+            ]}
+            testID="model-toggle"
+          >
+            <Feather
+              name={modelChoice === "fast" ? "zap" : "cpu"}
+              size={12}
+              color={
+                modelChoice === "fast"
+                  ? colors.primaryForeground
+                  : colors.mutedForeground
+              }
+            />
+            <Text
+              style={[
+                styles.quickActionText,
+                {
+                  color:
+                    modelChoice === "fast"
+                      ? colors.primaryForeground
+                      : colors.foreground,
+                  fontFamily: "Inter_600SemiBold",
+                },
+              ]}
+            >
+              {modelChoice === "fast" ? "Fast" : "Smart"}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setAutoSpeak((v) => !v)}
+            style={[
+              styles.quickActionPill,
+              {
+                borderColor: colors.border,
+                backgroundColor: autoSpeak ? colors.primary : colors.card,
+              },
+            ]}
+            testID="autospeak-toggle"
+          >
+            <Feather
+              name={autoSpeak ? "volume-2" : "volume-x"}
+              size={12}
+              color={
+                autoSpeak ? colors.primaryForeground : colors.mutedForeground
+              }
+            />
+            <Text
+              style={[
+                styles.quickActionText,
+                {
+                  color: autoSpeak
+                    ? colors.primaryForeground
+                    : colors.foreground,
+                  fontFamily: "Inter_600SemiBold",
+                },
+              ]}
+            >
+              {autoSpeak ? "Voice on" : "Voice off"}
+            </Text>
+          </Pressable>
+
+          {transcribing ? (
+            <View
+              style={[
+                styles.quickActionPill,
+                { borderColor: colors.border, backgroundColor: colors.card },
+              ]}
+            >
+              <ActivityIndicator size="small" color={colors.mutedForeground} />
+              <Text
+                style={[
+                  styles.quickActionText,
+                  { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
+                ]}
+              >
+                Transcribing…
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        {pendingAttachment ? (
+          <View
+            style={[
+              styles.attachmentRow,
+              { borderColor: colors.border, backgroundColor: colors.card },
+            ]}
+          >
+            <Feather name="paperclip" size={13} color={colors.mutedForeground} />
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.attachmentText,
+                { color: colors.foreground, fontFamily: "Inter_500Medium" },
+              ]}
+            >
+              {pendingAttachment.label}
+            </Text>
+            <Pressable
+              onPress={() => setPendingAttachment(null)}
+              hitSlop={6}
+              testID="remove-attachment"
+            >
+              <Feather name="x" size={14} color={colors.mutedForeground} />
+            </Pressable>
+          </View>
+        ) : null}
+
         <View
           style={[
             styles.inputWrap,
             {
               backgroundColor: colors.card,
-              borderColor: colors.border,
+              borderColor: isRecording ? colors.primary : colors.border,
               borderRadius: 22,
             },
           ]}
         >
-          <TextInput
-            value={draft}
-            onChangeText={setDraft}
-            placeholder="Talk to your coach"
-            placeholderTextColor={colors.mutedForeground}
-            multiline
+          <Pressable
+            onPress={onAttachmentPress}
+            hitSlop={6}
+            disabled={coach.isPending || isRecording}
+            style={styles.iconButton}
+            testID="attach-button"
+          >
+            <Feather name="paperclip" size={18} color={colors.mutedForeground} />
+          </Pressable>
+
+          {isRecording ? (
+            <View style={styles.recordingIndicator}>
+              <View style={[styles.recordingDot, { backgroundColor: colors.primary }]} />
+              <Text
+                style={[
+                  styles.recordingText,
+                  { color: colors.foreground, fontFamily: "Inter_500Medium" },
+                ]}
+              >
+                Recording {formatTime(recordingSeconds)}
+              </Text>
+            </View>
+          ) : (
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              placeholder="Talk to your coach"
+              placeholderTextColor={colors.mutedForeground}
+              multiline
+              style={[
+                styles.input,
+                { color: colors.foreground, fontFamily: "Inter_400Regular" },
+              ]}
+              editable={!coach.isPending && !transcribing}
+            />
+          )}
+
+          <Pressable
+            onPress={onMicPress}
+            disabled={coach.isPending || transcribing}
             style={[
-              styles.input,
-              { color: colors.foreground, fontFamily: "Inter_400Regular" },
+              styles.micButton,
+              {
+                backgroundColor: isRecording ? colors.primary : colors.muted,
+              },
             ]}
-            editable={!coach.isPending}
-          />
+            hitSlop={6}
+            testID="mic-button"
+          >
+            <Feather
+              name={isRecording ? "square" : "mic"}
+              size={16}
+              color={
+                isRecording ? colors.primaryForeground : colors.mutedForeground
+              }
+            />
+          </Pressable>
+
           <Pressable
             onPress={() => send(draft)}
-            disabled={!draft.trim() || coach.isPending}
+            disabled={!draft.trim() || coach.isPending || isRecording}
             style={[
               styles.sendButton,
-              { backgroundColor: draft.trim() ? colors.primary : colors.muted },
+              {
+                backgroundColor:
+                  draft.trim() && !isRecording ? colors.primary : colors.muted,
+              },
             ]}
             hitSlop={6}
           >
             <Feather
               name="arrow-up"
               size={18}
-              color={draft.trim() ? colors.primaryForeground : colors.mutedForeground}
+              color={
+                draft.trim() && !isRecording
+                  ? colors.primaryForeground
+                  : colors.mutedForeground
+              }
             />
           </Pressable>
         </View>
       </View>
     </KeyboardAvoidingView>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Voice transcription helper. Uploads the recorded clip to /api/atlas/transcribe
+// and returns the recognised text. We go through `customFetch` so the
+// request inherits the same base URL and bearer-token auth as the rest of
+// the generated client — the generated react-query hook can't be used
+// directly because it's JSON-only and doesn't support multipart bodies.
+// ---------------------------------------------------------------------------
+
+async function transcribeClip(clip: RecordedClip): Promise<string> {
+  const form = new FormData();
+  if (clip.kind === "web-blob") {
+    form.append("audio", clip.blob, clip.filename);
+  } else {
+    // React Native FormData accepts a {uri,name,type} object — TS doesn't
+    // know about it, so cast through unknown.
+    form.append(
+      "audio",
+      {
+        uri: clip.uri,
+        name: clip.filename,
+        type: clip.mimeType,
+      } as unknown as Blob,
+    );
+  }
+
+  // Route through customFetch so the request inherits the configured base
+  // URL (set in _layout.tsx) and the bearer token from Clerk. Without this
+  // the /atlas/* requireAuth middleware returns 401 on native.
+  const data = await customFetch<{ text?: string }>("/api/atlas/transcribe", {
+    method: "POST",
+    body: form,
+    responseType: "json",
+  });
+  return (data.text ?? "").trim();
+}
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function formatSize(kb: number): string {
+  if (kb >= 1024) return `${(kb / 1024).toFixed(1)}MB`;
+  return `${kb}KB`;
 }
 
 const styles = StyleSheet.create({
@@ -581,21 +965,83 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     letterSpacing: 0.2,
   },
+  quickActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  quickActionPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  quickActionText: {
+    fontSize: 11.5,
+    letterSpacing: 0.2,
+  },
+  attachmentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginHorizontal: 4,
+  },
+  attachmentText: {
+    flex: 1,
+    fontSize: 12.5,
+  },
   inputWrap: {
     flexDirection: "row",
     alignItems: "flex-end",
     borderWidth: 1,
-    paddingLeft: 16,
+    paddingLeft: 6,
     paddingRight: 6,
     paddingVertical: 6,
-    gap: 8,
+    gap: 6,
     minHeight: 48,
+  },
+  iconButton: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recordingIndicator: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+  },
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  recordingText: {
+    fontSize: 13,
   },
   input: {
     flex: 1,
     fontSize: 15,
     paddingVertical: 8,
     maxHeight: 140,
+  },
+  micButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
   },
   sendButton: {
     width: 36,

@@ -58,5 +58,9 @@
     "typescript": "~5.9.2",
     "zod": "catalog:",
     "zod-validation-error": "^3.4.0"
+  },
+  "dependencies": {
+    "expo-audio": "^55.0.14",
+    "expo-speech": "^55.0.13"
   }
 }

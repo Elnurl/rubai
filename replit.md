@@ -17,13 +17,16 @@ Key API endpoints (`/api/atlas/*`) include:
 - `POST /intake-submit`: Synthesizes a `UserProfile` from answered questions.
 - `POST /roadmap`: Returns a multi-phase `Roadmap` with milestones and risk analysis.
 - `POST /daily-plan`: Generates daily tasks based on user profile, roadmap, and behavioral snapshot.
-- `POST /coach`: Provides free-form AI coaching with contextual awareness.
+- `POST /coach`: Provides free-form AI coaching with contextual awareness. Accepts an optional `modelChoice` (`smart` → `gpt-5.4`, `fast` → `gpt-5.4-mini`) and an optional `attachmentNote` (filename string, folded into the user message so the coach acknowledges it without doing vision).
+- `POST /transcribe`: Multipart audio-to-text via OpenAI Whisper (`whisper-1`); 25MB cap, multer memory storage, structured 4xx JSON errors.
 - `POST /adapt`: Runs an adaptive engine to suggest adjustments (`easier | same | harder`).
 - `POST /behavioral-profile`: Builds or evolves a cumulative `BehavioralProfile`.
 
 The mobile app's architecture is based on `expo-router` for navigation, managing routes for welcome, intake, goal generation, and a main tab-based interface (Today, Roadmap, Coach, Goals, Account). State management is handled by `AtlasProvider.tsx`, persisting data to AsyncStorage and using refs to prevent stale closure issues. The app incorporates features like reflections for task feedback, an evolving roadmap that adapts to user behavior, and a context-aware coach with memory.
 
 UI/UX decisions focus on a warm cream, emerald, and amber palette, using Inter for typography. Iconography is handled via `@expo/vector-icons` and SF Symbols.
+
+The Coach screen also supports a voice layer and lightweight quick actions: a mic button records via `expo-audio` (native) or `MediaRecorder` (web), uploads to `/api/atlas/transcribe` through the auth-aware `customFetch`, and auto-sends the transcript; assistant bubbles render a small speaker icon that uses `expo-speech` (native) or `window.speechSynthesis` (web) for read-aloud. A "Voice on/off" pill toggles auto-speak for new replies, a "Smart/Fast" pill flips the underlying model via the `modelChoice` field, and a paperclip button attaches an image filename note to the next outgoing message (no vision — the coach just acknowledges that something was shared).
 
 Cloud sync is implemented with the server as the source of truth. On sign-in, the mobile app fetches state from `/api/me/state`, performing an initial migration of legacy local data if necessary. Mutations are optimistic and coalesced, with a conflict resolution mechanism for `409` responses, where the client re-syncs with the server's latest state. Subscription gating is enforced both in the UI and server-side to limit active goals based on the user's tier. Authentication is managed by Clerk, supporting email+password and SSO, with custom branded auth screens handling various flows like sign-in, sign-up, verification, and password reset.
 

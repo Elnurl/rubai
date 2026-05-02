@@ -1,5 +1,6 @@
+import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 
 import { useColors } from "@/hooks/useColors";
@@ -7,9 +8,12 @@ import { useColors } from "@/hooks/useColors";
 type Props = {
   role: "user" | "assistant";
   content: string;
+  /** When provided on assistant bubbles, renders a small speaker icon to replay the reply via TTS. */
+  onSpeak?: () => void;
+  isSpeaking?: boolean;
 };
 
-export function ChatBubble({ role, content }: Props) {
+export function ChatBubble({ role, content, onSpeak, isSpeaking }: Props) {
   const colors = useColors();
   const isUser = role === "user";
 
@@ -55,6 +59,21 @@ export function ChatBubble({ role, content }: Props) {
         >
           {content}
         </Text>
+        {!isUser && onSpeak ? (
+          <Pressable
+            onPress={onSpeak}
+            hitSlop={8}
+            style={styles.speakerButton}
+            testID="chat-bubble-speak"
+            accessibilityLabel={isSpeaking ? "Stop speaking" : "Read aloud"}
+          >
+            <Feather
+              name={isSpeaking ? "volume-2" : "volume-1"}
+              size={14}
+              color={isSpeaking ? colors.primary : colors.mutedForeground}
+            />
+          </Pressable>
+        ) : null}
       </View>
     </Animated.View>
   );
@@ -88,5 +107,11 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 15,
     lineHeight: 22,
+  },
+  speakerButton: {
+    alignSelf: "flex-end",
+    marginTop: 6,
+    paddingVertical: 2,
+    paddingLeft: 6,
   },
 });

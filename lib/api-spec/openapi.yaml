@@ -210,6 +210,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/CoachResponse"
 
+  /atlas/transcribe:
+    post:
+      operationId: atlasTranscribe
+      tags: [atlas]
+      summary: Transcribe a short voice clip into text via Whisper
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/TranscribeRequest"
+      responses:
+        "200":
+          description: Transcribed text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscribeResponse"
+
   /atlas/adapt:
     post:
       operationId: atlasAdaptPlan
@@ -842,7 +861,33 @@ components:
             $ref: "#/components/schemas/ChatMessage"
         message:
           type: string
+        modelChoice:
+          type: string
+          enum: [smart, fast]
+          description: Optional model preference. "smart" (default) uses the high-quality model; "fast" uses a lower-latency one.
+        attachmentNote:
+          type: string
+          description: Optional note about an attachment the user added this turn (e.g. an image filename). The reply should acknowledge it.
       required: [profile, roadmap, behavioral, history, message]
+
+    TranscribeRequest:
+      type: object
+      required: [audio]
+      properties:
+        audio:
+          type: string
+          format: binary
+          description: Audio file (m4a / webm / wav / mp3). Should be under ~25MB.
+        language:
+          type: string
+          description: Optional ISO-639-1 hint to bias recognition.
+
+    TranscribeResponse:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
 
     CoachResponse:
       type: object

@@ -9,6 +9,7 @@ import type { BehavioralProfile } from "./behavioralProfile";
 import type { BehavioralSnapshot } from "./behavioralSnapshot";
 import type { ChatMessage } from "./chatMessage";
 import type { CoachMemory } from "./coachMemory";
+import type { CoachRequestModelChoice } from "./coachRequestModelChoice";
 import type { CurrentPhaseSnapshot } from "./currentPhaseSnapshot";
 import type { DailyPlan } from "./dailyPlan";
 import type { ReflectionEntry } from "./reflectionEntry";
@@ -35,4 +36,8 @@ export interface CoachRequest {
   coachMemory?: CoachMemory | null;
   history: ChatMessage[];
   message: string;
+  /** Optional model preference. "smart" (default) uses the high-quality model; "fast" uses a lower-latency one. */
+  modelChoice?: CoachRequestModelChoice;
+  /** Optional note about an attachment the user added this turn (e.g. an image filename). The reply should acknowledge it. */
+  attachmentNote?: string;
 }

@@ -1,4 +1,7 @@
 import { Router, type IRouter } from "express";
+import multer from "multer";
+import { toFile } from "openai/uploads";
+import { openai } from "@workspace/integrations-openai-ai-server";
 import { trackedCreate } from "../lib/aiUsage";
 import {
   AtlasOnboardingChatBody as atlasOnboardingChatBody,
@@ -49,6 +52,44 @@ function summarizeLearnedProfile(p: unknown): string {
 const router: IRouter = Router();
 
 const MODEL = "gpt-5.4";
+const MODEL_FAST = "gpt-5.4-mini";
+
+function pickModel(choice: "smart" | "fast" | undefined): string {
+  return choice === "fast" ? MODEL_FAST : MODEL;
+}
+
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 }, // Whisper hard cap
+});
+
+/**
+ * Multer middleware errors (oversize file, malformed multipart) are
+ * delivered via the next(err) channel and otherwise fall through to the
+ * generic Express error handler. Wrap the upload so we always respond with
+ * a structured JSON 4xx the mobile client can show.
+ */
+function audioUploadMiddleware(field: string) {
+  const handler = audioUpload.single(field);
+  return (
+    req: import("express").Request,
+    res: import("express").Response,
+    next: import("express").NextFunction,
+  ) => {
+    handler(req, res, (err) => {
+      if (!err) return next();
+      const code = (err as { code?: string }).code;
+      const status = code === "LIMIT_FILE_SIZE" ? 413 : 400;
+      const message =
+        code === "LIMIT_FILE_SIZE"
+          ? "Audio file exceeds the 25MB limit."
+          : err instanceof Error
+            ? err.message
+            : "Upload failed.";
+      res.status(status).json({ error: message });
+    });
+  };
+}
 
 const goalLabels: Record<string, string> = {
   ielts: "IELTS Preparation",
@@ -618,7 +659,16 @@ router.post("/coach", async (req, res) => {
     coachMemory,
     history,
     message,
+    modelChoice,
+    attachmentNote,
   } = parsed.data;
+
+  // If the user attached something this turn, fold a brief note into the
+  // outgoing message so the model can acknowledge it. We don't run vision —
+  // we just want the coach to react warmly to the fact that they shared it.
+  const userMessage = attachmentNote
+    ? `${message}\n\n[The user also attached: ${attachmentNote}. Acknowledge it in one short sentence — you can't see its contents.]`
+    : message;
 
   try {
     const contextBlock = buildCoachContext({
@@ -667,7 +717,7 @@ CONTEXT:
 ${contextBlock}`;
 
     const completion = await trackedCreate(req, {
-      model: MODEL,
+      model: pickModel(modelChoice),
       max_completion_tokens: 1200,
       response_format: {
         type: "json_schema",
@@ -683,7 +733,7 @@ ${contextBlock}`;
           role: m.role as "user" | "assistant",
           content: m.content,
         })),
-        { role: "user", content: message },
+        { role: "user", content: userMessage },
       ],
     });
 
@@ -1302,5 +1352,64 @@ ${reflectionLines || "(none yet)"}`,
     res.status(500).json({ error: "AI request failed" });
   }
 });
+
+// Voice → text. Multipart form-data with a single `audio` field.
+// We let Whisper auto-detect the format; expo-audio gives us m4a on iOS,
+// 3gp/mp4 on Android, and the web MediaRecorder gives us webm/opus.
+router.post("/transcribe", audioUploadMiddleware("audio"), async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: "audio file is required" });
+      return;
+    }
+    const language =
+      typeof req.body?.language === "string" && req.body.language.length > 0
+        ? req.body.language
+        : undefined;
+
+    const filename = file.originalname || guessAudioFilename(file.mimetype);
+    const upload = await toFile(file.buffer, filename, {
+      type: file.mimetype || "audio/webm",
+    });
+
+    const start = Date.now();
+    const result = await openai.audio.transcriptions.create({
+      file: upload,
+      model: "whisper-1",
+      ...(language ? { language } : {}),
+    });
+    const latencyMs = Date.now() - start;
+
+    req.log.info(
+      { latencyMs, bytes: file.size, mimetype: file.mimetype },
+      "transcribe ok",
+    );
+
+    res.json({ text: (result.text ?? "").trim() });
+  } catch (err) {
+    req.log.error({ err }, "transcribe failed");
+    res.status(500).json({ error: "transcription failed" });
+  }
+});
+
+function guessAudioFilename(mimetype: string | undefined): string {
+  switch (mimetype) {
+    case "audio/webm":
+    case "audio/webm;codecs=opus":
+      return "audio.webm";
+    case "audio/mp4":
+    case "audio/m4a":
+    case "audio/x-m4a":
+      return "audio.m4a";
+    case "audio/wav":
+    case "audio/wave":
+      return "audio.wav";
+    case "audio/mpeg":
+      return "audio.mp3";
+    default:
+      return "audio.webm";
+  }
+}
 
 export default router;

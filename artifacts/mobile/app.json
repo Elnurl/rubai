@@ -35,7 +35,13 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow RubAI to use your microphone so you can talk to your coach."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

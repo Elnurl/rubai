@@ -401,6 +401,17 @@ export interface CoachMemoryUpdate {
   newFacts: string[];
 }
 
+/**
+ * Optional model preference. "smart" (default) uses the high-quality model; "fast" uses a lower-latency one.
+ */
+export type CoachRequestModelChoice =
+  (typeof CoachRequestModelChoice)[keyof typeof CoachRequestModelChoice];
+
+export const CoachRequestModelChoice = {
+  smart: "smart",
+  fast: "fast",
+} as const;
+
 export type ReflectionReasonTag =
   (typeof ReflectionReasonTag)[keyof typeof ReflectionReasonTag];
 
@@ -446,6 +457,21 @@ export interface CoachRequest {
   coachMemory?: CoachMemory | null;
   history: ChatMessage[];
   message: string;
+  /** Optional model preference. "smart" (default) uses the high-quality model; "fast" uses a lower-latency one. */
+  modelChoice?: CoachRequestModelChoice;
+  /** Optional note about an attachment the user added this turn (e.g. an image filename). The reply should acknowledge it. */
+  attachmentNote?: string;
+}
+
+export interface TranscribeRequest {
+  /** Audio file (m4a / webm / wav / mp3). Should be under ~25MB. */
+  audio: Blob;
+  /** Optional ISO-639-1 hint to bias recognition. */
+  language?: string;
+}
+
+export interface TranscribeResponse {
+  text: string;
 }
 
 export interface CoachResponse {

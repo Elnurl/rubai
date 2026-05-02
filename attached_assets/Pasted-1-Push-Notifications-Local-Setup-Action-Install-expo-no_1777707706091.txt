@@ -1,0 +1,53 @@
+1. Push Notifications (Local & Setup)
+Action: Install expo-notifications.
+
+Implementation: Since I am testing in a development environment, implement a Local Notification Service.
+
+Logic: Use peakHours data from the BehavioralProfile. Schedule a daily local notification to trigger during the user's most active window (e.g., 8-10 AM).
+
+Requirement: Ensure the code handles permissions gracefully and includes a fallback if the app is running in a simulator.
+
+2. Cron Jobs & Backend Automation (Railway Compatible)
+Problem: The backend is on Railway and may go to sleep; standard node-cron might be unreliable.
+
+Task:
+
+Create a secured public endpoint (e.g., /api/cron/daily-sync) that triggers the daily maintenance logic.
+
+This endpoint should:
+
+Identify "dormant users" (no activity in 48h).
+
+Pre-generate/update behavioral profiles and roadmap snapshots.
+
+Security: Protect this route with a simple CRON_SECRET header check so only external cron services (like Cron-job.org) can trigger it.
+
+3. Streak Visibility & UI Components
+Task: Create a <StreakBadge/> component using existing data from BehavioralSnapshot.currentStreakDays.
+
+UI: Display this on the "Today" screen.
+
+Visuals: If the streak is active, show a "fire" icon with the count. Use the app's existing design language.
+
+4. Milestone Celebrations & Haptic Feedback
+Action: Use expo-haptics (already in package.json).
+
+Implementation:
+
+Add Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium) to high-value moments:
+
+When a user completes a roadmap phase.
+
+When a 7-day streak is reached.
+
+On the first successful roadmap generation.
+
+UI: Trigger a celebration effect (e.g., a simple confetti overlay or a celebratory modal) during these milestones.
+
+Technical Constraints & Guardrails:
+
+State Management: NEVER bypass the CAS logic. All updates to user state must use version = expectedVersion to prevent data overwrites.
+
+Code Style: Keep components modular. If a new service is needed, create a dedicated file in /services.
+
+Safety: For haptics and notifications, always check if the device supports the feature to avoid crashes on web/simulators.

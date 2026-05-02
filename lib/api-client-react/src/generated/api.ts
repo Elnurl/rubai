@@ -41,6 +41,8 @@ import type {
   RoadmapEvolutionRequest,
   RoadmapEvolutionResponse,
   RoadmapRequest,
+  TranscribeRequest,
+  TranscribeResponse,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -868,6 +870,97 @@ export const useAtlasCoach = <
   TContext
 > => {
   return useMutation(getAtlasCoachMutationOptions(options));
+};
+
+/**
+ * @summary Transcribe a short voice clip into text via Whisper
+ */
+export const getAtlasTranscribeUrl = () => {
+  return `/api/atlas/transcribe`;
+};
+
+export const atlasTranscribe = async (
+  transcribeRequest: TranscribeRequest,
+  options?: RequestInit,
+): Promise<TranscribeResponse> => {
+  const formData = new FormData();
+  formData.append(`audio`, transcribeRequest.audio);
+  if (transcribeRequest.language !== undefined) {
+    formData.append(`language`, transcribeRequest.language);
+  }
+
+  return customFetch<TranscribeResponse>(getAtlasTranscribeUrl(), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getAtlasTranscribeMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasTranscribe>>,
+    TError,
+    { data: BodyType<TranscribeRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof atlasTranscribe>>,
+  TError,
+  { data: BodyType<TranscribeRequest> },
+  TContext
+> => {
+  const mutationKey = ["atlasTranscribe"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof atlasTranscribe>>,
+    { data: BodyType<TranscribeRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return atlasTranscribe(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AtlasTranscribeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof atlasTranscribe>>
+>;
+export type AtlasTranscribeMutationBody = BodyType<TranscribeRequest>;
+export type AtlasTranscribeMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Transcribe a short voice clip into text via Whisper
+ */
+export const useAtlasTranscribe = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasTranscribe>>,
+    TError,
+    { data: BodyType<TranscribeRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof atlasTranscribe>>,
+  TError,
+  { data: BodyType<TranscribeRequest> },
+  TContext
+> => {
+  return useMutation(getAtlasTranscribeMutationOptions(options));
 };
 
 /**
