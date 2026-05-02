@@ -3,6 +3,7 @@ import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 
+import { BrandDot } from "@/components/BrandDot";
 import { useColors } from "@/hooks/useColors";
 
 type Props = {
@@ -26,25 +27,16 @@ export function ChatBubble({ role, content, onSpeak, isSpeaking }: Props) {
       ]}
     >
       {!isUser && (
-        <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-          <Text
-            style={[
-              styles.avatarText,
-              { color: colors.primaryForeground, fontFamily: "Inter_700Bold" },
-            ]}
-          >
-            A
-          </Text>
+        <View style={styles.avatarSlot}>
+          <BrandDot size="md" mode="static" />
         </View>
       )}
       <View
         style={[
           styles.bubble,
           {
-            backgroundColor: isUser ? colors.foreground : colors.card,
-            borderColor: isUser ? colors.foreground : colors.border,
-            borderTopLeftRadius: isUser ? 18 : 6,
-            borderTopRightRadius: isUser ? 6 : 18,
+            backgroundColor: isUser ? colors.primary : colors.card,
+            borderColor: isUser ? colors.primary : colors.border,
           },
         ]}
       >
@@ -52,7 +44,7 @@ export function ChatBubble({ role, content, onSpeak, isSpeaking }: Props) {
           style={[
             styles.text,
             {
-              color: isUser ? colors.background : colors.foreground,
+              color: isUser ? colors.primaryForeground : colors.foreground,
               fontFamily: "Inter_400Regular",
             },
           ]}
@@ -83,26 +75,22 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "flex-end",
-    marginVertical: 6,
-    gap: 8,
+    marginVertical: 8,
+    gap: 10,
   },
-  avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  avatarSlot: {
+    width: 22,
+    height: 22,
     alignItems: "center",
     justifyContent: "center",
-  },
-  avatarText: {
-    fontSize: 13,
+    marginBottom: 8,
   },
   bubble: {
-    maxWidth: "80%",
+    maxWidth: "78%",
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderWidth: 1,
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 18,
   },
   text: {
     fontSize: 15,
@@ -111,7 +99,7 @@ const styles = StyleSheet.create({
   speakerButton: {
     alignSelf: "flex-end",
     marginTop: 6,
-    paddingVertical: 2,
     paddingLeft: 6,
+    paddingVertical: 2,
   },
 });

@@ -17,10 +17,11 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ActiveGoalChip } from "@/components/ActiveGoalChip";
+import { AtlasLogo } from "@/components/AtlasLogo";
+import { BrandDot } from "@/components/BrandDot";
 import { ChatBubble } from "@/components/ChatBubble";
 import { EmptyState } from "@/components/EmptyState";
 import { ProposedActionCard } from "@/components/ProposedActionCard";
-import { SectionHeader } from "@/components/SectionHeader";
 import { useColors } from "@/hooks/useColors";
 import { useEvolveRoadmap } from "@/hooks/useEvolveRoadmap";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
@@ -410,15 +411,9 @@ export default function CoachScreen() {
     if (coach.isPending) {
       return (
         <View style={styles.typing}>
-          <ActivityIndicator size="small" color={colors.mutedForeground} />
-          <Text
-            style={[
-              styles.typingText,
-              { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
-            ]}
-          >
-            rubai is thinking
-          </Text>
+          <View style={styles.typingDotSlot}>
+            <BrandDot size="md" mode="thinking" />
+          </View>
         </View>
       );
     }
@@ -532,12 +527,27 @@ export default function CoachScreen() {
     >
       <View style={[styles.header, { paddingTop: topPad }]}>
         <View style={styles.headerInner}>
-          <View style={{ flex: 1 }}>
-            <SectionHeader
-              eyebrow="COACH"
-              title="rubai"
-              subtitle={`Working on: ${activeRoadmap.headline}`}
-            />
+          <View style={{ flex: 1, gap: 6 }}>
+            <Text
+              style={[
+                styles.headerEyebrow,
+                { color: colors.primary, fontFamily: "Inter_600SemiBold" },
+              ]}
+            >
+              COACH
+            </Text>
+            <AtlasLogo size="lg" />
+            <Text
+              style={[
+                styles.headerSubtitle,
+                { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
+              ]}
+            >
+              Working on:{" "}
+              <Text style={{ color: colors.foreground, fontFamily: "Inter_500Medium" }}>
+                {activeRoadmap.headline}
+              </Text>
+            </Text>
           </View>
           <ActiveGoalChip />
         </View>
@@ -673,8 +683,7 @@ export default function CoachScreen() {
                 style={[
                   styles.suggestion,
                   {
-                    borderColor: colors.border,
-                    backgroundColor: colors.card,
+                    backgroundColor: colors.muted,
                     borderRadius: 999,
                   },
                 ]}
@@ -692,98 +701,74 @@ export default function CoachScreen() {
           </View>
         )}
 
-        {/* Quick actions row: model toggle + auto-speak toggle. Sits above the
-            input wrap so it doesn't disrupt the existing send/text affordance. */}
-        <View style={styles.quickActionsRow}>
+        {/* Status caption: tappable inline toggles for model + voice mode.
+            Replaces the earlier pill row; matches the screenshot's
+            "SMART MODE · VOICE OFF" caption. */}
+        <View style={styles.statusCaption}>
           <Pressable
             onPress={() =>
               setModelChoice((v) => (v === "smart" ? "fast" : "smart"))
             }
-            style={[
-              styles.quickActionPill,
-              {
-                borderColor: colors.border,
-                backgroundColor:
-                  modelChoice === "fast" ? colors.primary : colors.card,
-              },
-            ]}
+            hitSlop={8}
             testID="model-toggle"
           >
-            <Feather
-              name={modelChoice === "fast" ? "zap" : "cpu"}
-              size={12}
-              color={
-                modelChoice === "fast"
-                  ? colors.primaryForeground
-                  : colors.mutedForeground
-              }
-            />
             <Text
               style={[
-                styles.quickActionText,
+                styles.statusCaptionText,
                 {
-                  color:
-                    modelChoice === "fast"
-                      ? colors.primaryForeground
-                      : colors.foreground,
+                  color: colors.mutedForeground,
                   fontFamily: "Inter_600SemiBold",
                 },
               ]}
             >
-              {modelChoice === "fast" ? "Fast" : "Smart"}
+              {modelChoice === "fast" ? "FAST MODE" : "SMART MODE"}
             </Text>
           </Pressable>
-
+          <Text
+            style={[
+              styles.statusCaptionSep,
+              { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
+            ]}
+          >
+            ·
+          </Text>
           <Pressable
             onPress={() => setAutoSpeak((v) => !v)}
-            style={[
-              styles.quickActionPill,
-              {
-                borderColor: colors.border,
-                backgroundColor: autoSpeak ? colors.primary : colors.card,
-              },
-            ]}
+            hitSlop={8}
             testID="autospeak-toggle"
           >
-            <Feather
-              name={autoSpeak ? "volume-2" : "volume-x"}
-              size={12}
-              color={
-                autoSpeak ? colors.primaryForeground : colors.mutedForeground
-              }
-            />
             <Text
               style={[
-                styles.quickActionText,
+                styles.statusCaptionText,
                 {
-                  color: autoSpeak
-                    ? colors.primaryForeground
-                    : colors.foreground,
+                  color: colors.mutedForeground,
                   fontFamily: "Inter_600SemiBold",
                 },
               ]}
             >
-              {autoSpeak ? "Voice on" : "Voice off"}
+              {autoSpeak ? "VOICE ON" : "VOICE OFF"}
             </Text>
           </Pressable>
-
           {transcribing ? (
-            <View
-              style={[
-                styles.quickActionPill,
-                { borderColor: colors.border, backgroundColor: colors.card },
-              ]}
-            >
+            <>
+              <Text
+                style={[
+                  styles.statusCaptionSep,
+                  { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
+                ]}
+              >
+                ·
+              </Text>
               <ActivityIndicator size="small" color={colors.mutedForeground} />
               <Text
                 style={[
-                  styles.quickActionText,
-                  { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
+                  styles.statusCaptionText,
+                  { color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
                 ]}
               >
-                Transcribing…
+                TRANSCRIBING…
               </Text>
-            </View>
+            </>
           ) : null}
         </View>
 
@@ -1021,12 +1006,37 @@ const styles = StyleSheet.create({
   typing: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 12,
+    gap: 10,
+    paddingVertical: 16,
     paddingHorizontal: 6,
   },
-  typingText: {
-    fontSize: 13,
+  typingDotSlot: {
+    paddingLeft: 4,
+  },
+  headerEyebrow: {
+    fontSize: 11,
+    letterSpacing: 1.6,
+    textTransform: "uppercase",
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 2,
+  },
+  statusCaption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  statusCaptionText: {
+    fontSize: 10.5,
+    letterSpacing: 1.2,
+  },
+  statusCaptionSep: {
+    fontSize: 11,
   },
   footerStack: {
     paddingHorizontal: 6,
@@ -1081,31 +1091,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   suggestion: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
   },
   suggestionText: {
     fontSize: 12.5,
-    letterSpacing: 0.2,
-  },
-  quickActionsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 4,
-  },
-  quickActionPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  quickActionText: {
-    fontSize: 11.5,
     letterSpacing: 0.2,
   },
   attachmentRow: {

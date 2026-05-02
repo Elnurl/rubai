@@ -1,11 +1,11 @@
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import React from "react";
-import { Platform, StyleSheet, View, useColorScheme } from "react-native";
+import { Platform, Pressable, StyleSheet, View, useColorScheme } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 
@@ -21,7 +21,7 @@ function NativeTabLayout() {
         <Label>Roadmap</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="coach">
-        <Icon sf={{ default: "bubble.left", selected: "bubble.left.fill" }} />
+        <Icon sf={{ default: "sparkles", selected: "sparkles" }} />
         <Label>Coach</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="goals">
@@ -60,7 +60,8 @@ function ClassicTabLayout() {
           borderTopWidth: isWeb ? 1 : 0,
           borderTopColor: colors.border,
           elevation: 0,
-          ...(isWeb ? { height: 84 } : {}),
+          height: isWeb ? 84 : 70,
+          paddingTop: 6,
         },
         tabBarBackground: () =>
           isIOS ? (
@@ -106,13 +107,35 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="coach"
         options={{
-          title: "Coach",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="bubble.left" tintColor={color} size={24} />
-            ) : (
-              <Feather name="message-circle" size={22} color={color} />
-            ),
+          title: "",
+          tabBarLabel: () => null,
+          tabBarButton: (props) => (
+            <View style={[tabStyles.centerSlot, { pointerEvents: "box-none" }]}>
+              <Pressable
+                onPress={props.onPress}
+                onLongPress={props.onLongPress}
+                accessibilityRole="button"
+                accessibilityLabel="Coach"
+                accessibilityState={props.accessibilityState}
+                testID={props.testID ?? "coach-tab-button"}
+                style={({ pressed }) => [
+                  tabStyles.centerButton,
+                  {
+                    backgroundColor: colors.primary,
+                    borderColor: colors.background,
+                    opacity: pressed ? 0.9 : 1,
+                    shadowColor: colors.primary,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="sparkles"
+                  size={24}
+                  color={colors.primaryForeground}
+                />
+              </Pressable>
+            </View>
+          ),
         }}
       />
       <Tabs.Screen
@@ -142,6 +165,27 @@ function ClassicTabLayout() {
     </Tabs>
   );
 }
+
+const tabStyles = StyleSheet.create({
+  centerSlot: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "flex-start",
+  },
+  centerButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: -22,
+    borderWidth: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+});
 
 export default function TabsLayout() {
   if (isLiquidGlassAvailable()) return <NativeTabLayout />;
