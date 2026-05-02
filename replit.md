@@ -34,12 +34,16 @@ Cloud sync is implemented with the server as the source of truth. On sign-in, th
 
 A user-facing **Plans** screen at `app/plans.tsx` (registered in `app/_layout.tsx`, reached by tapping the plan card on the Account tab) shows the three tiers (Free / Pro / Premium) with feature lists; Pro is highlighted as POPULAR. Picking a plan calls `AtlasProvider.updateSubscription`, which is a **UI-only preview** — no billing, no server call. The provider keeps two refs to make this safe: `serverTierRef` tracks the server's authoritative tier (this is what `writeCacheSnapshot` persists, and what server-driven paths like `adoptServerState`, `doPushOnce`, and the boot/migration flow always update), while `localTierOverrideRef` tracks the user's session-only pick. While the override is non-null, server-driven `setTier` calls are skipped so a background sync can't clobber the displayed tier; the override is intentionally never persisted, so reloading the app drops the preview and falls back to the real server tier. `resetAll` (sign-out) clears both refs.
 
+The Coach paperclip is a real vision attachment now. The mobile picker requests base64 bytes (`expo-image-picker` quality 0.6) and ships them on `/atlas/coach` as `attachmentImage { base64Data, mimeType }`. The server validates MIME (jpeg / png / webp / gif) and caps the decoded payload at 5 MB before constructing a `data:` URL and switching the model to `MODEL_VISION` (`gpt-4o`) for that single turn. The Express JSON body limit was raised to 8 MB to accommodate base64-encoded photos. Non-image attachments still fall back to the existing acknowledgement-note path.
+
+Push notifications run on iOS/Android via Expo Push. `usersTable` carries `expo_push_token`, `tz_offset_minutes`, and `last_morning_nudge_date`. After Clerk sign-in, `AtlasProvider` calls `registerForPushAsync` (in `artifacts/mobile/lib/push.ts`) once per signed-in `userId` — it requests permission, fetches the Expo token, captures the device's UTC offset, and POSTs to `/atlas/push-token` (web and simulators short-circuit). Server-side, `pushScheduler.ts` runs an in-process 60s tick: for each user with a token it computes the user's local time, and if the local hour is in `[7, 10)` and `last_morning_nudge_date` is not today's local YYYY-MM-DD, it picks the active goal from `userStateTable.goals`, builds a momentum-based body (matching the client's momentum copy), sends via `expo-server-sdk`, and stamps `last_morning_nudge_date` (always — even on send failure — so a bad token can't trigger hourly retries). `/atlas/push-test` provides a one-shot self-test endpoint.
+
 ## External Dependencies
 
-- **OpenAI:** Used for AI-driven features like intake form generation, roadmap creation, daily planning, and coaching.
+- **OpenAI:** Used for AI-driven features like intake form generation, roadmap creation, daily planning, and coaching (`gpt-4o` is used for vision turns).
 - **Clerk:** Provides authentication and user management services.
-- **PostgreSQL (via Drizzle ORM):** Database for persisting user data, including `users` (Clerk user ID, email, tier) and `user_state` (app state, goals, active goal ID, account preferences, pending draft).
-- **Expo:** Framework for building the React Native mobile application.
+- **PostgreSQL (via Drizzle ORM):** Database for persisting user data, including `users` (Clerk user ID, email, tier, Expo push token, tz offset, last morning nudge date) and `user_state` (app state, goals, active goal ID, account preferences, pending draft).
+- **Expo:** Framework for building the React Native mobile application. Push notifications use `expo-notifications` + `expo-device` on the client and `expo-server-sdk` on the server.
 - **pnpm:** Package manager for the monorepo.
 - **Express:** Web application framework for the API server.
 - **React Native:** Framework for mobile application development.

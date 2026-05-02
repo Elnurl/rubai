@@ -747,6 +747,40 @@ router.post("/coach", async (req, res) => {
     attachmentImage,
   } = parsed.data;
 
+  // Validate any attached image before we hand bytes to the vision model.
+  // We only accept the formats gpt-4o reliably supports and cap the
+  // decoded size to keep latency + spend bounded.
+  const ALLOWED_IMAGE_MIMES = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+  ]);
+  const MAX_DECODED_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
+  if (attachmentImage?.base64Data || attachmentImage?.mimeType) {
+    if (
+      !attachmentImage.mimeType ||
+      !ALLOWED_IMAGE_MIMES.has(attachmentImage.mimeType)
+    ) {
+      res.status(415).json({
+        error: "Unsupported image type. Use JPEG, PNG, WebP, or GIF.",
+      });
+      return;
+    }
+    if (!attachmentImage.base64Data) {
+      res.status(400).json({ error: "Image attachment is missing data." });
+      return;
+    }
+    // base64 is ~4/3 the size of the decoded payload.
+    const decodedBytes = Math.floor((attachmentImage.base64Data.length * 3) / 4);
+    if (decodedBytes > MAX_DECODED_IMAGE_BYTES) {
+      res.status(413).json({
+        error: "Image is too large. Please attach an image under 5 MB.",
+      });
+      return;
+    }
+  }
+
   // If the user attached an image this turn, build a multimodal user
   // message so the vision model can actually look at it. Otherwise fall
   // back to the plain text path (with an optional acknowledgement note

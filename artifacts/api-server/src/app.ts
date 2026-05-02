@@ -42,7 +42,10 @@ app.use(
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
 app.use(cors({ credentials: true, origin: true }));
-app.use(express.json({ limit: "2mb" }));
+// 8mb is enough for a typical phone photo at quality 0.6 transmitted as
+// base64 in /atlas/coach. The coach handler enforces a stricter per-image
+// cap on the actual decoded bytes.
+app.use(express.json({ limit: "8mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use(
