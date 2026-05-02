@@ -2,6 +2,6 @@
 type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
 export const modules: ModuleMap = {
   "./components/mockups/rubai-ambient-thread/Home.tsx": () => import("../components/mockups/rubai-ambient-thread/Home.tsx"),
-  "./components/mockups/rubai-mission-control/Home.tsx": () => import("../components/mockups/rubai-mission-control/Home.tsx"),
-  "./components/mockups/rubai-card-deck/Home.tsx": () => import("../components/mockups/rubai-card-deck/Home.tsx")
+  "./components/mockups/rubai-card-deck/Home.tsx": () => import("../components/mockups/rubai-card-deck/Home.tsx"),
+  "./components/mockups/rubai-mission-control/Home.tsx": () => import("../components/mockups/rubai-mission-control/Home.tsx")
 };

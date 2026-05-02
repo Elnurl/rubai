@@ -128,6 +128,7 @@ function RootLayoutNav() {
       <Stack.Screen name="intake" />
       <Stack.Screen name="generating" />
       <Stack.Screen name="replace-goal" />
+      <Stack.Screen name="plans" />
       <Stack.Screen name="(tabs)" />
     </Stack>
   );

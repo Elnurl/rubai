@@ -136,7 +136,7 @@ export default function AccountScreen() {
       // signed-out, so we don't need to navigate here.
     };
     if (Platform.OS === "web") {
-      if (typeof window !== "undefined" && window.confirm("Sign out of RubAI?")) {
+      if (typeof window !== "undefined" && window.confirm("Sign out of rubai?")) {
         void doSignOut();
       }
     } else {
@@ -218,15 +218,19 @@ export default function AccountScreen() {
           </Pressable>
         ) : null}
 
-        <View
-          style={[
+        <Pressable
+          onPress={() => router.push("/plans")}
+          style={({ pressed }) => [
             styles.planCard,
             {
               backgroundColor: colors.card,
               borderColor: colors.border,
               borderRadius: colors.radius,
+              opacity: pressed ? 0.9 : 1,
             },
           ]}
+          accessibilityRole="button"
+          accessibilityLabel="Manage your plan"
         >
           <View style={styles.planCardHeader}>
             <View style={[styles.planBadge, { backgroundColor: colors.primary }]}>
@@ -260,7 +264,18 @@ export default function AccountScreen() {
           >
             {tierInfo.tagline}
           </Text>
-        </View>
+          <View style={styles.planManageRow}>
+            <Text
+              style={[
+                styles.planManageText,
+                { color: colors.primary, fontFamily: "Inter_600SemiBold" },
+              ]}
+            >
+              Manage plan
+            </Text>
+            <Feather name="chevron-right" size={16} color={colors.primary} />
+          </View>
+        </Pressable>
 
         <Pressable
           onPress={onSignOut}
@@ -322,7 +337,7 @@ export default function AccountScreen() {
           <>
             <SectionHeader
               eyebrow="INSIGHTS"
-              title="What RubAI has learned"
+              title="What rubai has learned"
               subtitle="Built from your reflections and history."
             />
 
@@ -396,7 +411,7 @@ export default function AccountScreen() {
                   ]}
                 >
                   No insights yet. Long-press a task on Today and add a quick
-                  reflection — RubAI will start building your profile after the
+                  reflection — rubai will start building your profile after the
                   first refresh.
                 </Text>
               )}
@@ -542,7 +557,7 @@ export default function AccountScreen() {
                   { color: colors.foreground, fontFamily: "Inter_400Regular" },
                 ]}
               >
-                Run a quick re-evaluation. RubAI will look at your last two
+                Run a quick re-evaluation. rubai will look at your last two
                 weeks and decide whether to soften, hold, or push the plan.
               </Text>
               <AtlasButton
@@ -877,6 +892,16 @@ const styles = StyleSheet.create({
   planTagline: {
     fontSize: 13.5,
     lineHeight: 19,
+  },
+  planManageRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 2,
+    marginTop: 4,
+  },
+  planManageText: {
+    fontSize: 13,
   },
   signOutBtn: {
     flexDirection: "row",

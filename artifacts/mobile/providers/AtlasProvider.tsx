@@ -274,6 +274,20 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
   // cancel the in-flight async work, and leave the user stuck on the splash.
   const tierRef = useRef<string>(DEFAULT_SUBSCRIPTION.tier);
 
+  // The server's authoritative tier, separate from the displayed tier. This
+  // is what gets persisted to cache and rehydrated on next boot. We keep it
+  // distinct from `tier` so that the local "Plans" preview (see
+  // updateSubscription / localTierOverrideRef below) can flip the displayed
+  // tier WITHOUT poisoning the cached snapshot or surviving a reload.
+  const serverTierRef = useRef<string>(DEFAULT_SUBSCRIPTION.tier);
+
+  // When non-null, the user has explicitly picked a plan from the in-app
+  // Plans screen. This is a UI-only preview — no billing, no server sync.
+  // While it's set, server-driven setTier paths are skipped so a background
+  // sync response can't clobber the user's pick. It is intentionally NOT
+  // persisted, so reloading the app falls back to the server tier.
+  const localTierOverrideRef = useRef<SubscriptionTier | null>(null);
+
   // Keep refs in sync with state on every commit.
   useEffect(() => {
     goalsRef.current = goals;
@@ -301,12 +315,18 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       accountRef.current = pickAccountPrefs(state.accountPrefs);
       pendingDraftRef.current = (state.pendingDraft as IntakeDraft | null) ?? null;
       versionRef.current = state.version;
+      serverTierRef.current = state.tier;
 
       setGoals(nextGoals);
       setActiveGoalId(state.activeGoalId);
       setAccount(accountRef.current);
       setPendingDraftState(pendingDraftRef.current);
-      setTier(state.tier);
+      // If the user has a local plan preview active, keep showing it; the
+      // server's tier is still recorded above and will be the source of truth
+      // on next boot.
+      if (localTierOverrideRef.current === null) {
+        setTier(state.tier);
+      }
     },
     [],
   );
@@ -318,7 +338,8 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       accountPrefs: accountRef.current,
       pendingDraft: pendingDraftRef.current,
       version: versionRef.current,
-      tier: tierRef.current,
+      // Persist the server's authoritative tier, never the local UI override.
+      tier: serverTierRef.current,
     });
   }, []);
 
@@ -347,7 +368,11 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       const res = await putMeState(body);
       if (!stillOwner()) return;
       versionRef.current = res.version;
-      setTier(res.tier);
+      serverTierRef.current = res.tier;
+      // Background sync: don't clobber an active local Plans preview.
+      if (localTierOverrideRef.current === null) {
+        setTier(res.tier);
+      }
       setSyncStatus("idle");
       setSyncMessage(null);
       await writeCacheSnapshot(owner);
@@ -427,6 +452,8 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       accountRef.current = DEFAULT_ACCOUNT;
       pendingDraftRef.current = null;
       versionRef.current = 0;
+      serverTierRef.current = DEFAULT_SUBSCRIPTION.tier;
+      localTierOverrideRef.current = null;
       setGoals([]);
       setActiveGoalId(null);
       setAccount(DEFAULT_ACCOUNT);
@@ -497,6 +524,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
         setActiveGoalId(cached.activeGoalId);
         setAccount(accountRef.current);
         setPendingDraftState(pendingDraftRef.current);
+        serverTierRef.current = cached.tier;
         setTier(cached.tier);
       }
 
@@ -550,6 +578,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
             setActiveGoalId(activeIdRef.current);
             setAccount(DEFAULT_ACCOUNT);
             setPendingDraftState(null);
+            serverTierRef.current = server.tier;
             setTier(server.tier);
             // Defer setLoaded(true) until the migration PUT resolves so the
             // user can't mutate seeded data before it's been uploaded.
@@ -565,6 +594,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
               });
               if (!stillBooting()) return;
               versionRef.current = uploaded.version;
+              serverTierRef.current = uploaded.tier;
               setTier(uploaded.tier);
               await setMigratedFlag(userId);
               if (!stillBooting()) return;
@@ -990,15 +1020,15 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     [schedulePush],
   );
 
-  // Tier is now controlled by the server; local "upgrade" is a no-op so any
-  // legacy callers don't crash. Surface a dev-only warning once.
-  const updateSubscription = useCallback(async (_tier: SubscriptionTier) => {
-    if (__DEV__) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[atlas] updateSubscription is a no-op — tier is server-controlled.",
-      );
-    }
+  // Local-only tier preview for the in-app Plans screen. There is no real
+  // billing yet — picking a plan flips the *displayed* tier (and goalLimit)
+  // for this session via localTierOverrideRef. The server's authoritative
+  // tier (serverTierRef) is left untouched, never sent to the server, and
+  // never written to cache, so reloading the app drops the preview and
+  // shows the real server tier again.
+  const updateSubscription = useCallback(async (newTier: SubscriptionTier) => {
+    localTierOverrideRef.current = newTier;
+    setTier(newTier);
   }, []);
 
   const updateAccount = useCallback(
