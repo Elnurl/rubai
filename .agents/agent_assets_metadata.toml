@@ -1,8 +1,13 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "bglmTZtOSigbPdyB0QjGP"
 uri = "file://artifacts/mobile/assets/images/icon.png"
 type = "image"
 title = "rubai app icon"
+
+[[outputs]]
+id = "1OZJ-pAK6cNEuLkOeGyNm"
+uri = "file://exports/rubai-system-specification.pdf"
+type = "pdf"
+title = "rubai — Full System Specification (PDF)"
