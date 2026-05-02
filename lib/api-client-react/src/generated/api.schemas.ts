@@ -136,6 +136,19 @@ export interface IntakeQuestion {
   required: boolean;
 }
 
+export interface GenerateTitleRequest {
+  goalType: GoalType;
+  /** The raw, free-form goal text the user typed. */
+  userInput: string;
+  /** Optional extra context the AI should use (e.g. first intake answer summary). */
+  intent?: string;
+}
+
+export interface GenerateTitleResponse {
+  /** A short (2-5 words) brand-neutral title for the goal. */
+  title: string;
+}
+
 export interface IntakeQuestionsRequest {
   goalType: GoalType;
   /** User-supplied free-form goal description. */
@@ -438,6 +451,16 @@ export interface ReflectionEntry {
   reflectedAt: string;
 }
 
+/**
+ * Inline image bytes shipped with a single coach turn. Not persisted server-side.
+ */
+export interface CoachAttachmentImage {
+  /** Raw base64-encoded image bytes with no data URL prefix. */
+  base64Data: string;
+  /** Image MIME type, e.g. image/jpeg or image/png. */
+  mimeType: string;
+}
+
 export interface CoachRequest {
   profile: UserProfile;
   roadmap: Roadmap;
@@ -461,6 +484,28 @@ export interface CoachRequest {
   modelChoice?: CoachRequestModelChoice;
   /** Optional note about an attachment the user added this turn (e.g. an image filename). The reply should acknowledge it. */
   attachmentNote?: string;
+  /** Optional inline image the coach should look at this turn. Triggers a vision-capable model. */
+  attachmentImage?: CoachAttachmentImage | null;
+}
+
+/**
+ * Register the device's Expo push token so the server can send daily nudges.
+ */
+export interface RegisterPushTokenBody {
+  /** An ExponentPushToken[xxx] string returned by expo-notifications. */
+  token: string;
+  /** Minutes east of UTC at the time of registration. Optional. */
+  tzOffsetMinutes?: number;
+}
+
+export interface RegisterPushTokenResponse {
+  ok: boolean;
+}
+
+export interface SendTestPushResponse {
+  ok: boolean;
+  /** True when the Expo push service accepted the message. */
+  delivered: boolean;
 }
 
 export interface TranscribeRequest {
@@ -474,12 +519,38 @@ export interface TranscribeResponse {
   text: string;
 }
 
+export type ProposedCoachActionKind =
+  (typeof ProposedCoachActionKind)[keyof typeof ProposedCoachActionKind];
+
+export const ProposedCoachActionKind = {
+  addTaskToday: "addTaskToday",
+  removeTaskToday: "removeTaskToday",
+  renameGoal: "renameGoal",
+  lightenToday: "lightenToday",
+} as const;
+
+/**
+ * A concrete plan-modifying action the AI proposes for user confirmation.
+ */
+export interface ProposedCoachAction {
+  kind: ProposedCoachActionKind;
+  label: string;
+  rationale: string;
+  task?: DailyTask | null;
+  taskId?: string | null;
+  taskTitle?: string | null;
+  newTitle?: string | null;
+  removeTaskIds?: string[];
+}
+
 export interface CoachResponse {
   reply: string;
   /** 0-3 short tappable follow-up prompts the user can send back. Each must be <= 50 chars and reference real context. */
   suggestedReplies: string[];
   /** Optional CTA for a concrete app action. Use kind=none (or null) when no action fits. */
   actionSuggestion: CoachActionSuggestion | null;
+  /** Optional plan-modifying action requiring explicit user confirmation in the UI. */
+  proposedAction: ProposedCoachAction | null;
   /** Optional update to long-term coach memory. Only set when the user revealed something durable this turn. */
   memoryUpdate: CoachMemoryUpdate | null;
 }

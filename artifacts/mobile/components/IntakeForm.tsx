@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -88,16 +88,26 @@ export function IntakeForm({ questions, initialAnswers, onChange }: Props) {
   const colors = useColors();
   const [answers, setAnswers] = useState<AnswerMap>(() => toMap(initialAnswers));
 
-  const update = useCallback(
-    (id: string, value: string) => {
-      setAnswers((prev) => {
-        const next = { ...prev, [id]: value };
-        onChange?.(toAnswers(next));
-        return next;
-      });
-    },
-    [onChange],
-  );
+  // Defer parent propagation to a post-render effect so we never call the
+  // parent's setter (which dispatches into AtlasProvider) inside our own
+  // setAnswers updater function. That was the source of the "Cannot update a
+  // component (`AtlasProvider`) while rendering a different component
+  // (`IntakeForm`)" warning.
+  const isFirstRunRef = useRef(true);
+  useEffect(() => {
+    if (isFirstRunRef.current) {
+      isFirstRunRef.current = false;
+      return;
+    }
+    onChange?.(toAnswers(answers));
+    // We intentionally do not depend on `onChange` — its identity changes on
+    // every parent render, which would over-fire this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answers]);
+
+  const update = useCallback((id: string, value: string) => {
+    setAnswers((prev) => ({ ...prev, [id]: value }));
+  }, []);
 
   return (
     <View style={styles.list}>

@@ -26,6 +26,20 @@ export type RoadmapEvolutionEntry = {
   phaseChanges: PhaseChange[];
 };
 
+export type AwardId =
+  | "streak_3"
+  | "streak_7"
+  | "streak_14"
+  | "streak_30"
+  | "full_day"
+  | "week_perfect";
+
+export type EarnedAward = {
+  id: AwardId;
+  earnedAt: string;
+  earnedOn: string;
+};
+
 export type Goal = {
   id: string;
   createdAt: string;
@@ -40,6 +54,7 @@ export type Goal = {
   roadmapEvolutions: RoadmapEvolutionEntry[];
   lastEvolvedAt: string | null;
   coachMemory: CoachMemory | null;
+  earnedAwards: EarnedAward[];
 };
 
 export type SubscriptionTier = "free" | "pro" | "premium";

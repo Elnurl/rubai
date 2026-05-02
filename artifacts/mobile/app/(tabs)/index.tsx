@@ -16,12 +16,15 @@ import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { AtlasButton } from "@/components/AtlasButton";
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { EmptyState } from "@/components/EmptyState";
+import { MomentumCard } from "@/components/MomentumCard";
 import { ReflectionSheet } from "@/components/ReflectionSheet";
 import { SectionHeader } from "@/components/SectionHeader";
 import { TaskCard } from "@/components/TaskCard";
+import { TaskDetailSheet } from "@/components/TaskDetailSheet";
 import { profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { useEvolveRoadmap } from "@/hooks/useEvolveRoadmap";
+import { computeMomentum } from "@/lib/momentum";
 import { todayISO } from "@/lib/storage";
 import { useAtlas } from "@/providers/AtlasProvider";
 import {
@@ -66,6 +69,7 @@ export default function TodayScreen() {
     task: DailyTask;
     completed: boolean;
   } | null>(null);
+  const [detailTarget, setDetailTarget] = useState<DailyTask | null>(null);
 
   const planIsForToday = activeDailyPlan && activeDailyPlan.plan.date === today;
 
@@ -140,6 +144,7 @@ export default function TodayScreen() {
   const totalCount = activeDailyPlan?.plan.tasks.length ?? 0;
   const progressPct = totalCount > 0 ? completedCount / totalCount : 0;
   const goalLabel = activeProfile ? profileGoalLabel(activeProfile) : "";
+  const momentum = useMemo(() => computeMomentum(activeBehavioral), [activeBehavioral]);
 
   const todaysReflectionMap = useMemo(() => {
     const map = new Map<string, ReflectionEntry>();
@@ -295,6 +300,8 @@ export default function TodayScreen() {
           </Animated.View>
         )}
 
+        <MomentumCard state={momentum} />
+
         {totalCount > 0 && (
           <View style={styles.progress}>
             <View
@@ -344,6 +351,7 @@ export default function TodayScreen() {
                   completed={isCompleted}
                   index={i}
                   hasReflection={todaysReflectionMap.has(task.id)}
+                  onCardPress={() => setDetailTarget(task)}
                   onReflect={() =>
                     setReflectTarget({ task, completed: isCompleted })
                   }
@@ -397,6 +405,36 @@ export default function TodayScreen() {
           onSubmit={handleSubmitReflection}
         />
       )}
+
+      <TaskDetailSheet
+        visible={detailTarget !== null}
+        task={detailTarget}
+        completed={detailTarget ? todaysCompletions.get(detailTarget.id) === true : false}
+        hasReflection={detailTarget ? todaysReflectionMap.has(detailTarget.id) : false}
+        onClose={() => setDetailTarget(null)}
+        onToggle={() => {
+          if (!detailTarget) return;
+          const isCompleted = todaysCompletions.get(detailTarget.id) === true;
+          recordActiveTask({
+            taskId: detailTarget.id,
+            taskTitle: detailTarget.title,
+            date: today,
+            completed: !isCompleted,
+          });
+          setDetailTarget(null);
+        }}
+        onReflect={() => {
+          if (!detailTarget) return;
+          const isCompleted = todaysCompletions.get(detailTarget.id) === true;
+          const target = detailTarget;
+          setDetailTarget(null);
+          // Defer the reflect sheet open by one tick so the detail sheet
+          // close animation doesn't fight with the reflect sheet open.
+          setTimeout(() => {
+            setReflectTarget({ task: target, completed: isCompleted });
+          }, 150);
+        }}
+      />
     </View>
   );
 }

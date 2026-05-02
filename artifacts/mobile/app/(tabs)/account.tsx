@@ -19,6 +19,7 @@ import { AtlasButton } from "@/components/AtlasButton";
 import { SectionHeader } from "@/components/SectionHeader";
 import { profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
+import { AWARD_DEFS } from "@/lib/awards";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { TIER_INFO, type SubscriptionTier } from "@/types/atlas";
 import {
@@ -68,6 +69,7 @@ export default function AccountScreen() {
     activeBehavioralProfile,
     activeReflections,
     activeTaskHistory,
+    activeEarnedAwards,
     syncStatus,
     syncMessage,
     setActiveBehavioralProfile,
@@ -523,6 +525,100 @@ export default function AccountScreen() {
                   ))}
               </View>
             )}
+
+            <SectionHeader
+              eyebrow="AWARDS"
+              title="Earned along the way"
+              subtitle={
+                activeEarnedAwards.length > 0
+                  ? `${activeEarnedAwards.length} of ${AWARD_DEFS.length} unlocked.`
+                  : "Complete tasks to unlock awards."
+              }
+            />
+
+            <View
+              style={[
+                styles.awardsCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  borderRadius: colors.radius,
+                },
+              ]}
+            >
+              {AWARD_DEFS.map((def, i) => {
+                const earned = activeEarnedAwards.find((a) => a.id === def.id);
+                const isLast = i === AWARD_DEFS.length - 1;
+                return (
+                  <View
+                    key={def.id}
+                    style={[
+                      styles.awardRow,
+                      !isLast
+                        ? { borderBottomColor: colors.border, borderBottomWidth: 1 }
+                        : null,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.awardIcon,
+                        {
+                          backgroundColor: earned ? colors.primary : colors.muted,
+                          opacity: earned ? 1 : 0.6,
+                        },
+                      ]}
+                    >
+                      <Feather
+                        name={def.icon}
+                        size={14}
+                        color={
+                          earned ? colors.primaryForeground : colors.mutedForeground
+                        }
+                      />
+                    </View>
+                    <View style={styles.awardText}>
+                      <Text
+                        style={[
+                          styles.awardTitle,
+                          {
+                            color: earned ? colors.foreground : colors.mutedForeground,
+                            fontFamily: "Inter_600SemiBold",
+                          },
+                        ]}
+                      >
+                        {def.title}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.awardSubtitle,
+                          {
+                            color: colors.mutedForeground,
+                            fontFamily: "Inter_400Regular",
+                          },
+                        ]}
+                      >
+                        {earned
+                          ? `Unlocked on ${earned.earnedOn}.`
+                          : def.subtitle}
+                      </Text>
+                    </View>
+                    {earned ? (
+                      <Feather
+                        name="check-circle"
+                        size={16}
+                        color={colors.primary}
+                      />
+                    ) : (
+                      <Feather
+                        name="lock"
+                        size={14}
+                        color={colors.mutedForeground}
+                      />
+                    )}
+                  </View>
+                );
+              })}
+            </View>
 
             <SectionHeader
               eyebrow="ACTIVE GOAL"
@@ -1019,6 +1115,36 @@ const styles = StyleSheet.create({
     padding: 18,
     borderWidth: 1,
     gap: 16,
+  },
+  awardsCard: {
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  awardRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  awardIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  awardText: {
+    flex: 1,
+    gap: 2,
+  },
+  awardTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  awardSubtitle: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   insightsSummary: {
     fontSize: 14,

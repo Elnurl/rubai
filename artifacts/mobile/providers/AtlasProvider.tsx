@@ -24,7 +24,13 @@ import type {
   Roadmap,
   UserProfile,
 } from "@workspace/api-client-react";
-import { ApiError, getMeState, putMeState } from "@workspace/api-client-react";
+import {
+  ApiError,
+  atlasRegisterPushToken,
+  getMeState,
+  putMeState,
+} from "@workspace/api-client-react";
+import { registerForPushAsync } from "@/lib/push";
 import {
   TaskHistoryEntry,
   clearAllAtlas,
@@ -42,6 +48,7 @@ import {
   DEFAULT_ACCOUNT,
   DEFAULT_SUBSCRIPTION,
   type AccountPrefs,
+  type EarnedAward,
   type Goal,
   type IntakeDraft,
   type RoadmapEvolutionEntry,
@@ -50,6 +57,8 @@ import {
   type SubscriptionTier,
   tierGoalLimit,
 } from "@/types/atlas";
+import { evaluateNewAwards } from "@/lib/awards";
+import { AwardToast } from "@/components/AwardToast";
 
 const EMPTY_BEHAVIORAL: BehavioralSnapshot = {
   completedTaskTitles: [],
@@ -87,6 +96,9 @@ type AtlasContextValue = AtlasState & {
   activeRoadmapEvolutions: RoadmapEvolutionEntry[];
   activeLastEvolvedAt: string | null;
   activeCoachMemory: CoachMemory | null;
+  activeEarnedAwards: EarnedAward[];
+  pendingAwardToast: EarnedAward | null;
+  dismissAwardToast: () => void;
   activeBehavioral: BehavioralSnapshot;
   activeCurrentWeek: number;
   activeCurrentPhase: CurrentPhaseSnapshot | null;
@@ -203,6 +215,7 @@ function ensureGoalShape(goal: Goal): Goal {
     roadmapEvolutions: goal.roadmapEvolutions ?? [],
     lastEvolvedAt: goal.lastEvolvedAt ?? null,
     coachMemory: goal.coachMemory ?? null,
+    earnedAwards: goal.earnedAwards ?? [],
   };
 }
 
@@ -242,6 +255,20 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [activeGoalId, setActiveGoalId] = useState<string | null>(null);
+  const [pendingAwardToast, setPendingAwardToast] = useState<EarnedAward | null>(null);
+  const pendingAwardToastRef = useRef<EarnedAward | null>(null);
+  const awardQueueRef = useRef<EarnedAward[]>([]);
+
+  const dismissAwardToast = useCallback(() => {
+    pendingAwardToastRef.current = null;
+    const next = awardQueueRef.current.shift();
+    if (next) {
+      pendingAwardToastRef.current = next;
+      setPendingAwardToast(next);
+    } else {
+      setPendingAwardToast(null);
+    }
+  }, []);
   const [tier, setTier] = useState<string>(DEFAULT_SUBSCRIPTION.tier);
   const [account, setAccount] = useState<AccountPrefs>(DEFAULT_ACCOUNT);
   const [pendingDraft, setPendingDraftState] = useState<IntakeDraft | null>(null);
@@ -679,6 +706,40 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     };
   }, [clerkLoaded, isSignedIn, userId, adoptServerState, writeCacheSnapshot]);
 
+  // Register the device's Expo push token once per signed-in session.
+  // Bootstrapped after Clerk is ready so requireAuth sees the token. Web
+  // and simulators short-circuit inside registerForPushAsync.
+  const pushBootstrappedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!clerkLoaded || !isSignedIn || !userId) {
+      pushBootstrappedFor.current = null;
+      return;
+    }
+    if (pushBootstrappedFor.current === userId) return;
+    pushBootstrappedFor.current = userId;
+    let cancelled = false;
+    (async () => {
+      try {
+        const reg = await registerForPushAsync();
+        if (cancelled || !reg) return;
+        await atlasRegisterPushToken({
+          token: reg.token,
+          tzOffsetMinutes: reg.tzOffsetMinutes,
+        });
+        if (__DEV__) console.log("[atlas] push token registered");
+      } catch (err) {
+        if (__DEV__) console.warn("[atlas] push registration failed", err);
+        // Allow a retry next sign-in cycle.
+        if (pushBootstrappedFor.current === userId) {
+          pushBootstrappedFor.current = null;
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [clerkLoaded, isSignedIn, userId]);
+
   // ----- Local mutators (each schedules a push) ------------------------
 
   const persistGoals = useCallback(
@@ -773,6 +834,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
         roadmapEvolutions: [],
         lastEvolvedAt: null,
         coachMemory: null,
+        earnedAwards: [],
       };
       const next = [...currentGoals, goal];
       persistGoals(next);
@@ -846,12 +908,44 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
 
   const recordActiveTask = useCallback(
     async (entry: TaskHistoryEntry) => {
+      let toQueue: EarnedAward[] = [];
       await updateActiveGoal((g) => {
         const filtered = g.taskHistory.filter(
           (e) => !(e.taskId === entry.taskId && e.date === entry.date),
         );
-        return { ...g, taskHistory: [...filtered, entry].slice(-200) };
+        const next: Goal = {
+          ...g,
+          taskHistory: [...filtered, entry].slice(-200),
+        };
+        // Evaluate after the new history is in place so awards reflect this
+        // toggle. Cap stored awards at 50 to keep the snapshot bounded.
+        const fresh = evaluateNewAwards(next, entry.date);
+        if (fresh.length > 0) {
+          toQueue = fresh;
+          return {
+            ...next,
+            earnedAwards: [...next.earnedAwards, ...fresh].slice(-50),
+          };
+        }
+        return next;
       });
+      if (toQueue.length > 0) {
+        // Surface the most "important" award if multiple unlocked at once;
+        // ordering in AWARD_DEFS encodes loose priority (streaks bigger first
+        // for ties). For simplicity we just queue them sequentially.
+        for (const award of toQueue) {
+          awardQueueRef.current.push(award);
+        }
+        // Trigger the toast pump — `setPendingAwardToast` only assigns when
+        // nothing is currently showing; the toast's onClose drains the queue.
+        if (!pendingAwardToastRef.current) {
+          const next = awardQueueRef.current.shift();
+          if (next) {
+            pendingAwardToastRef.current = next;
+            setPendingAwardToast(next);
+          }
+        }
+      }
     },
     [updateActiveGoal],
   );
@@ -1099,6 +1193,9 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     activeRoadmapEvolutions: activeGoal?.roadmapEvolutions ?? [],
     activeLastEvolvedAt: activeGoal?.lastEvolvedAt ?? null,
     activeCoachMemory: activeGoal?.coachMemory ?? null,
+    activeEarnedAwards: activeGoal?.earnedAwards ?? [],
+    pendingAwardToast,
+    dismissAwardToast,
     activeBehavioral,
     activeCurrentWeek,
     activeCurrentPhase,
@@ -1131,7 +1228,12 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     dismissSyncMessage,
   };
 
-  return <AtlasContext.Provider value={value}>{children}</AtlasContext.Provider>;
+  return (
+    <AtlasContext.Provider value={value}>
+      {children}
+      <AwardToast />
+    </AtlasContext.Provider>
+  );
 }
 
 export function useAtlas() {

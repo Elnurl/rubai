@@ -12,6 +12,7 @@ import { tokenCache } from "@clerk/expo/token-cache";
 import Constants from "expo-constants";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import React, { useEffect } from "react";
 import { Platform, useColorScheme } from "react-native";
@@ -215,6 +216,12 @@ export default function RootLayout() {
     if (fontsLoaded || fontError) {
       SplashScreen.hideAsync();
     }
+    if (fontError) {
+      // Surface font / icon-font loading failures so we can diagnose the
+      // "tofu boxes everywhere" symptom in the field.
+      // eslint-disable-next-line no-console
+      console.warn("[rubai] Font loading failed:", fontError);
+    }
   }, [fontsLoaded, fontError]);
 
   useEffect(() => {
@@ -227,6 +234,9 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
+        {/* Cream surface in light, charcoal in dark — `style="auto"` flips the
+            status bar text color to whichever stays legible. */}
+        <StatusBar style="auto" translucent />
         <QueryClientProvider client={queryClient}>
           <ClerkProvider
             publishableKey={CLERK_PUBLISHABLE_KEY ?? ""}

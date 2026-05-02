@@ -532,6 +532,35 @@ export const AtlasGenerateDailyPlanResponse = zod.object({
 });
 
 /**
+ * @summary Refine a raw user goal description into a short brand-neutral title
+ */
+export const AtlasGenerateTitleBody = zod.object({
+  goalType: zod.enum([
+    "ielts",
+    "car",
+    "programming",
+    "fitness",
+    "finance",
+    "custom",
+  ]),
+  userInput: zod
+    .string()
+    .describe("The raw, free-form goal text the user typed."),
+  intent: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional extra context the AI should use (e.g. first intake answer summary).",
+    ),
+});
+
+export const AtlasGenerateTitleResponse = zod.object({
+  title: zod
+    .string()
+    .describe("A short (2-5 words) brand-neutral title for the goal."),
+});
+
+/**
  * @summary Conversational coaching reply with full execution context
  */
 export const AtlasCoachBody = zod.object({
@@ -804,6 +833,28 @@ export const AtlasCoachBody = zod.object({
     .describe(
       "Optional note about an attachment the user added this turn (e.g. an image filename). The reply should acknowledge it.",
     ),
+  attachmentImage: zod
+    .union([
+      zod
+        .object({
+          base64Data: zod
+            .string()
+            .describe(
+              "Raw base64-encoded image bytes with no data URL prefix.",
+            ),
+          mimeType: zod
+            .string()
+            .describe("Image MIME type, e.g. image\/jpeg or image\/png."),
+        })
+        .describe(
+          "Inline image bytes shipped with a single coach turn. Not persisted server-side.",
+        ),
+      zod.null(),
+    ])
+    .optional()
+    .describe(
+      "Optional inline image the coach should look at this turn. Triggers a vision-capable model.",
+    ),
 });
 
 export const AtlasCoachResponse = zod.object({
@@ -839,6 +890,44 @@ export const AtlasCoachResponse = zod.object({
     ])
     .describe(
       "Optional CTA for a concrete app action. Use kind=none (or null) when no action fits.",
+    ),
+  proposedAction: zod
+    .union([
+      zod
+        .object({
+          kind: zod.enum([
+            "addTaskToday",
+            "removeTaskToday",
+            "renameGoal",
+            "lightenToday",
+          ]),
+          label: zod.string(),
+          rationale: zod.string(),
+          task: zod
+            .union([
+              zod.object({
+                id: zod.string(),
+                title: zod.string(),
+                description: zod.string(),
+                durationMinutes: zod.number(),
+                category: zod.string(),
+                priority: zod.enum(["critical", "high", "normal"]),
+              }),
+              zod.null(),
+            ])
+            .optional(),
+          taskId: zod.union([zod.string(), zod.null()]).optional(),
+          taskTitle: zod.union([zod.string(), zod.null()]).optional(),
+          newTitle: zod.union([zod.string(), zod.null()]).optional(),
+          removeTaskIds: zod.array(zod.string()).optional(),
+        })
+        .describe(
+          "A concrete plan-modifying action the AI proposes for user confirmation.",
+        ),
+      zod.null(),
+    ])
+    .describe(
+      "Optional plan-modifying action requiring explicit user confirmation in the UI.",
     ),
   memoryUpdate: zod
     .union([
@@ -1359,4 +1448,37 @@ export const AtlasEvolveRoadmapResponse = zod.object({
       "Brief explanation of the reasoning the AI used (under 80 words).",
     ),
   evolvedAt: zod.string(),
+});
+
+/**
+ * @summary Register or update the device's Expo push token for the signed-in user
+ */
+export const AtlasRegisterPushTokenBody = zod
+  .object({
+    token: zod
+      .string()
+      .describe(
+        "An ExponentPushToken[xxx] string returned by expo-notifications.",
+      ),
+    tzOffsetMinutes: zod
+      .number()
+      .optional()
+      .describe("Minutes east of UTC at the time of registration. Optional."),
+  })
+  .describe(
+    "Register the device's Expo push token so the server can send daily nudges.",
+  );
+
+export const AtlasRegisterPushTokenResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * @summary Send a test push notification to the signed-in user's registered device
+ */
+export const AtlasSendTestPushResponse = zod.object({
+  ok: zod.boolean(),
+  delivered: zod
+    .boolean()
+    .describe("True when the Expo push service accepted the message."),
 });

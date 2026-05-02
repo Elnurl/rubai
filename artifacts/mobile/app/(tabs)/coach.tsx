@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { ChatBubble } from "@/components/ChatBubble";
 import { EmptyState } from "@/components/EmptyState";
+import { ProposedActionCard } from "@/components/ProposedActionCard";
 import { SectionHeader } from "@/components/SectionHeader";
 import { useColors } from "@/hooks/useColors";
 import { useEvolveRoadmap } from "@/hooks/useEvolveRoadmap";
@@ -30,6 +31,7 @@ import {
   useAtlasCoach,
   type ChatMessage,
   type CoachActionSuggestion,
+  type ProposedCoachAction,
 } from "@workspace/api-client-react";
 
 const COLD_START_SUGGESTIONS = [
@@ -45,6 +47,12 @@ type PendingAttachment = {
   filename: string;
   /** A short label we show in the input (e.g. "photo · 1.2MB"). */
   label: string;
+  /** Base64-encoded image bytes (no data URL prefix). Set when the user
+   *  picks an image so the server can run vision on this turn. */
+  base64?: string;
+  /** MIME type of the picked image, e.g. "image/jpeg" or "image/png".
+   *  Combined with `base64` to build a data URL for the vision model. */
+  mimeType?: string;
 };
 
 export default function CoachScreen() {
@@ -71,6 +79,8 @@ export default function CoachScreen() {
     appendActiveCoachMessage,
     setActiveCoachMemory,
     applyCoachMemoryUpdate,
+    setActiveDailyPlan,
+    updateActiveGoal,
   } = useAtlas();
 
   const coach = useAtlasCoach();
@@ -80,6 +90,9 @@ export default function CoachScreen() {
   const [draft, setDraft] = useState("");
   const [lastSuggestedReplies, setLastSuggestedReplies] = useState<string[]>([]);
   const [lastAction, setLastAction] = useState<CoachActionSuggestion | null>(null);
+  const [lastProposedAction, setLastProposedAction] =
+    useState<ProposedCoachAction | null>(null);
+  const [applyingAction, setApplyingAction] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [modelChoice, setModelChoice] = useState<ModelChoice>("smart");
   const [autoSpeak, setAutoSpeak] = useState(false);
@@ -141,6 +154,7 @@ export default function CoachScreen() {
       // Clear ephemeral per-turn UI as soon as the next turn starts.
       setLastSuggestedReplies([]);
       setLastAction(null);
+      setLastProposedAction(null);
 
       const visibleContent = attachment
         ? `${message}\n📎 ${attachment.label}`
@@ -167,6 +181,14 @@ export default function CoachScreen() {
             ...(activeCurrentPhase ? { currentPhase: activeCurrentPhase } : {}),
             ...(activeCoachMemory ? { coachMemory: activeCoachMemory } : {}),
             ...(attachment ? { attachmentNote: attachment.filename } : {}),
+            ...(attachment?.base64 && attachment.mimeType
+              ? {
+                  attachmentImage: {
+                    base64Data: attachment.base64,
+                    mimeType: attachment.mimeType,
+                  },
+                }
+              : {}),
           },
         });
         const assistantMsg: ChatMessage = { role: "assistant", content: res.reply };
@@ -174,6 +196,7 @@ export default function CoachScreen() {
         setLastSuggestedReplies(res.suggestedReplies ?? []);
         const action = res.actionSuggestion;
         setLastAction(action && action.kind !== "none" ? action : null);
+        setLastProposedAction(res.proposedAction ?? null);
         if (res.memoryUpdate) {
           await applyCoachMemoryUpdate({
             summary: res.memoryUpdate.summary,
@@ -235,6 +258,77 @@ export default function CoachScreen() {
     }
   };
 
+  // Confirm = apply the proposed plan/goal mutation locally, then drop a tiny
+  // assistant follow-up so the chat reflects what just happened.
+  // Cancel = silently dismiss the card.
+  const onConfirmProposed = useCallback(async () => {
+    const action = lastProposedAction;
+    if (!action || applyingAction) return;
+    setApplyingAction(true);
+    try {
+      let confirmation = "Done.";
+      if (action.kind === "addTaskToday" && action.task) {
+        const currentPlan = activeDailyPlan?.plan;
+        if (currentPlan) {
+          await setActiveDailyPlan({
+            ...currentPlan,
+            tasks: [...currentPlan.tasks, action.task],
+          });
+          confirmation = `Added "${action.task.title}" to today.`;
+        }
+      } else if (action.kind === "removeTaskToday" && action.taskId) {
+        const currentPlan = activeDailyPlan?.plan;
+        if (currentPlan) {
+          const removed = currentPlan.tasks.find((t) => t.id === action.taskId);
+          await setActiveDailyPlan({
+            ...currentPlan,
+            tasks: currentPlan.tasks.filter((t) => t.id !== action.taskId),
+          });
+          confirmation = removed
+            ? `Removed "${removed.title}" from today.`
+            : "Removed that task.";
+        }
+      } else if (action.kind === "renameGoal" && action.newTitle) {
+        const newTitle = action.newTitle;
+        await updateActiveGoal((g) => ({
+          ...g,
+          profile: { ...g.profile, customGoalTitle: newTitle },
+        }));
+        confirmation = `Renamed your goal to "${newTitle}".`;
+      } else if (action.kind === "lightenToday") {
+        const ids = action.removeTaskIds ?? [];
+        const currentPlan = activeDailyPlan?.plan;
+        if (ids.length > 0 && currentPlan) {
+          const drop = new Set(ids);
+          await setActiveDailyPlan({
+            ...currentPlan,
+            tasks: currentPlan.tasks.filter((t) => !drop.has(t.id)),
+          });
+          confirmation = `Lightened today by ${ids.length} task${
+            ids.length === 1 ? "" : "s"
+          }.`;
+        }
+      }
+      setLastProposedAction(null);
+      await appendActiveCoachMessage({ role: "assistant", content: confirmation });
+    } catch {
+      // Soft-fail: leave the card up so the user can retry.
+    } finally {
+      setApplyingAction(false);
+    }
+  }, [
+    lastProposedAction,
+    applyingAction,
+    activeDailyPlan,
+    setActiveDailyPlan,
+    updateActiveGoal,
+    appendActiveCoachMessage,
+  ]);
+
+  const onCancelProposed = useCallback(() => {
+    setLastProposedAction(null);
+  }, []);
+
   const onForgetMemory = async () => {
     await setActiveCoachMemory(null);
     setMemoryOpen(false);
@@ -280,16 +374,30 @@ export default function CoachScreen() {
         return;
       }
       const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.7,
+        // SDK 54+: pass the array form. The legacy MediaTypeOptions enum
+        // is deprecated and prints a warning at runtime.
+        mediaTypes: ["images"],
+        quality: 0.6,
         allowsMultipleSelection: false,
+        // Request base64 so we can ship the bytes straight to the coach
+        // endpoint for vision without setting up object storage.
+        base64: true,
       });
       if (res.canceled || !res.assets?.[0]) return;
       const asset = res.assets[0];
       const filename = asset.fileName || "image";
       const sizeKb = asset.fileSize ? Math.round(asset.fileSize / 1024) : null;
       const label = sizeKb ? `${filename} · ${formatSize(sizeKb)}` : filename;
-      setPendingAttachment({ filename, label });
+      // Heuristic mime type: ImagePicker's mimeType field is reliable on
+      // iOS/Android; fall back to JPEG since that's what the picker emits
+      // by default after compression.
+      const mimeType = asset.mimeType || "image/jpeg";
+      setPendingAttachment({
+        filename,
+        label,
+        base64: asset.base64 ?? undefined,
+        mimeType,
+      });
     } catch {
       // ignore — picker errors are usually permission cancellations
     }
@@ -316,6 +424,14 @@ export default function CoachScreen() {
     }
     return (
       <View style={styles.footerStack}>
+        {lastProposedAction ? (
+          <ProposedActionCard
+            action={lastProposedAction}
+            pending={applyingAction}
+            onConfirm={onConfirmProposed}
+            onCancel={onCancelProposed}
+          />
+        ) : null}
         {lastAction ? (
           <Pressable
             onPress={onActionPress}
@@ -382,7 +498,15 @@ export default function CoachScreen() {
     );
     // onActionPress / send change identity every render but are safe to omit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coach.isPending, lastAction, lastSuggestedReplies, isEvolving, colors]);
+  }, [
+    coach.isPending,
+    lastAction,
+    lastProposedAction,
+    applyingAction,
+    lastSuggestedReplies,
+    isEvolving,
+    colors,
+  ]);
 
   if (!activeProfile || !activeRoadmap) {
     return (

@@ -8,6 +8,7 @@
 import type { BehavioralProfile } from "./behavioralProfile";
 import type { BehavioralSnapshot } from "./behavioralSnapshot";
 import type { ChatMessage } from "./chatMessage";
+import type { CoachAttachmentImage } from "./coachAttachmentImage";
 import type { CoachMemory } from "./coachMemory";
 import type { CoachRequestModelChoice } from "./coachRequestModelChoice";
 import type { CurrentPhaseSnapshot } from "./currentPhaseSnapshot";
@@ -40,4 +41,6 @@ export interface CoachRequest {
   modelChoice?: CoachRequestModelChoice;
   /** Optional note about an attachment the user added this turn (e.g. an image filename). The reply should acknowledge it. */
   attachmentNote?: string;
+  /** Optional inline image the coach should look at this turn. Triggers a vision-capable model. */
+  attachmentImage?: CoachAttachmentImage | null;
 }

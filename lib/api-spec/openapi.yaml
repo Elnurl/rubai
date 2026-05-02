@@ -191,6 +191,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/DailyPlan"
 
+  /atlas/generate-title:
+    post:
+      operationId: atlasGenerateTitle
+      tags: [atlas]
+      summary: Refine a raw user goal description into a short brand-neutral title
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateTitleRequest"
+      responses:
+        "200":
+          description: AI-refined goal title
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateTitleResponse"
+
   /atlas/coach:
     post:
       operationId: atlasCoach
@@ -285,6 +304,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RoadmapEvolutionResponse"
+
+  /atlas/push-token:
+    post:
+      operationId: atlasRegisterPushToken
+      tags: [atlas]
+      summary: Register or update the device's Expo push token for the signed-in user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterPushTokenBody"
+      responses:
+        "200":
+          description: Token saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterPushTokenResponse"
+
+  /atlas/push-test:
+    post:
+      operationId: atlasSendTestPush
+      tags: [atlas]
+      summary: Send a test push notification to the signed-in user's registered device
+      responses:
+        "200":
+          description: Push attempted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendTestPushResponse"
 
 components:
   schemas:
@@ -490,6 +541,27 @@ components:
         required:
           type: boolean
       required: [id, label, type, required]
+
+    GenerateTitleRequest:
+      type: object
+      properties:
+        goalType:
+          $ref: "#/components/schemas/GoalType"
+        userInput:
+          type: string
+          description: The raw, free-form goal text the user typed.
+        intent:
+          type: string
+          description: Optional extra context the AI should use (e.g. first intake answer summary).
+      required: [goalType, userInput]
+
+    GenerateTitleResponse:
+      type: object
+      properties:
+        title:
+          type: string
+          description: A short (2-5 words) brand-neutral title for the goal.
+      required: [title]
 
     IntakeQuestionsRequest:
       type: object
@@ -868,7 +940,53 @@ components:
         attachmentNote:
           type: string
           description: Optional note about an attachment the user added this turn (e.g. an image filename). The reply should acknowledge it.
+        attachmentImage:
+          oneOf:
+            - $ref: "#/components/schemas/CoachAttachmentImage"
+            - type: "null"
+          description: Optional inline image the coach should look at this turn. Triggers a vision-capable model.
       required: [profile, roadmap, behavioral, history, message]
+
+    RegisterPushTokenBody:
+      type: object
+      description: Register the device's Expo push token so the server can send daily nudges.
+      properties:
+        token:
+          type: string
+          description: An ExponentPushToken[xxx] string returned by expo-notifications.
+        tzOffsetMinutes:
+          type: integer
+          description: Minutes east of UTC at the time of registration. Optional.
+      required: [token]
+
+    RegisterPushTokenResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+      required: [ok]
+
+    SendTestPushResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        delivered:
+          type: boolean
+          description: True when the Expo push service accepted the message.
+      required: [ok, delivered]
+
+    CoachAttachmentImage:
+      type: object
+      description: Inline image bytes shipped with a single coach turn. Not persisted server-side.
+      properties:
+        base64Data:
+          type: string
+          description: Raw base64-encoded image bytes with no data URL prefix.
+        mimeType:
+          type: string
+          description: Image MIME type, e.g. image/jpeg or image/png.
+      required: [base64Data, mimeType]
 
     TranscribeRequest:
       type: object
@@ -889,6 +1007,39 @@ components:
         text:
           type: string
 
+    ProposedCoachAction:
+      type: object
+      description: A concrete plan-modifying action the AI proposes for user confirmation.
+      properties:
+        kind:
+          type: string
+          enum: [addTaskToday, removeTaskToday, renameGoal, lightenToday]
+        label:
+          type: string
+        rationale:
+          type: string
+        task:
+          oneOf:
+            - $ref: "#/components/schemas/DailyTask"
+            - type: "null"
+        taskId:
+          oneOf:
+            - type: string
+            - type: "null"
+        taskTitle:
+          oneOf:
+            - type: string
+            - type: "null"
+        newTitle:
+          oneOf:
+            - type: string
+            - type: "null"
+        removeTaskIds:
+          type: array
+          items:
+            type: string
+      required: [kind, label, rationale]
+
     CoachResponse:
       type: object
       properties:
@@ -904,12 +1055,17 @@ components:
             - $ref: "#/components/schemas/CoachActionSuggestion"
             - type: "null"
           description: Optional CTA for a concrete app action. Use kind=none (or null) when no action fits.
+        proposedAction:
+          oneOf:
+            - $ref: "#/components/schemas/ProposedCoachAction"
+            - type: "null"
+          description: Optional plan-modifying action requiring explicit user confirmation in the UI.
         memoryUpdate:
           oneOf:
             - $ref: "#/components/schemas/CoachMemoryUpdate"
             - type: "null"
           description: Optional update to long-term coach memory. Only set when the user revealed something durable this turn.
-      required: [reply, suggestedReplies, actionSuggestion, memoryUpdate]
+      required: [reply, suggestedReplies, actionSuggestion, proposedAction, memoryUpdate]
 
     AdaptRequest:
       type: object

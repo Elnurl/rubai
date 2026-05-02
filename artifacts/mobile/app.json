@@ -41,6 +41,12 @@
         {
           "microphonePermission": "Allow rubai to use your microphone so you can talk to your coach."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#84CC16"
+        }
       ]
     ],
     "experiments": {

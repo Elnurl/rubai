@@ -1,8 +1,12 @@
+import crypto from "node:crypto";
+import { eq } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import multer from "multer";
 import { toFile } from "openai/uploads";
 import { openai } from "@workspace/integrations-openai-ai-server";
+import { db, usersTable } from "@workspace/db";
 import { trackedCreate } from "../lib/aiUsage";
+import { sendPushTo } from "../lib/pushScheduler";
 import {
   AtlasOnboardingChatBody as atlasOnboardingChatBody,
   AtlasGenerateRoadmapBody as atlasGenerateRoadmapBody,
@@ -11,8 +15,10 @@ import {
   AtlasAdaptPlanBody as atlasAdaptPlanBody,
   AtlasIntakeQuestionsBody as atlasIntakeQuestionsBody,
   AtlasIntakeSubmitBody as atlasIntakeSubmitBody,
+  AtlasGenerateTitleBody as atlasGenerateTitleBody,
   AtlasBehavioralProfileBody as atlasBehavioralProfileBody,
   AtlasEvolveRoadmapBody as atlasEvolveRoadmapBody,
+  AtlasRegisterPushTokenBody as atlasRegisterPushTokenBody,
 } from "@workspace/api-zod";
 
 function summarizeLearnedProfile(p: unknown): string {
@@ -53,6 +59,9 @@ const router: IRouter = Router();
 
 const MODEL = "gpt-5.4";
 const MODEL_FAST = "gpt-5.4-mini";
+// Vision-capable model used only for coach turns that include an inline
+// image. The default models are text-only.
+const MODEL_VISION = "gpt-4o";
 
 function pickModel(choice: "smart" | "fast" | undefined): string {
   return choice === "fast" ? MODEL_FAST : MODEL;
@@ -636,8 +645,82 @@ const coachResponseSchema = {
       description:
         "Set ONLY when the user revealed something durable this turn. Otherwise null.",
     },
+    proposedAction: {
+      anyOf: [
+        {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            kind: {
+              type: "string",
+              enum: [
+                "addTaskToday",
+                "removeTaskToday",
+                "renameGoal",
+                "lightenToday",
+                "none",
+              ],
+            },
+            label: { type: "string" },
+            rationale: { type: "string" },
+            // Strict-mode requires every property to appear in `required`, so
+            // every action carries every payload field — populate the ones
+            // relevant to the chosen kind, leave the others null/empty.
+            task: {
+              anyOf: [
+                {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    title: { type: "string" },
+                    description: { type: "string" },
+                    durationMinutes: { type: "integer" },
+                    category: { type: "string" },
+                    priority: {
+                      type: "string",
+                      enum: ["critical", "high", "normal"],
+                    },
+                  },
+                  required: [
+                    "title",
+                    "description",
+                    "durationMinutes",
+                    "category",
+                    "priority",
+                  ],
+                },
+                { type: "null" },
+              ],
+            },
+            taskId: { type: ["string", "null"] },
+            taskTitle: { type: ["string", "null"] },
+            newTitle: { type: ["string", "null"] },
+            removeTaskIds: { type: "array", items: { type: "string" } },
+          },
+          required: [
+            "kind",
+            "label",
+            "rationale",
+            "task",
+            "taskId",
+            "taskTitle",
+            "newTitle",
+            "removeTaskIds",
+          ],
+        },
+        { type: "null" },
+      ],
+      description:
+        "Set ONLY when the user is asking to MODIFY their plan/goal this turn (add task, drop task, lighten the day, rename the goal). Otherwise null.",
+    },
   },
-  required: ["reply", "suggestedReplies", "actionSuggestion", "memoryUpdate"],
+  required: [
+    "reply",
+    "suggestedReplies",
+    "actionSuggestion",
+    "memoryUpdate",
+    "proposedAction",
+  ],
 } as const;
 
 router.post("/coach", async (req, res) => {
@@ -661,14 +744,39 @@ router.post("/coach", async (req, res) => {
     message,
     modelChoice,
     attachmentNote,
+    attachmentImage,
   } = parsed.data;
 
-  // If the user attached something this turn, fold a brief note into the
-  // outgoing message so the model can acknowledge it. We don't run vision —
-  // we just want the coach to react warmly to the fact that they shared it.
-  const userMessage = attachmentNote
+  // If the user attached an image this turn, build a multimodal user
+  // message so the vision model can actually look at it. Otherwise fall
+  // back to the plain text path (with an optional acknowledgement note
+  // for non-image attachments).
+  const hasImage = !!attachmentImage?.base64Data && !!attachmentImage?.mimeType;
+  const userMessageText = hasImage
+    ? `${message}\n\n[The user attached an image. Describe what you see briefly in your reply, then connect it to their goal.]`
+    : attachmentNote
     ? `${message}\n\n[The user also attached: ${attachmentNote}. Acknowledge it in one short sentence — you can't see its contents.]`
     : message;
+  // Mixed content type the OpenAI chat API accepts on user messages. Kept
+  // inline so we don't have to pull the SDK's namespace into this file.
+  const userMessageContent: string | Array<
+    | { type: "text"; text: string }
+    | {
+        type: "image_url";
+        image_url: { url: string; detail?: "low" | "high" | "auto" };
+      }
+  > = hasImage
+    ? [
+        { type: "text", text: userMessageText },
+        {
+          type: "image_url",
+          image_url: {
+            url: `data:${attachmentImage!.mimeType};base64,${attachmentImage!.base64Data}`,
+            detail: "low",
+          },
+        },
+      ]
+    : userMessageText;
 
   try {
     const contextBlock = buildCoachContext({
@@ -710,6 +818,12 @@ Hard rules:
     • refresh_insights — they're asking about themselves / patterns / "what should I focus on" and the learned profile feels stale.
     • reflect_on_task — they mentioned a specific task they did or skipped and haven't reflected on it.
   Otherwise return null. Don't suggest the same action two turns in a row.
+- "proposedAction": include ONLY when the user is asking you to MODIFY their plan or goal in this turn. The mobile UI will show a Confirm/Cancel card with these — never claim the change is done; phrase your reply as "I can add this — confirm below if that's right.":
+    • addTaskToday — user asked to add a new task to TODAY (e.g. "add a 10-min reading task at 8 PM"). Fill 'task' with title/description/durationMinutes/category/priority. Keep titles concrete (≤6 words). Set the other payload fields to null/[].
+    • removeTaskToday — user asked to drop a SPECIFIC task from today. Fill taskId AND taskTitle with the matching task from the TODAY's tasks list in CONTEXT. Other fields null/[].
+    • renameGoal — user asked to rename their current goal. Fill newTitle (2-5 words, Title Case). Other fields null/[].
+    • lightenToday — user said today feels too heavy / "make today easier" / "I only have 30 minutes today". Fill removeTaskIds with the lowest-priority task ids that should be cut. Other fields null/[].
+  Otherwise return null. Reply text and proposedAction must agree — if you propose an addTask, your reply should preview the task. If the user already said "yes, do it" twice, don't keep proposing the same thing — assume the previous turn was confirmed.
 - "memoryUpdate": include ONLY when the user revealed something durable in THIS message (a constraint, preference, life event, identity statement). Otherwise null. The summary you write replaces the prior summary; keep it ≤ 3 sentences. newFacts must not duplicate existing facts.
 - If the user goes off-topic, steer back to their goal in one sentence.
 
@@ -717,7 +831,9 @@ CONTEXT:
 ${contextBlock}`;
 
     const completion = await trackedCreate(req, {
-      model: pickModel(modelChoice),
+      // Vision turns need a multimodal model; gpt-4o supports both
+      // image_url content and json_schema response_format.
+      model: hasImage ? MODEL_VISION : pickModel(modelChoice),
       max_completion_tokens: 1200,
       response_format: {
         type: "json_schema",
@@ -733,7 +849,7 @@ ${contextBlock}`;
           role: m.role as "user" | "assistant",
           content: m.content,
         })),
-        { role: "user", content: userMessage },
+        { role: "user", content: userMessageContent },
       ],
     });
 
@@ -743,6 +859,22 @@ ${contextBlock}`;
       suggestedReplies: string[];
       actionSuggestion: { kind: string; label: string; rationale: string } | null;
       memoryUpdate: { summary: string; newFacts: string[] } | null;
+      proposedAction: {
+        kind: string;
+        label: string;
+        rationale: string;
+        task: {
+          title: string;
+          description: string;
+          durationMinutes: number;
+          category: string;
+          priority: "critical" | "high" | "normal";
+        } | null;
+        taskId: string | null;
+        taskTitle: string | null;
+        newTitle: string | null;
+        removeTaskIds: string[];
+      } | null;
     };
 
     // Defensive clamps so the AI can't blow our UI budgets even if it tries.
@@ -772,6 +904,94 @@ ${contextBlock}`;
         }
       : null;
 
+    // Sanitize proposedAction. Validate each shape against the in-context
+    // todayPlan so we don't pass through phantom taskIds. Generate fresh
+    // server-side ids for added tasks (don't trust the model with ids).
+    const todayTaskIds = new Set(
+      (todayPlan?.tasks ?? []).map((t: { id: string }) => t.id),
+    );
+    const proposedAction = (() => {
+      const a = parsedJson.proposedAction;
+      if (!a || a.kind === "none") return null;
+      const label = (a.label ?? "").trim().slice(0, 80);
+      const rationale = (a.rationale ?? "").trim().slice(0, 240);
+      if (!label || !rationale) return null;
+      switch (a.kind) {
+        case "addTaskToday": {
+          const t = a.task;
+          if (!t || !t.title?.trim()) return null;
+          return {
+            kind: "addTaskToday" as const,
+            label,
+            rationale,
+            task: {
+              id: `task_${crypto.randomUUID()}`,
+              title: t.title.trim().slice(0, 120),
+              description: (t.description ?? "").trim().slice(0, 1000),
+              durationMinutes: Math.min(
+                240,
+                Math.max(5, Math.round(t.durationMinutes || 15)),
+              ),
+              category: (t.category ?? "general").trim().slice(0, 60),
+              priority: ["critical", "high", "normal"].includes(t.priority)
+                ? t.priority
+                : "normal",
+            },
+            taskId: null,
+            taskTitle: null,
+            newTitle: null,
+            removeTaskIds: [],
+          };
+        }
+        case "removeTaskToday": {
+          const id = (a.taskId ?? "").trim();
+          if (!id || !todayTaskIds.has(id)) return null;
+          return {
+            kind: "removeTaskToday" as const,
+            label,
+            rationale,
+            task: null,
+            taskId: id,
+            taskTitle: (a.taskTitle ?? "").trim().slice(0, 120) || null,
+            newTitle: null,
+            removeTaskIds: [],
+          };
+        }
+        case "renameGoal": {
+          const newTitle = (a.newTitle ?? "").trim().slice(0, 60);
+          if (newTitle.length < 2) return null;
+          return {
+            kind: "renameGoal" as const,
+            label,
+            rationale,
+            task: null,
+            taskId: null,
+            taskTitle: null,
+            newTitle,
+            removeTaskIds: [],
+          };
+        }
+        case "lightenToday": {
+          const ids = (a.removeTaskIds ?? [])
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0 && todayTaskIds.has(s));
+          if (ids.length === 0) return null;
+          return {
+            kind: "lightenToday" as const,
+            label,
+            rationale,
+            task: null,
+            taskId: null,
+            taskTitle: null,
+            newTitle: null,
+            removeTaskIds: ids,
+          };
+        }
+        default:
+          return null;
+      }
+    })();
+
     // Defensive fallback: a missing/empty reply from a malformed model output
     // would otherwise crash on .trim() or render an empty bubble.
     const reply =
@@ -784,6 +1004,7 @@ ${contextBlock}`;
       suggestedReplies,
       actionSuggestion,
       memoryUpdate,
+      proposedAction,
     });
   } catch (err) {
     req.log.error({ err }, "coach request failed");
@@ -918,6 +1139,83 @@ const intakeProfileSchema = {
   },
   required: ["profile", "followUp"],
 } as const;
+
+/**
+ * Refine a raw user goal description into a short, brand-neutral title.
+ * Used by the create-goal flow so a custom goal like "I want to clean me from
+ * my bad habbits" becomes a clean display title like "Break Daily Trigger
+ * Loops" before it lands on the goal record.
+ *
+ * Template goals (ielts, fitness, etc.) already have polished labels so the
+ * mobile client only invokes this for `goalType === "custom"`.
+ */
+const generateTitleSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    title: { type: "string" },
+  },
+  required: ["title"],
+} as const;
+
+router.post("/generate-title", async (req, res) => {
+  const parsed = atlasGenerateTitleBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const { goalType, userInput, intent } = parsed.data;
+  const trimmed = userInput.trim();
+  if (trimmed.length === 0) {
+    res.status(400).json({ error: "userInput is required." });
+    return;
+  }
+  try {
+    const completion = await trackedCreate(req, {
+      model: MODEL_FAST,
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "generated_title", strict: true, schema: generateTitleSchema },
+      },
+      messages: [
+        {
+          role: "system",
+          content: `You convert a user's raw goal description into a SHORT, brand-neutral display title for their goal record.
+
+Rules:
+- 2 to 5 words. Title Case.
+- No punctuation, no emojis, no quotes, no trailing period.
+- Capture the *outcome*, not the process. ("Break Daily Trigger Loops", not "Try to Quit Bad Habits".)
+- Use the user's actual intent — if they said "lose 20 lbs", the title is "Lose 20 Pounds", not "Get In Shape".
+- If the input is gibberish or ambiguous, fall back to a generic title like "New Personal Goal".
+- Goal category hint: ${goalType}. (Custom means the user wrote it themselves.)
+- Never refer to the assistant or the app. Just the goal.`,
+        },
+        {
+          role: "user",
+          content: `User input: "${trimmed}"${intent ? `\nExtra context: ${intent}` : ""}\n\nReturn the refined title.`,
+        },
+      ],
+    });
+    const raw = completion.choices[0]?.message?.content ?? "{}";
+    let parsedJson: { title?: unknown };
+    try {
+      parsedJson = JSON.parse(raw);
+    } catch {
+      parsedJson = {};
+    }
+    const title =
+      typeof parsedJson.title === "string" && parsedJson.title.trim().length > 0
+        ? parsedJson.title.trim().slice(0, 60)
+        : trimmed.slice(0, 60);
+    res.json({ title });
+  } catch (err) {
+    req.log.error({ err }, "generate-title request failed");
+    // Soft-fail with the user input itself so the create-goal flow doesn't
+    // hard-block when the AI is degraded.
+    res.json({ title: trimmed.slice(0, 60) });
+  }
+});
 
 router.post("/intake-questions", async (req, res) => {
   const parsed = atlasIntakeQuestionsBody.safeParse(req.body);
@@ -1411,5 +1709,55 @@ function guessAudioFilename(mimetype: string | undefined): string {
       return "audio.webm";
   }
 }
+
+// --- Push notifications ----------------------------------------------------
+
+router.post("/push-token", async (req, res) => {
+  const parsed = atlasRegisterPushTokenBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const { token, tzOffsetMinutes } = parsed.data;
+  try {
+    await db
+      .update(usersTable)
+      .set({
+        expoPushToken: token,
+        // Only overwrite the offset when the client supplied one. This
+        // way a stale registration without it can't blank out a good
+        // offset captured by an earlier session.
+        ...(typeof tzOffsetMinutes === "number"
+          ? { tzOffsetMinutes }
+          : {}),
+      })
+      .where(eq(usersTable.id, req.userId!));
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to save push token");
+    res.status(500).json({ error: "Failed to save push token" });
+  }
+});
+
+router.post("/push-test", async (req, res) => {
+  try {
+    const [user] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, req.userId!));
+    if (!user?.expoPushToken) {
+      res.json({ ok: true, delivered: false });
+      return;
+    }
+    const ok = await sendPushTo(user.expoPushToken, {
+      title: "rubai test",
+      body: "Push is wired up. Daily nudges will land in your morning window.",
+    });
+    res.json({ ok: true, delivered: ok });
+  } catch (err) {
+    req.log.error({ err }, "Failed to send test push");
+    res.status(500).json({ error: "Failed to send test push" });
+  }
+});
 
 export default router;

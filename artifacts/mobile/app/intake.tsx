@@ -5,21 +5,21 @@ import {
   ActivityIndicator,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AtlasButton } from "@/components/AtlasButton";
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { IntakeForm, validateIntake } from "@/components/IntakeForm";
+import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import {
+  useAtlasGenerateTitle,
   useAtlasIntakeQuestions,
   useAtlasIntakeSubmit,
   type IntakeAnswer,
@@ -43,6 +43,7 @@ export default function IntakeScreen() {
 
   const fetchQuestions = useAtlasIntakeQuestions();
   const submit = useAtlasIntakeSubmit();
+  const generateTitle = useAtlasGenerateTitle();
   const requestedRef = useRef(false);
   const [missing, setMissing] = useState<string[]>([]);
 
@@ -96,19 +97,58 @@ export default function IntakeScreen() {
     }
     setMissing([]);
     try {
-      const res = await submit.mutateAsync({
-        data: {
-          goalType: pendingDraft.goalType,
-          goalTitle: pendingDraft.goalTitle,
-          questions: pendingDraft.questions,
-          answers: pendingDraft.answers,
-        },
-      });
+      // For custom goals, kick off an AI title refinement in PARALLEL with
+      // intake-submit so we don't add extra wall-clock latency before the
+      // generating screen. Pass the first 2-3 answers as `intent` so the
+      // model has more than just the raw goal blurb to work with.
+      const isCustom = pendingDraft.goalType === "custom";
+      const rawCustomInput =
+        pendingDraft.customGoalTitle?.trim() || pendingDraft.goalTitle?.trim() || "";
+
+      const titlePromise: Promise<string | null> = isCustom && rawCustomInput.length > 0
+        ? generateTitle
+            .mutateAsync({
+              data: {
+                goalType: pendingDraft.goalType,
+                userInput: rawCustomInput,
+                intent: pendingDraft.answers
+                  .slice(0, 3)
+                  .map((a) => a.value)
+                  .filter((v) => v && v.trim().length > 0)
+                  .join(" | ")
+                  .slice(0, 400),
+              },
+            })
+            .then((r) => r.title?.trim() || null)
+            .catch(() => null)
+        : Promise.resolve(null);
+
+      const [res, refinedTitle] = await Promise.all([
+        submit.mutateAsync({
+          data: {
+            goalType: pendingDraft.goalType,
+            goalTitle: pendingDraft.goalTitle,
+            questions: pendingDraft.questions,
+            answers: pendingDraft.answers,
+          },
+        }),
+        titlePromise,
+      ]);
+
+      // Use the AI-refined title as the display name on the new goal record.
+      // Keep the raw user input intact via goalStatement (set by intake-submit)
+      // so behavioural prompts can still reference how the user phrased it.
+      const finalCustomTitle =
+        isCustom && refinedTitle && refinedTitle.length > 0
+          ? refinedTitle
+          : isCustom
+            ? pendingDraft.customGoalTitle
+            : undefined;
+
       const profile = {
         ...res.profile,
         goalType: pendingDraft.goalType,
-        customGoalTitle:
-          pendingDraft.goalType === "custom" ? pendingDraft.customGoalTitle : undefined,
+        customGoalTitle: finalCustomTitle,
       };
       // Persist the synthesised profile so the generating screen can recover
       // it on resume even if route params are lost.
@@ -126,10 +166,7 @@ export default function IntakeScreen() {
   const hasError = fetchQuestions.isError && pendingDraft.questions.length === 0;
 
   return (
-    <KeyboardAvoidingView
-      behavior="padding"
-      style={[styles.root, { backgroundColor: colors.background }]}
-    >
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad }]}>
         <Pressable
           onPress={async () => {
@@ -145,13 +182,15 @@ export default function IntakeScreen() {
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollViewCompat
         contentContainerStyle={[
           styles.scroll,
-          { paddingBottom: bottomPad + 100 },
+          { paddingBottom: bottomPad + 140 },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        bottomOffset={140}
+        extraKeyboardSpace={20}
       >
         <View style={styles.hero}>
           <Text
@@ -258,7 +297,7 @@ export default function IntakeScreen() {
             />
           </>
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScrollViewCompat>
 
       {pendingDraft.questions.length > 0 ? (
         <View
@@ -284,7 +323,7 @@ export default function IntakeScreen() {
           />
         </View>
       ) : null}
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

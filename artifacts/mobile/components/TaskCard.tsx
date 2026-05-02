@@ -12,6 +12,14 @@ type Props = {
   completed: boolean;
   onToggle: () => void;
   onReflect?: () => void;
+  /**
+   * Tap handler for the card body itself (not the checkbox). When provided,
+   * tapping anywhere outside the checkbox/Reflect pill opens the detail
+   * sheet — toggling completion stays anchored to the checkbox circle so we
+   * don't accidentally complete a task while the user is just trying to read
+   * the full description.
+   */
+  onCardPress?: () => void;
   hasReflection?: boolean;
   index: number;
 };
@@ -21,18 +29,29 @@ export function TaskCard({
   completed,
   onToggle,
   onReflect,
+  onCardPress,
   hasReflection,
   index,
 }: Props) {
   const colors = useColors();
 
-  const handlePress = () => {
+  const handleCheckboxPress = () => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(
         completed ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium,
       ).catch(() => {});
     }
     onToggle();
+  };
+
+  const handleCardPress = () => {
+    if (onCardPress) {
+      onCardPress();
+      return;
+    }
+    // Fall back to toggle behaviour if no detail handler is wired up — keeps
+    // existing callers (and tests) that only pass onToggle working.
+    handleCheckboxPress();
   };
 
   const handleLongPress = () => {
@@ -54,7 +73,7 @@ export function TaskCard({
   return (
     <Animated.View entering={FadeIn.delay(index * 60).duration(280)}>
       <Pressable
-        onPress={handlePress}
+        onPress={handleCardPress}
         onLongPress={onReflect ? handleLongPress : undefined}
         delayLongPress={350}
         style={({ pressed }) => [
@@ -68,7 +87,7 @@ export function TaskCard({
         ]}
       >
         <Pressable
-          onPress={handlePress}
+          onPress={handleCheckboxPress}
           hitSlop={10}
           style={[
             styles.checkbox,
@@ -153,26 +172,25 @@ export function TaskCard({
                 onPress={onReflect}
                 hitSlop={6}
                 style={[
-                  styles.metaPill,
+                  styles.reflectBtn,
                   {
                     backgroundColor: hasReflection
                       ? colors.primary + "1A"
-                      : "transparent",
-                    borderWidth: 1,
+                      : colors.muted,
                     borderColor: hasReflection ? colors.primary + "55" : colors.border,
                   },
                 ]}
               >
                 <Feather
                   name={hasReflection ? "message-circle" : "edit-3"}
-                  size={11}
-                  color={hasReflection ? colors.primary : colors.mutedForeground}
+                  size={12}
+                  color={hasReflection ? colors.primary : colors.foreground}
                 />
                 <Text
                   style={[
-                    styles.metaText,
+                    styles.reflectBtnText,
                     {
-                      color: hasReflection ? colors.primary : colors.mutedForeground,
+                      color: hasReflection ? colors.primary : colors.foreground,
                       fontFamily: "Inter_600SemiBold",
                     },
                   ]}
@@ -239,6 +257,19 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 11.5,
+    letterSpacing: 0.2,
+  },
+  reflectBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  reflectBtnText: {
+    fontSize: 12,
     letterSpacing: 0.2,
   },
 });

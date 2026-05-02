@@ -359,11 +359,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 4,
   },
   evolveBtnText: {
-    fontSize: 14,
+    fontSize: 14.5,
     letterSpacing: 0.3,
   },
   helperText: {

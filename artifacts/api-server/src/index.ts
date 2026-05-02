@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startPushScheduler } from "./lib/pushScheduler";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,8 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+  // Boot the daily push scheduler once the HTTP server is up. The
+  // scheduler is in-process and idempotent; it will silently no-op until
+  // users have registered tokens.
+  startPushScheduler();
 });

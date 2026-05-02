@@ -26,6 +26,8 @@ import type {
   DailyPlan,
   DailyPlanRequest,
   ErrorResponse,
+  GenerateTitleRequest,
+  GenerateTitleResponse,
   HealthStatus,
   IntakeQuestionsRequest,
   IntakeQuestionsResponse,
@@ -37,10 +39,13 @@ import type {
   MeStateResponse,
   OnboardingChatRequest,
   OnboardingChatResponse,
+  RegisterPushTokenBody,
+  RegisterPushTokenResponse,
   Roadmap,
   RoadmapEvolutionRequest,
   RoadmapEvolutionResponse,
   RoadmapRequest,
+  SendTestPushResponse,
   TranscribeRequest,
   TranscribeResponse,
 } from "./api.schemas";
@@ -787,6 +792,92 @@ export const useAtlasGenerateDailyPlan = <
 };
 
 /**
+ * @summary Refine a raw user goal description into a short brand-neutral title
+ */
+export const getAtlasGenerateTitleUrl = () => {
+  return `/api/atlas/generate-title`;
+};
+
+export const atlasGenerateTitle = async (
+  generateTitleRequest: GenerateTitleRequest,
+  options?: RequestInit,
+): Promise<GenerateTitleResponse> => {
+  return customFetch<GenerateTitleResponse>(getAtlasGenerateTitleUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(generateTitleRequest),
+  });
+};
+
+export const getAtlasGenerateTitleMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasGenerateTitle>>,
+    TError,
+    { data: BodyType<GenerateTitleRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof atlasGenerateTitle>>,
+  TError,
+  { data: BodyType<GenerateTitleRequest> },
+  TContext
+> => {
+  const mutationKey = ["atlasGenerateTitle"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof atlasGenerateTitle>>,
+    { data: BodyType<GenerateTitleRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return atlasGenerateTitle(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AtlasGenerateTitleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof atlasGenerateTitle>>
+>;
+export type AtlasGenerateTitleMutationBody = BodyType<GenerateTitleRequest>;
+export type AtlasGenerateTitleMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Refine a raw user goal description into a short brand-neutral title
+ */
+export const useAtlasGenerateTitle = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasGenerateTitle>>,
+    TError,
+    { data: BodyType<GenerateTitleRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof atlasGenerateTitle>>,
+  TError,
+  { data: BodyType<GenerateTitleRequest> },
+  TContext
+> => {
+  return useMutation(getAtlasGenerateTitleMutationOptions(options));
+};
+
+/**
  * @summary Conversational coaching reply with full execution context
  */
 export const getAtlasCoachUrl = () => {
@@ -1223,4 +1314,175 @@ export const useAtlasEvolveRoadmap = <
   TContext
 > => {
   return useMutation(getAtlasEvolveRoadmapMutationOptions(options));
+};
+
+/**
+ * @summary Register or update the device's Expo push token for the signed-in user
+ */
+export const getAtlasRegisterPushTokenUrl = () => {
+  return `/api/atlas/push-token`;
+};
+
+export const atlasRegisterPushToken = async (
+  registerPushTokenBody: RegisterPushTokenBody,
+  options?: RequestInit,
+): Promise<RegisterPushTokenResponse> => {
+  return customFetch<RegisterPushTokenResponse>(
+    getAtlasRegisterPushTokenUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(registerPushTokenBody),
+    },
+  );
+};
+
+export const getAtlasRegisterPushTokenMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasRegisterPushToken>>,
+    TError,
+    { data: BodyType<RegisterPushTokenBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof atlasRegisterPushToken>>,
+  TError,
+  { data: BodyType<RegisterPushTokenBody> },
+  TContext
+> => {
+  const mutationKey = ["atlasRegisterPushToken"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof atlasRegisterPushToken>>,
+    { data: BodyType<RegisterPushTokenBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return atlasRegisterPushToken(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AtlasRegisterPushTokenMutationResult = NonNullable<
+  Awaited<ReturnType<typeof atlasRegisterPushToken>>
+>;
+export type AtlasRegisterPushTokenMutationBody =
+  BodyType<RegisterPushTokenBody>;
+export type AtlasRegisterPushTokenMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Register or update the device's Expo push token for the signed-in user
+ */
+export const useAtlasRegisterPushToken = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasRegisterPushToken>>,
+    TError,
+    { data: BodyType<RegisterPushTokenBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof atlasRegisterPushToken>>,
+  TError,
+  { data: BodyType<RegisterPushTokenBody> },
+  TContext
+> => {
+  return useMutation(getAtlasRegisterPushTokenMutationOptions(options));
+};
+
+/**
+ * @summary Send a test push notification to the signed-in user's registered device
+ */
+export const getAtlasSendTestPushUrl = () => {
+  return `/api/atlas/push-test`;
+};
+
+export const atlasSendTestPush = async (
+  options?: RequestInit,
+): Promise<SendTestPushResponse> => {
+  return customFetch<SendTestPushResponse>(getAtlasSendTestPushUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getAtlasSendTestPushMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasSendTestPush>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof atlasSendTestPush>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["atlasSendTestPush"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof atlasSendTestPush>>,
+    void
+  > = () => {
+    return atlasSendTestPush(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AtlasSendTestPushMutationResult = NonNullable<
+  Awaited<ReturnType<typeof atlasSendTestPush>>
+>;
+
+export type AtlasSendTestPushMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Send a test push notification to the signed-in user's registered device
+ */
+export const useAtlasSendTestPush = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasSendTestPush>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof atlasSendTestPush>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getAtlasSendTestPushMutationOptions(options));
 };
