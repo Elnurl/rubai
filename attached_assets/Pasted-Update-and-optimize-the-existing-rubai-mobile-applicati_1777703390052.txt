@@ -1,0 +1,105 @@
+Update and optimize the existing “rubai” mobile application UI/UX architecture and interaction system. Do not redesign the app from scratch. Keep the current branding, logo, colors, and overall visual identity of rubai, but evolve the product experience into a cleaner, more intelligent, AI-first interface inspired by the feeling and interaction philosophy of Perplexity AI.
+
+The goal is not to copy Perplexity visually, but to achieve the same experience qualities:
+
+* fast
+* minimal
+* focused
+* smooth
+* intelligent
+* non-cluttered
+* AI-centered
+* highly responsive
+
+rubai should feel like:
+“an AI operating system for human progress and execution,”
+not a normal productivity or habit-tracker app.
+
+Optimize navigation, spacing, interaction flow, transitions, layout hierarchy, and AI accessibility across the entire app.
+
+Core sections that must exist and be optimized:
+
+1. Home / AI Hub
+
+* today focus
+* active goals
+* AI recommendations
+* adaptive insights
+* fast access to AI coach
+* clean dashboard feeling
+
+2. Goal Workspace
+   Each goal should contain:
+
+* roadmap
+* phases
+* daily tasks
+* AI analysis
+* reflections
+* adaptive roadmap updates
+* execution tracking
+
+Do not redirect users unnecessarily between pages. Keep interactions fluid and contextual.
+
+3. AI Coach Chat
+   Must feel like a persistent intelligent companion:
+
+* contextual replies
+* long-term memory
+* execution guidance
+* emotional support
+* voice-ready structure
+* suggested actions/replies
+* smooth conversational UX
+
+4. Insights / Behavioral Analytics
+
+* productivity patterns
+* focus score
+* burnout risk
+* motivation trends
+* behavioral evolution
+* weekly AI reports
+
+5. Spaces / Life Domains
+   Support structured areas such as:
+
+* Career
+* Study
+* Health
+* Finance
+* Personal Growth
+
+6. Memory / Identity Layer
+   Allow rubai to surface:
+
+* what it learned about the user
+* detected behavioral patterns
+* strongest habits
+* weaknesses
+* execution tendencies
+
+7. Settings
+   Keep settings minimal and modern:
+
+* Theme
+* Font
+* AI capabilities
+* Assistant controls
+* Help center
+
+General UX requirements:
+
+* persistent AI accessibility
+* smooth bottom interaction/input system
+* minimal cognitive load
+* AI-first navigation
+* modern dark-mode optimization
+* clean typography hierarchy
+* adaptive cards/components
+* lightweight animations
+* responsive mobile-first layout
+* avoid cluttered dashboards
+* prioritize clarity and execution flow over decoration
+
+Use the uploaded screenshots as inspiration for interaction feeling, simplicity, spacing, and AI-centered layout structure.
