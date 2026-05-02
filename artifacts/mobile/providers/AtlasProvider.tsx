@@ -475,6 +475,24 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
         const server = await getMeState();
         if (!stillBooting()) return;
 
+        // Defensive: if the response body was empty for any reason (e.g. a
+        // stale 304 from an upstream cache, a network proxy stripping the
+        // body, etc.) treat it as a soft failure and exit the splash with
+        // whatever we already painted from cache. Without this guard, the
+        // user is stuck on the index screen spinner forever.
+        if (server == null) {
+          if (__DEV__) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              "[atlas] /me/state returned an empty body; staying on cached state",
+            );
+          }
+          setSyncStatus("error");
+          setSyncMessage("Couldn't reach the cloud. Showing your last sync.");
+          setLoaded(true);
+          return;
+        }
+
         // 3. First-sign-in migration: if the server is empty for this user
         // and we have legacy local goals on this device that have never
         // been migrated, push them up.

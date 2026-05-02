@@ -13,6 +13,12 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// Disable Express's automatic ETag generation. We don't want JSON API
+// responses (especially /me/state) to be served as 304 Not Modified because
+// downstream clients sometimes resolve those as null/empty bodies and end up
+// stuck on a loading screen waiting for fresh data they already had.
+app.set("etag", false);
+
 app.use(
   pinoHttp({
     logger,
