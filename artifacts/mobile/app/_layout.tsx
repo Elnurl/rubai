@@ -1,4 +1,3 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -203,13 +202,21 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   const scheme = useColorScheme();
+  // Vector-icon fonts are loaded by direct .ttf require rather than by
+  // spreading Feather.font / Ionicons.font. The spread relies on
+  // @expo/vector-icons' internal asset paths which Metro on Android
+  // (Expo Go + new architecture) sometimes registers without delivering
+  // the actual font binary, producing tofu boxes for every icon. Copying
+  // the .ttf into our own assets/fonts and requiring it explicitly
+  // bypasses that bundling problem.
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
-    ...Feather.font,
-    ...Ionicons.font,
+    Feather: require("../assets/fonts/Feather.ttf"),
+    Ionicons: require("../assets/fonts/Ionicons.ttf"),
+    MaterialIcons: require("../assets/fonts/MaterialIcons.ttf"),
   });
 
   useEffect(() => {

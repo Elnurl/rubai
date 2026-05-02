@@ -34,7 +34,16 @@
           "origin": "https://replit.com/"
         }
       ],
-      "expo-font",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/Feather.ttf",
+            "./assets/fonts/Ionicons.ttf",
+            "./assets/fonts/MaterialIcons.ttf"
+          ]
+        }
+      ],
       "expo-web-browser",
       [
         "expo-audio",
