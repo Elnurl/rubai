@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useAuth, useSignUp, useSSO } from "@clerk/expo";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
@@ -18,6 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AtlasLogo } from "@/components/AtlasLogo";
+import { GoogleGIcon } from "@/components/GoogleGIcon";
 import { friendlyAuthError } from "@/lib/authErrors";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -32,6 +32,13 @@ const BRAND = {
   card: "#FFFFFF",
   destructive: "#B43E3E",
 };
+
+function debug(...args: unknown[]) {
+  if (__DEV__) {
+    // eslint-disable-next-line no-console
+    console.log("[auth/sign-up]", ...args);
+  }
+}
 
 function useWarmUpBrowser() {
   useEffect(() => {
@@ -54,30 +61,65 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [oauthLoading, setOauthLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const handleSubmit = useCallback(async () => {
+    if (!signUp) return;
     setSubmitError(null);
+    setInfo(null);
     if (password.length < 8) {
       setSubmitError("Password must be at least 8 characters long.");
       return;
     }
+    setSubmitting(true);
     try {
+      debug("password attempt", { email: emailAddress });
       const { error } = await signUp.password({ emailAddress, password });
       if (error) {
+        debug("password error", error);
         setSubmitError(friendlyAuthError(error));
         return;
       }
-      await signUp.verifications.sendEmailCode();
+      debug("password ok, sending email code; status =", signUp.status);
+      const { error: sendErr } = await signUp.verifications.sendEmailCode();
+      if (sendErr) {
+        debug("sendEmailCode error", sendErr);
+        setSubmitError(friendlyAuthError(sendErr));
+        return;
+      }
+      setInfo(`We just emailed a 6-digit code to ${emailAddress}.`);
     } catch (err) {
+      debug("submit threw", err);
       setSubmitError(friendlyAuthError(err));
+    } finally {
+      setSubmitting(false);
     }
   }, [signUp, emailAddress, password]);
 
   const handleVerify = useCallback(async () => {
+    if (!signUp) return;
     setSubmitError(null);
+    setInfo(null);
+    const trimmed = code.trim().replace(/\s+/g, "");
+    if (trimmed.length === 0) {
+      setSubmitError("Enter the 6-digit code we emailed you.");
+      return;
+    }
+    setSubmitting(true);
     try {
-      await signUp.verifications.verifyEmailCode({ code });
+      debug("verify attempt");
+      const { error } = await signUp.verifications.verifyEmailCode({
+        code: trimmed,
+      });
+      if (error) {
+        debug("verify error", error);
+        setSubmitError(friendlyAuthError(error));
+        return;
+      }
+      debug("verify ok, status =", signUp.status);
       if (signUp.status === "complete") {
         await signUp.finalize({
           navigate: ({ session }) => {
@@ -87,22 +129,46 @@ export default function SignUpScreen() {
         });
       } else {
         setSubmitError(
-          "We couldn't finish creating your account. Please request a new code and try again.",
+          "We couldn't finish creating your account. Tap 'Resend code' and try again.",
         );
       }
     } catch (err) {
+      debug("verify threw", err);
       setSubmitError(friendlyAuthError(err));
+    } finally {
+      setSubmitting(false);
     }
   }, [signUp, code, router]);
+
+  const handleResend = useCallback(async () => {
+    if (!signUp) return;
+    setSubmitError(null);
+    setInfo(null);
+    setResending(true);
+    try {
+      const { error } = await signUp.verifications.sendEmailCode();
+      if (error) {
+        setSubmitError(friendlyAuthError(error));
+        return;
+      }
+      setInfo(`A new code is on its way to ${emailAddress}.`);
+    } catch (err) {
+      setSubmitError(friendlyAuthError(err));
+    } finally {
+      setResending(false);
+    }
+  }, [signUp, emailAddress]);
 
   const handleGoogle = useCallback(async () => {
     setSubmitError(null);
     setOauthLoading(true);
     try {
+      debug("google sso start");
       const { createdSessionId, setActive } = await startSSOFlow({
         strategy: "oauth_google",
         redirectUrl: AuthSession.makeRedirectUri(),
       });
+      debug("google sso result", { createdSessionId: !!createdSessionId });
       if (createdSessionId && setActive) {
         await setActive({
           session: createdSessionId,
@@ -113,6 +179,7 @@ export default function SignUpScreen() {
         });
       }
     } catch (err) {
+      debug("google sso threw", err);
       setSubmitError(friendlyAuthError(err));
     } finally {
       setOauthLoading(false);
@@ -123,7 +190,7 @@ export default function SignUpScreen() {
     return null;
   }
 
-  const isFetching = fetchStatus === "fetching";
+  const isFetching = fetchStatus === "fetching" || submitting;
   const disabled = !emailAddress || !password || isFetching;
   const verifyDisabled = !code || isFetching;
 
@@ -146,61 +213,93 @@ export default function SignUpScreen() {
             <View style={styles.brandWrap}>
               <AtlasLogo size="lg" />
             </View>
-            <Text style={styles.title}>
+            <Text style={styles.title} maxFontSizeMultiplier={1.4}>
               {needsVerification ? "Check your email" : "Create your account"}
             </Text>
-            <Text style={styles.subtitle}>
+            <Text style={styles.subtitle} maxFontSizeMultiplier={1.4}>
               {needsVerification
-                ? `We sent a verification code to ${emailAddress}.`
+                ? `We sent a 6-digit code to ${emailAddress}. Enter it below to finish setting up your account.`
                 : "Start your AI-coached journey toward your biggest goal."}
             </Text>
           </View>
 
           {needsVerification ? (
             <>
-              <Text style={styles.label}>Verification code</Text>
+              <Text style={styles.label} maxFontSizeMultiplier={1.3}>
+                Verification code
+              </Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, styles.codeInput]}
                 value={code}
                 onChangeText={setCode}
                 placeholder="123456"
                 placeholderTextColor={BRAND.muted}
                 keyboardType="number-pad"
                 autoComplete="one-time-code"
+                textContentType="oneTimeCode"
                 returnKeyType="go"
+                maxLength={6}
                 onSubmitEditing={handleVerify}
+                editable={!isFetching}
               />
               {errors?.fields?.code?.message && (
-                <Text style={styles.errorText}>
+                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
                   {errors.fields.code.message}
                 </Text>
               )}
+              {info && !submitError && (
+                <Text style={styles.infoText} maxFontSizeMultiplier={1.3}>
+                  {info}
+                </Text>
+              )}
               {submitError && (
-                <Text style={styles.errorText}>{submitError}</Text>
+                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
+                  {submitError}
+                </Text>
               )}
 
               <Pressable
                 style={({ pressed }) => [
                   styles.primaryBtn,
                   verifyDisabled && styles.primaryBtnDisabled,
-                  pressed && !verifyDisabled && { opacity: 0.9 },
+                  pressed &&
+                    !verifyDisabled &&
+                    Platform.OS === "ios" && { opacity: 0.9 },
                 ]}
+                android_ripple={{ color: "#FFFFFF22" }}
                 onPress={handleVerify}
                 disabled={verifyDisabled}
+                accessibilityRole="button"
               >
                 {isFetching ? (
                   <ActivityIndicator color="#FAF6EE" />
                 ) : (
-                  <Text style={styles.primaryBtnText}>Verify and continue</Text>
+                  <Text
+                    style={styles.primaryBtnText}
+                    maxFontSizeMultiplier={1.3}
+                  >
+                    Verify and continue
+                  </Text>
                 )}
               </Pressable>
 
               <Pressable
                 hitSlop={8}
-                onPress={() => signUp.verifications.sendEmailCode()}
-                style={{ alignSelf: "center", marginTop: 16 }}
+                onPress={handleResend}
+                disabled={resending}
+                style={{
+                  alignSelf: "center",
+                  marginTop: 16,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+                accessibilityRole="button"
               >
-                <Text style={styles.linkText}>Resend code</Text>
+                {resending && <ActivityIndicator size="small" color={BRAND.primary} />}
+                <Text style={styles.linkText} maxFontSizeMultiplier={1.3}>
+                  {resending ? "Sending…" : "Resend code"}
+                </Text>
               </Pressable>
             </>
           ) : (
@@ -208,18 +307,25 @@ export default function SignUpScreen() {
               <Pressable
                 style={({ pressed }) => [
                   styles.googleBtn,
-                  pressed && { opacity: 0.85 },
+                  pressed && Platform.OS === "ios" && { opacity: 0.85 },
                   oauthLoading && { opacity: 0.6 },
                 ]}
+                android_ripple={{ color: "#0000000D" }}
                 onPress={handleGoogle}
                 disabled={oauthLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Sign up with Google"
               >
                 {oauthLoading ? (
                   <ActivityIndicator color={BRAND.fg} />
                 ) : (
                   <>
-                    <Ionicons name="logo-google" size={18} color={BRAND.fg} />
-                    <Text style={styles.googleBtnText}>
+                    <GoogleGIcon size={20} />
+                    <Text
+                      style={styles.googleBtnText}
+                      maxFontSizeMultiplier={1.3}
+                      numberOfLines={1}
+                    >
                       Sign up with Google
                     </Text>
                   </>
@@ -228,11 +334,15 @@ export default function SignUpScreen() {
 
               <View style={styles.dividerRow}>
                 <View style={styles.divider} />
-                <Text style={styles.dividerText}>or</Text>
+                <Text style={styles.dividerText} maxFontSizeMultiplier={1.2}>
+                  or
+                </Text>
                 <View style={styles.divider} />
               </View>
 
-              <Text style={styles.label}>Email</Text>
+              <Text style={styles.label} maxFontSizeMultiplier={1.3}>
+                Email
+              </Text>
               <TextInput
                 style={styles.input}
                 value={emailAddress}
@@ -243,14 +353,20 @@ export default function SignUpScreen() {
                 autoComplete="email"
                 keyboardType="email-address"
                 returnKeyType="next"
+                editable={!isFetching}
               />
               {errors?.fields?.emailAddress?.message && (
-                <Text style={styles.errorText}>
+                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
                   {errors.fields.emailAddress.message}
                 </Text>
               )}
 
-              <Text style={[styles.label, { marginTop: 12 }]}>Password</Text>
+              <Text
+                style={[styles.label, { marginTop: 12 }]}
+                maxFontSizeMultiplier={1.3}
+              >
+                Password
+              </Text>
               <TextInput
                 style={styles.input}
                 value={password}
@@ -261,30 +377,42 @@ export default function SignUpScreen() {
                 autoComplete="password-new"
                 returnKeyType="go"
                 onSubmitEditing={handleSubmit}
+                editable={!isFetching}
               />
               {errors?.fields?.password?.message && (
-                <Text style={styles.errorText}>
+                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
                   {errors.fields.password.message}
                 </Text>
               )}
 
               {submitError && (
-                <Text style={styles.errorText}>{submitError}</Text>
+                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
+                  {submitError}
+                </Text>
               )}
 
               <Pressable
                 style={({ pressed }) => [
                   styles.primaryBtn,
                   disabled && styles.primaryBtnDisabled,
-                  pressed && !disabled && { opacity: 0.9 },
+                  pressed &&
+                    !disabled &&
+                    Platform.OS === "ios" && { opacity: 0.9 },
                 ]}
+                android_ripple={{ color: "#FFFFFF22" }}
                 onPress={handleSubmit}
                 disabled={disabled}
+                accessibilityRole="button"
               >
                 {isFetching ? (
                   <ActivityIndicator color="#FAF6EE" />
                 ) : (
-                  <Text style={styles.primaryBtnText}>Create account</Text>
+                  <Text
+                    style={styles.primaryBtnText}
+                    maxFontSizeMultiplier={1.3}
+                  >
+                    Create account
+                  </Text>
                 )}
               </Pressable>
 
@@ -292,12 +420,14 @@ export default function SignUpScreen() {
               <View nativeID="clerk-captcha" />
 
               <View style={styles.linkRow}>
-                <Text style={styles.linkRowText}>
+                <Text style={styles.linkRowText} maxFontSizeMultiplier={1.3}>
                   Already have an account?
                 </Text>
                 <Link href="/(auth)/sign-in" asChild>
-                  <Pressable hitSlop={8}>
-                    <Text style={styles.linkText}>Sign in</Text>
+                  <Pressable hitSlop={8} accessibilityRole="link">
+                    <Text style={styles.linkText} maxFontSizeMultiplier={1.3}>
+                      Sign in
+                    </Text>
                   </Pressable>
                 </Link>
               </View>
@@ -313,9 +443,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BRAND.bg },
   container: { padding: 24, paddingTop: 32, gap: 4 },
   header: { marginBottom: 24, gap: 6 },
-  brandWrap: {
-    marginBottom: 4,
-  },
+  brandWrap: { marginBottom: 4 },
   title: {
     fontFamily: "Inter_700Bold",
     color: BRAND.fg,
@@ -332,17 +460,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 12,
     backgroundColor: BRAND.card,
     borderColor: BRAND.border,
     borderWidth: 1,
     borderRadius: 14,
+    minHeight: 52,
+    paddingHorizontal: 16,
     paddingVertical: 14,
+    overflow: "hidden",
   },
   googleBtnText: {
     fontFamily: "Inter_600SemiBold",
     color: BRAND.fg,
     fontSize: 15,
+    includeFontPadding: false,
   },
   dividerRow: {
     flexDirection: "row",
@@ -370,14 +502,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: Platform.OS === "android" ? 10 : 12,
+    minHeight: 48,
     fontFamily: "Inter_400Regular",
     fontSize: 15,
     color: BRAND.fg,
   },
+  codeInput: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 22,
+    letterSpacing: 6,
+    textAlign: "center",
+  },
   errorText: {
     fontFamily: "Inter_500Medium",
     color: BRAND.destructive,
+    fontSize: 13,
+    marginTop: 6,
+  },
+  infoText: {
+    fontFamily: "Inter_500Medium",
+    color: BRAND.fg,
     fontSize: 13,
     marginTop: 6,
   },
@@ -386,14 +531,17 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND.primary,
     borderRadius: 14,
     paddingVertical: 15,
+    minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   primaryBtnDisabled: { opacity: 0.4 },
   primaryBtnText: {
     fontFamily: "Inter_600SemiBold",
     color: BRAND.bg,
     fontSize: 16,
+    includeFontPadding: false,
   },
   linkRow: {
     flexDirection: "row",

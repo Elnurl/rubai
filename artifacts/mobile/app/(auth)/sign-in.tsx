@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useSignIn, useSSO } from "@clerk/expo";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
@@ -18,6 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AtlasLogo } from "@/components/AtlasLogo";
+import { GoogleGIcon } from "@/components/GoogleGIcon";
 import { friendlyAuthError } from "@/lib/authErrors";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -32,6 +32,13 @@ const BRAND = {
   card: "#FFFFFF",
   destructive: "#B43E3E",
 };
+
+function debug(...args: unknown[]) {
+  if (__DEV__) {
+    // eslint-disable-next-line no-console
+    console.log("[auth/sign-in]", ...args);
+  }
+}
 
 function useWarmUpBrowser() {
   useEffect(() => {
@@ -53,15 +60,23 @@ export default function SignInScreen() {
   const [password, setPassword] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [oauthLoading, setOauthLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = useCallback(async () => {
+    if (!signIn) return;
     setSubmitError(null);
+    setSubmitting(true);
     try {
+      debug("password attempt", { email: emailAddress });
       const { error } = await signIn.password({ emailAddress, password });
       if (error) {
+        debug("password error", error);
         setSubmitError(friendlyAuthError(error));
         return;
       }
+
+      debug("password ok, status =", signIn.status);
+
       if (signIn.status === "complete") {
         await signIn.finalize({
           navigate: ({ session }) => {
@@ -71,31 +86,46 @@ export default function SignInScreen() {
         });
         return;
       }
-      // Account requires 2FA — route to the verify screen and let it pick
-      // the right strategy from signIn.supportedSecondFactors.
+
+      // Replit-managed Clerk doesn't support MFA today, but if Clerk ever
+      // returns `needs_second_factor` (e.g. TOTP/SMS configured externally)
+      // we route to the verify screen with a sensible default strategy.
       if (signIn.status === "needs_second_factor") {
         const factors = signIn.supportedSecondFactors ?? [];
-        // Prefer authenticator app, then SMS, then backup.
         const preferred =
           factors.find((f) => f.strategy === "totp")?.strategy ??
           factors.find((f) => f.strategy === "phone_code")?.strategy ??
           factors.find((f) => f.strategy === "backup_code")?.strategy ??
           "totp";
+        router.push({ pathname: "/verify", params: { strategy: preferred } });
+        return;
+      }
+
+      // Clerk's "client trust" path — fired when signing in from a new
+      // device/browser. Clerk sends a 6-digit code by email; we ask for
+      // it on the verify screen. THIS is the path users see most often
+      // and is what people commonly call "the 2FA / 6-digit step".
+      // The verify screen owns the actual sendEmailCode call (single
+      // source of truth) — we just route there with the right strategy.
+      if (signIn.status === "needs_client_trust") {
+        debug("needs_client_trust — routing to verify");
         router.push({
           pathname: "/verify",
-          params: { strategy: preferred },
+          params: { strategy: "email_code", email: emailAddress },
         });
         return;
       }
-      // Unverified email or other intermediate states — show a clear,
-      // user-readable message instead of the raw status code.
+
+      // Catch-all: surface the actual status code so we never silently
+      // dead-end the user.
       setSubmitError(
-        signIn.status === "needs_first_factor"
-          ? "We need to verify your identity again. Check your email for a code, then try signing in."
-          : `Sign-in didn't complete. Please try again.`,
+        `Sign-in didn't complete (${signIn.status ?? "unknown"}). Please try again.`,
       );
     } catch (err) {
+      debug("password threw", err);
       setSubmitError(friendlyAuthError(err));
+    } finally {
+      setSubmitting(false);
     }
   }, [signIn, emailAddress, password, router]);
 
@@ -103,10 +133,12 @@ export default function SignInScreen() {
     setSubmitError(null);
     setOauthLoading(true);
     try {
+      debug("google sso start");
       const { createdSessionId, setActive } = await startSSOFlow({
         strategy: "oauth_google",
         redirectUrl: AuthSession.makeRedirectUri(),
       });
+      debug("google sso result", { createdSessionId: !!createdSessionId });
       if (createdSessionId && setActive) {
         await setActive({
           session: createdSessionId,
@@ -115,15 +147,20 @@ export default function SignInScreen() {
             router.replace("/");
           },
         });
+      } else {
+        // No session was created. Most commonly this means the user closed
+        // the OAuth sheet — don't show an error, just let them try again.
+        debug("google sso cancelled or missing requirements");
       }
     } catch (err) {
+      debug("google sso threw", err);
       setSubmitError(friendlyAuthError(err));
     } finally {
       setOauthLoading(false);
     }
   }, [startSSOFlow, router]);
 
-  const isFetching = fetchStatus === "fetching";
+  const isFetching = fetchStatus === "fetching" || submitting;
   const disabled = !emailAddress || !password || isFetching;
 
   return (
@@ -140,8 +177,10 @@ export default function SignInScreen() {
             <View style={styles.brandWrap}>
               <AtlasLogo size="lg" />
             </View>
-            <Text style={styles.title}>Welcome back</Text>
-            <Text style={styles.subtitle}>
+            <Text style={styles.title} maxFontSizeMultiplier={1.4}>
+              Welcome back
+            </Text>
+            <Text style={styles.subtitle} maxFontSizeMultiplier={1.4}>
               Sign in to continue with your AI goal coach.
             </Text>
           </View>
@@ -149,30 +188,43 @@ export default function SignInScreen() {
           <Pressable
             style={({ pressed }) => [
               styles.googleBtn,
-              pressed && { opacity: 0.85 },
+              pressed && Platform.OS === "ios" && { opacity: 0.85 },
               oauthLoading && { opacity: 0.6 },
             ]}
+            android_ripple={{ color: "#0000000D" }}
             onPress={handleGoogle}
             disabled={oauthLoading}
             accessibilityRole="button"
+            accessibilityLabel="Continue with Google"
+            accessibilityState={{ disabled: oauthLoading }}
           >
             {oauthLoading ? (
               <ActivityIndicator color={BRAND.fg} />
             ) : (
               <>
-                <Ionicons name="logo-google" size={18} color={BRAND.fg} />
-                <Text style={styles.googleBtnText}>Continue with Google</Text>
+                <GoogleGIcon size={20} />
+                <Text
+                  style={styles.googleBtnText}
+                  maxFontSizeMultiplier={1.3}
+                  numberOfLines={1}
+                >
+                  Continue with Google
+                </Text>
               </>
             )}
           </Pressable>
 
           <View style={styles.dividerRow}>
             <View style={styles.divider} />
-            <Text style={styles.dividerText}>or</Text>
+            <Text style={styles.dividerText} maxFontSizeMultiplier={1.2}>
+              or
+            </Text>
             <View style={styles.divider} />
           </View>
 
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label} maxFontSizeMultiplier={1.3}>
+            Email
+          </Text>
           <TextInput
             style={styles.input}
             value={emailAddress}
@@ -183,14 +235,26 @@ export default function SignInScreen() {
             autoComplete="email"
             keyboardType="email-address"
             returnKeyType="next"
+            editable={!isFetching}
           />
           {errors?.fields?.identifier?.message && (
-            <Text style={styles.errorText}>
+            <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
               {errors.fields.identifier.message}
             </Text>
           )}
 
-          <Text style={[styles.label, { marginTop: 12 }]}>Password</Text>
+          <View style={styles.passwordHeaderRow}>
+            <Text style={styles.label} maxFontSizeMultiplier={1.3}>
+              Password
+            </Text>
+            <Link href="/(auth)/forgot-password" asChild>
+              <Pressable hitSlop={8} accessibilityRole="link">
+                <Text style={styles.forgotText} maxFontSizeMultiplier={1.3}>
+                  Forgot?
+                </Text>
+              </Pressable>
+            </Link>
+          </View>
           <TextInput
             style={styles.input}
             value={password}
@@ -201,37 +265,50 @@ export default function SignInScreen() {
             autoComplete="password"
             returnKeyType="go"
             onSubmitEditing={handleSubmit}
+            editable={!isFetching}
           />
           {errors?.fields?.password?.message && (
-            <Text style={styles.errorText}>
+            <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
               {errors.fields.password.message}
             </Text>
           )}
 
-          {submitError && <Text style={styles.errorText}>{submitError}</Text>}
+          {submitError && (
+            <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
+              {submitError}
+            </Text>
+          )}
 
           <Pressable
             style={({ pressed }) => [
               styles.primaryBtn,
               disabled && styles.primaryBtnDisabled,
-              pressed && !disabled && { opacity: 0.9 },
+              pressed && !disabled && Platform.OS === "ios" && { opacity: 0.9 },
             ]}
+            android_ripple={{ color: "#FFFFFF22" }}
             onPress={handleSubmit}
             disabled={disabled}
             accessibilityRole="button"
+            accessibilityState={{ disabled }}
           >
             {isFetching ? (
               <ActivityIndicator color="#FAF6EE" />
             ) : (
-              <Text style={styles.primaryBtnText}>Sign in</Text>
+              <Text style={styles.primaryBtnText} maxFontSizeMultiplier={1.3}>
+                Sign in
+              </Text>
             )}
           </Pressable>
 
           <View style={styles.linkRow}>
-            <Text style={styles.linkRowText}>Don&apos;t have an account?</Text>
+            <Text style={styles.linkRowText} maxFontSizeMultiplier={1.3}>
+              Don&apos;t have an account?
+            </Text>
             <Link href="/(auth)/sign-up" asChild>
-              <Pressable hitSlop={8}>
-                <Text style={styles.linkText}>Sign up</Text>
+              <Pressable hitSlop={8} accessibilityRole="link">
+                <Text style={styles.linkText} maxFontSizeMultiplier={1.3}>
+                  Sign up
+                </Text>
               </Pressable>
             </Link>
           </View>
@@ -245,9 +322,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BRAND.bg },
   container: { padding: 24, paddingTop: 32, gap: 4 },
   header: { marginBottom: 24, gap: 6 },
-  brandWrap: {
-    marginBottom: 4,
-  },
+  brandWrap: { marginBottom: 4 },
   title: {
     fontFamily: "Inter_700Bold",
     color: BRAND.fg,
@@ -264,17 +339,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 12,
     backgroundColor: BRAND.card,
     borderColor: BRAND.border,
     borderWidth: 1,
     borderRadius: 14,
+    minHeight: 52,
+    paddingHorizontal: 16,
     paddingVertical: 14,
+    overflow: "hidden",
   },
   googleBtnText: {
     fontFamily: "Inter_600SemiBold",
     color: BRAND.fg,
     fontSize: 15,
+    includeFontPadding: false,
   },
   dividerRow: {
     flexDirection: "row",
@@ -296,13 +375,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginBottom: 6,
   },
+  passwordHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 12,
+  },
+  forgotText: {
+    fontFamily: "Inter_600SemiBold",
+    color: BRAND.primary,
+    fontSize: 13,
+    marginBottom: 6,
+  },
   input: {
     backgroundColor: BRAND.card,
     borderColor: BRAND.border,
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: Platform.OS === "android" ? 10 : 12,
+    minHeight: 48,
     fontFamily: "Inter_400Regular",
     fontSize: 15,
     color: BRAND.fg,
@@ -318,14 +410,17 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND.primary,
     borderRadius: 14,
     paddingVertical: 15,
+    minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   primaryBtnDisabled: { opacity: 0.4 },
   primaryBtnText: {
     fontFamily: "Inter_600SemiBold",
     color: BRAND.bg,
     fontSize: 16,
+    includeFontPadding: false,
   },
   linkRow: {
     flexDirection: "row",

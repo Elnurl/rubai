@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AtlasLogo } from "@/components/AtlasLogo";
+import { friendlyAuthError } from "@/lib/authErrors";
 
 const BRAND = {
   primary: "#0E7C5A",
@@ -25,58 +26,84 @@ const BRAND = {
   danger: "#B43E3E",
 };
 
-type Strategy = "totp" | "phone_code" | "backup_code";
+type Strategy = "email_code" | "totp" | "phone_code" | "backup_code";
 
 const STRATEGY_COPY: Record<
   Strategy,
-  { title: string; subtitle: string; placeholder: string }
+  { title: string; subtitle: (email?: string) => string; placeholder: string }
 > = {
+  email_code: {
+    title: "Verify it's you",
+    subtitle: (email) =>
+      email
+        ? `We just emailed a 6-digit code to ${email}. Enter it below to finish signing in.`
+        : "We just emailed you a 6-digit code. Enter it below to finish signing in.",
+    placeholder: "123456",
+  },
   totp: {
     title: "Enter your 6-digit code",
-    subtitle:
+    subtitle: () =>
       "Open your authenticator app (Google Authenticator, 1Password, Authy…) and type the current code.",
     placeholder: "123 456",
   },
   phone_code: {
     title: "Enter the SMS code",
-    subtitle:
+    subtitle: () =>
       "We sent a 6-digit code to your phone. Enter it below to finish signing in.",
     placeholder: "123 456",
   },
   backup_code: {
     title: "Enter a backup code",
-    subtitle:
+    subtitle: () =>
       "Use one of the backup codes you saved when you set up two-factor auth. Each code works once.",
     placeholder: "abcd-efgh",
   },
 };
 
+function debug(...args: unknown[]) {
+  if (__DEV__) {
+    // eslint-disable-next-line no-console
+    console.log("[auth/verify]", ...args);
+  }
+}
+
 function isStrategy(value: unknown): value is Strategy {
-  return value === "totp" || value === "phone_code" || value === "backup_code";
+  return (
+    value === "email_code" ||
+    value === "totp" ||
+    value === "phone_code" ||
+    value === "backup_code"
+  );
 }
 
 export default function VerifyScreen() {
   const router = useRouter();
   const { signIn, fetchStatus } = useSignIn();
   const isLoaded = fetchStatus !== "fetching";
-  const params = useLocalSearchParams<{ strategy?: string }>();
+  const params = useLocalSearchParams<{ strategy?: string; email?: string }>();
+  const emailHint = typeof params.email === "string" ? params.email : undefined;
 
-  // Pick a sensible default strategy. If we already have a valid strategy in
-  // the URL, use it. Otherwise prefer whatever the server reports as
-  // supported in this order: totp -> phone_code -> backup_code.
+  // For sign-in 2FA we look at supportedSecondFactors. For the
+  // "needs_client_trust" flow there's no factor list — Clerk just expects
+  // an email_code. We treat email_code as available whenever the parent
+  // route navigated us here with that strategy.
   const supported = useMemo<Strategy[]>(() => {
-    if (!signIn?.supportedSecondFactors) return [];
-    return signIn.supportedSecondFactors
+    const fromServer = (signIn?.supportedSecondFactors ?? [])
       .map((f) => f.strategy)
       .filter(isStrategy) as Strategy[];
-  }, [signIn?.supportedSecondFactors]);
+    if (params.strategy === "email_code" && !fromServer.includes("email_code")) {
+      return ["email_code", ...fromServer];
+    }
+    return fromServer;
+  }, [signIn?.supportedSecondFactors, params.strategy]);
 
   const initialStrategy: Strategy = useMemo(() => {
     if (isStrategy(params.strategy)) return params.strategy;
+    if (supported.includes("email_code")) return "email_code";
     if (supported.includes("totp")) return "totp";
     if (supported.includes("phone_code")) return "phone_code";
     if (supported.includes("backup_code")) return "backup_code";
-    return "totp";
+    return "email_code";
   }, [params.strategy, supported]);
 
   const [strategy, setStrategy] = useState<Strategy>(initialStrategy);
@@ -85,24 +112,36 @@ export default function VerifyScreen() {
   const [preparing, setPreparing] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  // Bumping this re-runs the auto-send effect — used by the "Resend code"
+  // button without having to round-trip through state changes that don't
+  // actually change the strategy.
+  const [sendNonce, setSendNonce] = useState(0);
 
-  // Guard: if the user lands on /verify outside of a real 2FA flow
-  // (e.g. via deep link, hard refresh, or back button after signing
-  // in), bounce them back to the sign-in screen so they don't get
-  // stuck on a screen that can't make progress.
+  // Guard: if the user lands on /verify outside of a real verification flow
+  // (e.g. via deep link, hard refresh, or back button after signing in),
+  // bounce them back so they don't get stuck on a screen with no path
+  // forward. Both `needs_second_factor` AND `needs_client_trust` are valid
+  // here — the latter is what Replit-managed Clerk emits for new-device
+  // verification. We require an EXPLICIT valid status before letting the
+  // user stay (and before the auto-send effect below fires) — otherwise
+  // we could end up calling sendEmailCode against a stale/uninitialized
+  // SignIn instance and 401-ing the user.
   useEffect(() => {
     if (!isLoaded || !signIn) return;
-    if (signIn.status && signIn.status !== "needs_second_factor") {
+    const ok =
+      signIn.status === "needs_second_factor" ||
+      signIn.status === "needs_client_trust";
+    if (!ok) {
+      debug("guard bounce — status =", signIn.status);
       router.replace("/sign-in");
     }
   }, [isLoaded, signIn, router]);
 
-  // Reconcile selected strategy with what the account actually supports.
-  // This matters when the URL hint (initialStrategy) was missing or
-  // incorrect — e.g. account only has SMS configured but we defaulted
-  // to TOTP. Without this the user could be stuck on a tab that has no
-  // valid path forward.
+  // If we routed here for a tab the account doesn't actually support, fall
+  // back to whatever IS available. Skips for email_code which is always
+  // available for client-trust verification.
   useEffect(() => {
+    if (strategy === "email_code") return;
     if (supported.length === 0) return;
     if (!supported.includes(strategy)) {
       setStrategy(supported[0]);
@@ -112,12 +151,19 @@ export default function VerifyScreen() {
     }
   }, [supported, strategy]);
 
-  // For phone_code we ask Clerk to send the SMS as soon as the user
-  // lands on this strategy — without sending, there's nothing for them
-  // to type. The Future API returns `{ error }` instead of throwing.
+  // Auto-send the code when the user lands on a strategy that requires
+  // server-side delivery (phone_code, email_code). TOTP/backup codes are
+  // generated on the user's side and don't need a send step.
+  // Status-gated so we never fire against a stale SignIn instance that
+  // got here via deep link / refresh — the guard effect above will be
+  // bouncing the user back in that case.
   useEffect(() => {
     if (!isLoaded || !signIn) return;
-    if (strategy !== "phone_code") return;
+    if (strategy !== "phone_code" && strategy !== "email_code") return;
+    if (strategy === "email_code" && signIn.status !== "needs_client_trust")
+      return;
+    if (strategy === "phone_code" && signIn.status !== "needs_second_factor")
+      return;
 
     let cancelled = false;
     setPreparing(true);
@@ -125,23 +171,28 @@ export default function VerifyScreen() {
     setInfo(null);
     void (async () => {
       try {
-        const { error } = await signIn.mfa.sendPhoneCode();
+        debug("sending", strategy);
+        const { error } =
+          strategy === "phone_code"
+            ? await signIn.mfa.sendPhoneCode()
+            : await signIn.mfa.sendEmailCode();
         if (cancelled) return;
         if (error) {
-          setSubmitError(
-            error.message ??
-              "We couldn't send the SMS code. Try again in a moment.",
-          );
+          debug("send error", error);
+          setSubmitError(friendlyAuthError(error));
           return;
         }
-        setInfo("We just texted you a code.");
+        setInfo(
+          strategy === "phone_code"
+            ? "We just texted you a code."
+            : emailHint
+              ? `We just emailed a code to ${emailHint}.`
+              : "We just emailed you a code.",
+        );
       } catch (err) {
         if (cancelled) return;
-        setSubmitError(
-          err instanceof Error
-            ? err.message
-            : "We couldn't send the SMS code. Try again.",
-        );
+        debug("send threw", err);
+        setSubmitError(friendlyAuthError(err));
       } finally {
         if (!cancelled) setPreparing(false);
       }
@@ -150,7 +201,7 @@ export default function VerifyScreen() {
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, signIn, strategy]);
+  }, [isLoaded, signIn, strategy, emailHint, sendNonce]);
 
   const handleSubmit = useCallback(async () => {
     if (!signIn) return;
@@ -162,24 +213,23 @@ export default function VerifyScreen() {
     }
     setSubmitting(true);
     try {
-      // Pick the right verify call for the chosen strategy. The Future
-      // API resolves with `{ error }` rather than throwing, so we
-      // surface that as the user-visible error string.
+      debug("verify attempt", { strategy });
       const { error } =
         strategy === "totp"
           ? await signIn.mfa.verifyTOTP({ code: trimmed })
           : strategy === "phone_code"
             ? await signIn.mfa.verifyPhoneCode({ code: trimmed })
-            : await signIn.mfa.verifyBackupCode({ code: trimmed });
+            : strategy === "backup_code"
+              ? await signIn.mfa.verifyBackupCode({ code: trimmed })
+              : await signIn.mfa.verifyEmailCode({ code: trimmed });
 
       if (error) {
-        setSubmitError(
-          error.message ??
-            "That code didn't work. Double-check and try again.",
-        );
+        debug("verify error", error);
+        setSubmitError(friendlyAuthError(error));
         return;
       }
 
+      debug("verify ok, status =", signIn.status);
       if (signIn.status === "complete") {
         await signIn.finalize({
           navigate: ({ session }) => {
@@ -196,11 +246,8 @@ export default function VerifyScreen() {
           : "Verification didn't complete. Try again.",
       );
     } catch (err) {
-      setSubmitError(
-        err instanceof Error
-          ? err.message
-          : "That code didn't work. Double-check and try again.",
-      );
+      debug("verify threw", err);
+      setSubmitError(friendlyAuthError(err));
     } finally {
       setSubmitting(false);
     }
@@ -208,6 +255,10 @@ export default function VerifyScreen() {
 
   const copy = STRATEGY_COPY[strategy];
   const disabled = submitting || preparing || code.trim().length === 0;
+  // Only show the strategy switcher when the user has more than one
+  // real second-factor option configured. For client-trust email_code
+  // there's nothing to switch between.
+  const showTabs = supported.length > 1 && strategy !== "email_code";
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -223,11 +274,15 @@ export default function VerifyScreen() {
             <View style={styles.brandWrap}>
               <AtlasLogo size="lg" />
             </View>
-            <Text style={styles.title}>{copy.title}</Text>
-            <Text style={styles.subtitle}>{copy.subtitle}</Text>
+            <Text style={styles.title} maxFontSizeMultiplier={1.4}>
+              {copy.title}
+            </Text>
+            <Text style={styles.subtitle} maxFontSizeMultiplier={1.4}>
+              {copy.subtitle(emailHint)}
+            </Text>
           </View>
 
-          {supported.length > 1 && (
+          {showTabs && (
             <View style={styles.tabs}>
               {supported.map((s) => (
                 <Pressable
@@ -239,6 +294,7 @@ export default function VerifyScreen() {
                     setInfo(null);
                   }}
                   style={[styles.tab, strategy === s && styles.tabActive]}
+                  android_ripple={{ color: "#0000000D" }}
                 >
                   <Text
                     style={[
@@ -250,16 +306,20 @@ export default function VerifyScreen() {
                       ? "Authenticator app"
                       : s === "phone_code"
                         ? "Text message"
-                        : "Backup code"}
+                        : s === "email_code"
+                          ? "Email"
+                          : "Backup code"}
                   </Text>
                 </Pressable>
               ))}
             </View>
           )}
 
-          <Text style={styles.label}>Code</Text>
+          <Text style={styles.label} maxFontSizeMultiplier={1.3}>
+            Code
+          </Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.codeInput]}
             value={code}
             onChangeText={setCode}
             placeholder={copy.placeholder}
@@ -267,22 +327,40 @@ export default function VerifyScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType={strategy === "backup_code" ? "default" : "number-pad"}
+            autoComplete={
+              strategy === "email_code" || strategy === "phone_code"
+                ? "one-time-code"
+                : undefined
+            }
+            textContentType={
+              strategy === "email_code" || strategy === "phone_code"
+                ? "oneTimeCode"
+                : undefined
+            }
+            maxLength={strategy === "backup_code" ? 32 : 8}
             editable={!submitting && !preparing}
             onSubmitEditing={handleSubmit}
             returnKeyType="go"
           />
 
           {info && !submitError && (
-            <Text style={styles.info}>{info}</Text>
+            <Text style={styles.info} maxFontSizeMultiplier={1.3}>
+              {info}
+            </Text>
           )}
-          {submitError && <Text style={styles.errorText}>{submitError}</Text>}
+          {submitError && (
+            <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
+              {submitError}
+            </Text>
+          )}
 
           <Pressable
             style={({ pressed }) => [
               styles.submit,
               disabled && { opacity: 0.5 },
-              pressed && !disabled && { opacity: 0.85 },
+              pressed && !disabled && Platform.OS === "ios" && { opacity: 0.85 },
             ]}
+            android_ripple={{ color: "#FFFFFF22" }}
             onPress={handleSubmit}
             disabled={disabled}
             accessibilityRole="button"
@@ -290,16 +368,38 @@ export default function VerifyScreen() {
             {submitting ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.submitText}>Verify and sign in</Text>
+              <Text style={styles.submitText} maxFontSizeMultiplier={1.3}>
+                Verify and sign in
+              </Text>
             )}
           </Pressable>
+
+          {(strategy === "email_code" || strategy === "phone_code") && (
+            <Pressable
+              hitSlop={8}
+              onPress={() => {
+                setCode("");
+                setSubmitError(null);
+                setSendNonce((n) => n + 1);
+              }}
+              disabled={preparing}
+              style={{ alignSelf: "center", marginTop: 12 }}
+              accessibilityRole="button"
+            >
+              <Text style={styles.linkText} maxFontSizeMultiplier={1.3}>
+                {preparing ? "Sending…" : "Resend code"}
+              </Text>
+            </Pressable>
+          )}
 
           <Pressable
             onPress={() => router.replace("/sign-in")}
             style={styles.backRow}
             accessibilityRole="button"
           >
-            <Text style={styles.backText}>Back to sign in</Text>
+            <Text style={styles.backText} maxFontSizeMultiplier={1.3}>
+              Back to sign in
+            </Text>
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -337,6 +437,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BRAND.border,
     backgroundColor: "transparent",
+    overflow: "hidden",
   },
   tabActive: {
     backgroundColor: BRAND.primary,
@@ -347,9 +448,7 @@ const styles = StyleSheet.create({
     color: BRAND.fg,
     fontSize: 13,
   },
-  tabTextActive: {
-    color: "#fff",
-  },
+  tabTextActive: { color: "#fff" },
   label: {
     fontFamily: "Inter_600SemiBold",
     color: BRAND.fg,
@@ -362,11 +461,18 @@ const styles = StyleSheet.create({
     borderColor: BRAND.border,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: Platform.OS === "android" ? 10 : 12,
+    minHeight: 48,
     fontFamily: "Inter_500Medium",
     color: BRAND.fg,
     fontSize: 16,
     backgroundColor: "#fff",
+  },
+  codeInput: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 22,
+    letterSpacing: 6,
+    textAlign: "center",
   },
   info: {
     color: BRAND.fg,
@@ -385,13 +491,21 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND.primary,
     borderRadius: 12,
     paddingVertical: 14,
+    minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   submitText: {
     color: "#fff",
     fontFamily: "Inter_700Bold",
     fontSize: 15,
+    includeFontPadding: false,
+  },
+  linkText: {
+    color: BRAND.primary,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
   },
   backRow: {
     alignSelf: "center",
