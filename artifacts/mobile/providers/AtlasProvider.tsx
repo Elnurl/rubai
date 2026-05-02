@@ -441,11 +441,32 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     setSyncStatus("loading");
     setSyncMessage(null);
 
+    // Safety net: under no circumstances should the user sit on the splash
+    // forever. If the boot async work hasn't flipped `loaded` within 10s
+    // (slow network, hung fetch, surprise re-render race, etc.) we force the
+    // UI past the splash so they can at least see the app and retry. Cleared
+    // on success in the boot work below.
+    const safetyTimer = setTimeout(() => {
+      if (cancelled) return;
+      // eslint-disable-next-line no-console
+      if (__DEV__) {
+        console.warn(
+          "[atlas] boot safety timeout fired — forcing loaded=true",
+        );
+      }
+      setSyncStatus("error");
+      setSyncMessage("Couldn't fully sync. You can keep using the app.");
+      setLoaded(true);
+    }, 10_000);
+
     // After every await in the boot async work we re-check ownership before
     // mutating React state. If the user signed out or switched accounts
     // mid-await, abandon the work — the new boot run owns the state.
     const stillBooting = (): boolean =>
       !cancelled && ownerRef.current === userId;
+
+    // eslint-disable-next-line no-console
+    if (__DEV__) console.log("[atlas] boot start for user", userId);
 
     void (async () => {
       // 1. Fast paint from per-user cache so the UI doesn't flash empty.
@@ -599,6 +620,11 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
         // eslint-disable-next-line no-console
         if (__DEV__) console.warn("[atlas] hydrate failed", err);
       } finally {
+        // Boot reached a terminal state (success or handled error) — the
+        // safety net is no longer needed.
+        clearTimeout(safetyTimer);
+        // eslint-disable-next-line no-console
+        if (__DEV__) console.log("[atlas] boot finished for user", userId);
         // Suppression is gated by ownership in schedulePush() too, but we
         // only lift it for the still-current owner. A stale boot returning
         // late should not re-enable pushes for the new owner.
@@ -610,6 +636,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelled = true;
+      clearTimeout(safetyTimer);
     };
   }, [clerkLoaded, isSignedIn, userId, adoptServerState, writeCacheSnapshot]);
 
