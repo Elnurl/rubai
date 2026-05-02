@@ -192,7 +192,7 @@ export default function IntakeScreen() {
                 { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
               ]}
             >
-              rubai is designing your intake form
+              RubAI is designing your intake form
             </Text>
           </View>
         ) : hasError ? (

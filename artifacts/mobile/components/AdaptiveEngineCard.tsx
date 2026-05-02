@@ -105,7 +105,7 @@ export function AdaptiveEngineCard({
             { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
           ]}
         >
-          As you reflect on tasks, rubai learns how you actually execute and
+          As you reflect on tasks, RubAI learns how you actually execute and
           updates this roadmap to match. Tap below to evolve it manually.
         </Text>
       )}
@@ -257,7 +257,7 @@ export function AdaptiveEngineCard({
             { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
           ]}
         >
-          Add a couple of reflections in Today first so rubai has signal to learn from.
+          Add a couple of reflections in Today first so RubAI has signal to learn from.
         </Text>
       )}
     </View>

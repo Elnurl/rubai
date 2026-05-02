@@ -136,7 +136,7 @@ export default function AccountScreen() {
       // signed-out, so we don't need to navigate here.
     };
     if (Platform.OS === "web") {
-      if (typeof window !== "undefined" && window.confirm("Sign out of rubai?")) {
+      if (typeof window !== "undefined" && window.confirm("Sign out of RubAI?")) {
         void doSignOut();
       }
     } else {
@@ -260,33 +260,6 @@ export default function AccountScreen() {
           >
             {tierInfo.tagline}
           </Text>
-
-          <Pressable
-            onPress={() => router.push("/plans")}
-            accessibilityRole="button"
-            accessibilityLabel="Change plan"
-            style={({ pressed }) => [
-              styles.changePlanBtn,
-              {
-                backgroundColor: colors.primary,
-                borderRadius: colors.radius,
-                opacity: pressed ? 0.85 : 1,
-              },
-            ]}
-          >
-            <Feather name="zap" size={14} color={colors.primaryForeground} />
-            <Text
-              style={[
-                styles.changePlanText,
-                {
-                  color: colors.primaryForeground,
-                  fontFamily: "Inter_600SemiBold",
-                },
-              ]}
-            >
-              Change plan
-            </Text>
-          </Pressable>
         </View>
 
         <Pressable
@@ -349,7 +322,7 @@ export default function AccountScreen() {
           <>
             <SectionHeader
               eyebrow="INSIGHTS"
-              title="What rubai has learned"
+              title="What RubAI has learned"
               subtitle="Built from your reflections and history."
             />
 
@@ -423,7 +396,7 @@ export default function AccountScreen() {
                   ]}
                 >
                   No insights yet. Long-press a task on Today and add a quick
-                  reflection — rubai will start building your profile after the
+                  reflection — RubAI will start building your profile after the
                   first refresh.
                 </Text>
               )}
@@ -569,7 +542,7 @@ export default function AccountScreen() {
                   { color: colors.foreground, fontFamily: "Inter_400Regular" },
                 ]}
               >
-                Run a quick re-evaluation. rubai will look at your last two
+                Run a quick re-evaluation. RubAI will look at your last two
                 weeks and decide whether to soften, hold, or push the plan.
               </Text>
               <AtlasButton
@@ -904,19 +877,6 @@ const styles = StyleSheet.create({
   planTagline: {
     fontSize: 13.5,
     lineHeight: 19,
-  },
-  changePlanBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-    marginTop: 12,
-  },
-  changePlanText: {
-    fontSize: 14,
-    letterSpacing: 0.2,
   },
   signOutBtn: {
     flexDirection: "row",

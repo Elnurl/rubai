@@ -1,29 +1,13 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
-import {
-  db,
-  usersTable,
-  userStateTable,
-  analyticsEventsTable,
-} from "@workspace/db";
+import { db, usersTable, userStateTable } from "@workspace/db";
 import {
   GetMeResponse,
   GetMeStateResponse,
   PutMeStateBody,
   PutMeStateResponse,
-  PutMeTierBody,
-  PutMeTierResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
-
-// Goal limits per tier — kept here as the server's source of truth so the
-// downgrade-safety check can't be bypassed by tampering with the client.
-// Mirrors `TIER_INFO` in the mobile app; if you change one, update both.
-const TIER_GOAL_LIMITS: Record<string, number> = {
-  free: 1,
-  pro: 5,
-  premium: 25,
-};
 
 const router: IRouter = Router();
 
@@ -43,98 +27,6 @@ router.get("/me", async (req, res): Promise<void> => {
       clerkUserId: user.clerkUserId,
       email: user.email,
       tier: user.tier,
-    }),
-  );
-});
-
-router.put("/me/tier", async (req, res): Promise<void> => {
-  const parsed = PutMeTierBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid tier" });
-    return;
-  }
-  const { tier: nextTier } = parsed.data;
-
-  const [user] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.id, req.userId!));
-  if (!user) {
-    res.status(404).json({ error: "User not found" });
-    return;
-  }
-
-  // No-op fast path: don't write or log when nothing is changing.
-  if (user.tier === nextTier) {
-    res.json(
-      PutMeTierResponse.parse({
-        clerkUserId: user.clerkUserId,
-        email: user.email,
-        tier: user.tier,
-      }),
-    );
-    return;
-  }
-
-  // Downgrade safety: if the user has more "active" goals (those with a
-  // generated roadmap) than the new tier permits, refuse rather than
-  // silently leaving them with an over-the-limit account.
-  const newLimit = TIER_GOAL_LIMITS[nextTier];
-  if (newLimit === undefined) {
-    res.status(400).json({ error: "Unknown tier" });
-    return;
-  }
-
-  const [state] = await db
-    .select()
-    .from(userStateTable)
-    .where(eq(userStateTable.userId, user.id));
-
-  const goals = (state?.goals as Array<{ roadmap?: unknown }> | undefined) ?? [];
-  const activeGoalCount = goals.filter(
-    (g) => g && g.roadmap !== null && g.roadmap !== undefined,
-  ).length;
-
-  if (activeGoalCount > newLimit) {
-    res.status(409).json({
-      error: `Downgrade blocked: you have ${activeGoalCount} active goals but the ${nextTier} plan only allows ${newLimit}. Remove ${activeGoalCount - newLimit} goal(s) first.`,
-    });
-    return;
-  }
-
-  const [updated] = await db
-    .update(usersTable)
-    .set({ tier: nextTier })
-    .where(eq(usersTable.id, user.id))
-    .returning();
-
-  // Best-effort analytics — never block the response on this.
-  void db
-    .insert(analyticsEventsTable)
-    .values({
-      userId: user.id,
-      eventType: "subscription.tier_changed",
-      payload: {
-        from: user.tier,
-        to: nextTier,
-        activeGoalCount,
-        manual: true,
-      },
-    })
-    .catch((err) =>
-      req.log.warn({ err }, "Failed to record subscription.tier_changed event"),
-    );
-
-  req.log.info(
-    { userId: user.id, from: user.tier, to: nextTier },
-    "Subscription tier updated (manual switch)",
-  );
-
-  res.json(
-    PutMeTierResponse.parse({
-      clerkUserId: updated.clerkUserId,
-      email: updated.email,
-      tier: updated.tier,
     }),
   );
 });

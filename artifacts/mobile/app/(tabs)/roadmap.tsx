@@ -67,7 +67,7 @@ export default function RoadmapScreen() {
         <EmptyState
           icon="map"
           title="No roadmap yet"
-          description="Finish intake and rubai will generate your personalized roadmap."
+          description="Finish intake and RubAI will generate your personalized roadmap."
         />
       </View>
     );

@@ -48,51 +48,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /me/tier:
-    put:
-      operationId: putMeTier
-      tags: [me]
-      summary: Update the signed-in user's subscription tier
-      description: |
-        Manually sets the user's subscription tier. Today this is a self-serve
-        switch with no payment validation — useful for development and beta
-        testing. In production this endpoint should be replaced (or guarded)
-        by a webhook handler from RevenueCat (mobile IAP) or Stripe (web
-        subscriptions) that writes both `users.tier` and a row in
-        `subscriptions`. The endpoint also refuses downgrades that would
-        leave the account over the new tier's goal limit.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/PutMeTierRequest"
-      responses:
-        "200":
-          description: Tier updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MeResponse"
-        "400":
-          description: Invalid tier
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "409":
-          description: Downgrade blocked — too many active goals for new tier
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
   /me/state:
     get:
       operationId: getMeState
@@ -328,16 +283,6 @@ components:
         error:
           type: string
       required: [error]
-
-    PutMeTierRequest:
-      type: object
-      description: Request body for switching the signed-in user's subscription tier.
-      properties:
-        tier:
-          type: string
-          enum: [free, pro, premium]
-          description: Target tier. Must be one of the known tiers.
-      required: [tier]
 
     MeResponse:
       type: object

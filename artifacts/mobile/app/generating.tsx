@@ -180,7 +180,7 @@ export default function GeneratingScreen() {
   }, [router]);
 
   const handleUpgrade = useCallback(() => {
-    router.push("/plans");
+    router.replace("/(tabs)/account");
   }, [router]);
 
   const planLabel = TIER_INFO[subscription.tier].label;

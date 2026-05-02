@@ -31,39 +31,6 @@ export const GetMeResponse = zod
   .describe("Public-safe identity and tier for the signed-in user.");
 
 /**
- * Manually sets the user's subscription tier. Today this is a self-serve
-switch with no payment validation — useful for development and beta
-testing. In production this endpoint should be replaced (or guarded)
-by a webhook handler from RevenueCat (mobile IAP) or Stripe (web
-subscriptions) that writes both `users.tier` and a row in
-`subscriptions`. The endpoint also refuses downgrades that would
-leave the account over the new tier's goal limit.
-
- * @summary Update the signed-in user's subscription tier
- */
-export const PutMeTierBody = zod
-  .object({
-    tier: zod
-      .enum(["free", "pro", "premium"])
-      .describe("Target tier. Must be one of the known tiers."),
-  })
-  .describe(
-    "Request body for switching the signed-in user's subscription tier.",
-  );
-
-export const PutMeTierResponse = zod
-  .object({
-    clerkUserId: zod.string(),
-    email: zod.union([zod.string(), zod.null()]),
-    tier: zod
-      .string()
-      .describe(
-        'Server-side subscription tier. \"free\" today; later \"pro\" etc.',
-      ),
-  })
-  .describe("Public-safe identity and tier for the signed-in user.");
-
-/**
  * @summary Full personal state for the signed-in user (goals, prefs, draft)
  */
 export const GetMeStateResponse = zod.object({

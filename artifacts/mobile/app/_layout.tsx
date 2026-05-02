@@ -128,7 +128,6 @@ function RootLayoutNav() {
       <Stack.Screen name="intake" />
       <Stack.Screen name="generating" />
       <Stack.Screen name="replace-goal" />
-      <Stack.Screen name="plans" options={{ presentation: "modal" }} />
       <Stack.Screen name="(tabs)" />
     </Stack>
   );

@@ -129,7 +129,7 @@ export default function WelcomeScreen() {
               { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
             ]}
           >
-            Tell rubai any goal — career, fitness, study, money, creative,
+            Tell RubAI any goal — career, fitness, study, money, creative,
             personal — and it will generate a smart intake form, then build a
             real plan around your time and how you actually behave.
           </Text>
@@ -179,7 +179,7 @@ export default function WelcomeScreen() {
               { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
             ]}
           >
-            Be specific if you can. rubai will generate a tailored intake form
+            Be specific if you can. RubAI will generate a tailored intake form
             for your exact goal.
           </Text>
         </Animated.View>
@@ -220,7 +220,7 @@ export default function WelcomeScreen() {
               { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
             ]}
           >
-            rubai adapts as you go. Skip a day and the plan softens. Stack wins
+            RubAI adapts as you go. Skip a day and the plan softens. Stack wins
             and it pushes you.
           </Text>
         </View>

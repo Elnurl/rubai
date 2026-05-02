@@ -25,7 +25,7 @@ export const GOAL_META: Record<GoalType, GoalMeta> = {
     iconLib: "ionicons",
     icon: "language",
     opener:
-      "Welcome. I'm rubai. We're going to build a real plan to land your IELTS band. To start — what target band score do you need, by what month, and what is the score for?",
+      "Welcome. I'm RubAI. We're going to build a real plan to land your IELTS band. To start — what target band score do you need, by what month, and what is the score for?",
   },
   programming: {
     label: "Learning Programming",
@@ -34,7 +34,7 @@ export const GOAL_META: Record<GoalType, GoalMeta> = {
     iconLib: "ionicons",
     icon: "code-slash",
     opener:
-      "I'm rubai. We'll move you from where you are now to shipping real software. First — what specifically do you want to be able to build, and is there a deadline driving this?",
+      "I'm RubAI. We'll move you from where you are now to shipping real software. First — what specifically do you want to be able to build, and is there a deadline driving this?",
   },
   fitness: {
     label: "Fitness Goals",
@@ -43,7 +43,7 @@ export const GOAL_META: Record<GoalType, GoalMeta> = {
     iconLib: "ionicons",
     icon: "barbell",
     opener:
-      "rubai here. We'll build a fitness plan that respects your real life. To begin — what's the specific outcome (lose fat, gain muscle, run a distance, athletic milestone) and when do you want it by?",
+      "RubAI here. We'll build a fitness plan that respects your real life. To begin — what's the specific outcome (lose fat, gain muscle, run a distance, athletic milestone) and when do you want it by?",
   },
   finance: {
     label: "Financial Improvement",
@@ -52,7 +52,7 @@ export const GOAL_META: Record<GoalType, GoalMeta> = {
     iconLib: "ionicons",
     icon: "trending-up",
     opener:
-      "I'm rubai. Money goals only work when the plan is honest. Tell me — what financial outcome are you chasing (saving target, debt clear, income jump), and what's your deadline?",
+      "I'm RubAI. Money goals only work when the plan is honest. Tell me — what financial outcome are you chasing (saving target, debt clear, income jump), and what's your deadline?",
   },
   car: {
     label: "Buying a Car",
@@ -61,7 +61,7 @@ export const GOAL_META: Record<GoalType, GoalMeta> = {
     iconLib: "ionicons",
     icon: "car-sport",
     opener:
-      "Welcome. I'm rubai. Buying a car is a campaign, not a wish. To start — what kind of car are you targeting, and what's your real deadline to be driving it?",
+      "Welcome. I'm RubAI. Buying a car is a campaign, not a wish. To start — what kind of car are you targeting, and what's your real deadline to be driving it?",
   },
   custom: {
     label: "Custom Goal",
@@ -74,7 +74,7 @@ export const GOAL_META: Record<GoalType, GoalMeta> = {
 };
 
 export function customOpener(title: string): string {
-  return `Welcome. I'm rubai. You said: "${title.trim()}". I take that seriously. To turn it into a real plan — what's the specific outcome you'll be able to see, and what's your honest deadline?`;
+  return `Welcome. I'm RubAI. You said: "${title.trim()}". I take that seriously. To turn it into a real plan — what's the specific outcome you'll be able to see, and what's your honest deadline?`;
 }
 
 export function goalLabel(profile: { goalType: GoalType; customGoalTitle?: string }): string {
