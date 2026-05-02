@@ -83,21 +83,47 @@ export default function SignUpScreen() {
         setSubmitError(friendlyAuthError(error));
         return;
       }
-      debug("password ok, sending email code; status =", signUp.status);
+      debug("password ok, status =", signUp.status, {
+        unverified: signUp.unverifiedFields,
+        missing: signUp.missingFields,
+      });
+      // Some Clerk instances (e.g. when email verification is disabled) finish
+      // the sign-up immediately. Don't sit on the verification screen waiting
+      // for a code that will never come — finalize and route home.
+      if (signUp.status === "complete") {
+        await signUp.finalize({
+          navigate: ({ session }) => {
+            if (session?.currentTask) return;
+            router.replace("/");
+          },
+        });
+        return;
+      }
+      const needsEmailVerify =
+        signUp.status === "missing_requirements" &&
+        signUp.unverifiedFields?.includes("email_address");
+      if (!needsEmailVerify) {
+        setSubmitError(
+          "We couldn't continue your sign-up. Please try again or contact support.",
+        );
+        return;
+      }
       const { error: sendErr } = await signUp.verifications.sendEmailCode();
       if (sendErr) {
         debug("sendEmailCode error", sendErr);
         setSubmitError(friendlyAuthError(sendErr));
         return;
       }
-      setInfo(`We just emailed a 6-digit code to ${emailAddress}.`);
+      setInfo(
+        `We emailed a 6-digit code to ${emailAddress}. It can take a minute — be sure to check your spam or promotions folder.`,
+      );
     } catch (err) {
       debug("submit threw", err);
       setSubmitError(friendlyAuthError(err));
     } finally {
       setSubmitting(false);
     }
-  }, [signUp, emailAddress, password]);
+  }, [signUp, emailAddress, password, router]);
 
   const handleVerify = useCallback(async () => {
     if (!signUp) return;
@@ -151,7 +177,9 @@ export default function SignUpScreen() {
         setSubmitError(friendlyAuthError(error));
         return;
       }
-      setInfo(`A new code is on its way to ${emailAddress}.`);
+      setInfo(
+        `A new code is on its way to ${emailAddress}. Check your spam or promotions folder if you don't see it.`,
+      );
     } catch (err) {
       setSubmitError(friendlyAuthError(err));
     } finally {
@@ -198,6 +226,14 @@ export default function SignUpScreen() {
     signUp.status === "missing_requirements" &&
     signUp.unverifiedFields?.includes("email_address") &&
     (signUp.missingFields?.length ?? 0) === 0;
+
+  // Surface any global Clerk errors (captcha rejection, bot protection,
+  // rate-limits, network problems) that aren't returned via the .password()
+  // promise but show up in the hook's `errors` object.
+  const globalClerkError =
+    !submitError && errors?.global && errors.global.length > 0
+      ? friendlyAuthError(errors.global[0])
+      : null;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -252,9 +288,18 @@ export default function SignUpScreen() {
                   {info}
                 </Text>
               )}
+              <Text style={styles.hintText} maxFontSizeMultiplier={1.3}>
+                Codes can take up to a minute. If nothing arrives, check your
+                spam or promotions folder, then tap Resend code.
+              </Text>
               {submitError && (
                 <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
                   {submitError}
+                </Text>
+              )}
+              {globalClerkError && (
+                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
+                  {globalClerkError}
                 </Text>
               )}
 
@@ -388,6 +433,11 @@ export default function SignUpScreen() {
               {submitError && (
                 <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
                   {submitError}
+                </Text>
+              )}
+              {globalClerkError && (
+                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
+                  {globalClerkError}
                 </Text>
               )}
 
@@ -525,6 +575,13 @@ const styles = StyleSheet.create({
     color: BRAND.fg,
     fontSize: 13,
     marginTop: 6,
+  },
+  hintText: {
+    fontFamily: "Inter_400Regular",
+    color: BRAND.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 8,
   },
   primaryBtn: {
     marginTop: 20,

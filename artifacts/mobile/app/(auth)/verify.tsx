@@ -348,6 +348,12 @@ export default function VerifyScreen() {
               {info}
             </Text>
           )}
+          {strategy === "email_code" && (
+            <Text style={styles.hintText} maxFontSizeMultiplier={1.3}>
+              Codes can take up to a minute. If nothing arrives, check your
+              spam or promotions folder, then tap Resend code.
+            </Text>
+          )}
           {submitError && (
             <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
               {submitError}
@@ -479,6 +485,13 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontFamily: "Inter_400Regular",
     fontSize: 13,
+  },
+  hintText: {
+    color: BRAND.muted,
+    marginTop: 8,
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    lineHeight: 17,
   },
   errorText: {
     color: BRAND.danger,
