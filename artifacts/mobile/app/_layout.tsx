@@ -22,7 +22,7 @@ import { setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import colors from "@/constants/colors";
-import { AtlasProvider } from "@/providers/AtlasProvider";
+import { AtlasProvider, useAtlas } from "@/providers/AtlasProvider";
 
 function resolveApiBaseUrl(): string | null {
   // 1. Explicit env var baked in at bundle time (set by the dev workflow).
@@ -88,8 +88,21 @@ const queryClient = new QueryClient({
   },
 });
 
+// Routes a brand-new (no goals) user is allowed to be on. Anything else
+// kicks them back to /welcome so the only escape is creating a goal. We
+// include the goal-add/replace flows here too — existing users use those,
+// and they're harmless for a new user (the flow itself enforces it).
+const ONBOARDING_ROUTES = new Set([
+  "welcome",
+  "intake",
+  "generating",
+  "new-goal",
+  "replace-goal",
+]);
+
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { loaded: atlasLoaded, goals, pendingDraft } = useAtlas();
   const segments = useSegments();
   const router = useRouter();
 
@@ -103,12 +116,65 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isLoaded) return;
     const inAuthGroup = segments[0] === "(auth)";
-    if (!isSignedIn && !inAuthGroup) {
-      router.replace("/(auth)/sign-in");
-    } else if (isSignedIn && inAuthGroup) {
-      router.replace("/");
+
+    // ---- Auth gate ----
+    if (!isSignedIn) {
+      if (!inAuthGroup) router.replace("/(auth)/sign-in");
+      return;
     }
-  }, [isLoaded, isSignedIn, segments, router]);
+    if (inAuthGroup) {
+      router.replace("/");
+      return;
+    }
+
+    const currentRoute = segments[0];
+    const isIndex = currentRoute === undefined;
+    const inOnboarding =
+      currentRoute !== undefined && ONBOARDING_ROUTES.has(currentRoute);
+    const hasGoals = goals.length > 0;
+
+    // ---- Pre-hydration holding pattern ----
+    // Until AtlasProvider has loaded goals from cache + server we don't yet
+    // know whether this user is brand-new or returning. A deep link or a
+    // restored web session could otherwise drop them straight onto /(tabs),
+    // /plans, /welcome, etc. before the gate below can decide. Force them
+    // onto the splash route, which already waits on `loaded` and then routes
+    // them to /welcome or /(tabs) correctly.
+    if (!atlasLoaded) {
+      if (!isIndex) router.replace("/");
+      return;
+    }
+
+    // ---- Goal gate (post-hydration) ----
+
+    if (!hasGoals && !inOnboarding && !isIndex) {
+      // New user trying to reach tabs / plans / anywhere else. Force them
+      // back into the goal-creation funnel — if they already started a
+      // draft, drop them where /index would have, otherwise welcome.
+      if (pendingDraft) {
+        router.replace(
+          pendingDraft.stage === "ready_to_generate" ? "/generating" : "/intake",
+        );
+      } else {
+        router.replace("/welcome");
+      }
+      return;
+    }
+
+    if (hasGoals && currentRoute === "welcome") {
+      // Existing user landed on welcome — they should never see it again.
+      // Send them to the daily/today tab.
+      router.replace("/(tabs)");
+    }
+  }, [
+    isLoaded,
+    isSignedIn,
+    segments,
+    router,
+    atlasLoaded,
+    goals.length,
+    pendingDraft,
+  ]);
 
   return <>{children}</>;
 }
