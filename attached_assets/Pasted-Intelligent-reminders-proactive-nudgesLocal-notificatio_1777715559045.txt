@@ -1,0 +1,15 @@
+Intelligent reminders / proactive nudgesLocal notifications scheduled from Account tab (daily plan reminder at user-set time + weekly performance summary)Partial — local-only, requires the OS to honor; no server-driven push  / Performance diagnostics / progress analysisAccount tab shows current snapshot; Today tab has streak chip + coach note; Roadmap tab has risks-to-watchPartial — no historical charts or trend graphs/ Image / document uploads as part of the workspacePaperclip in coach attaches a filename note only — the model is told a file was shared but doesn't see itCosmetic/ Monthly subscription billingPlans screen renders Free / Pro / Premium with state changes, but it's a UI preview — no Stripe / RevenueCat / IAPMissing (intentional — you said UI only for now) /Financial calculators / domain-specific tools (the "buying a car" example)None — the AI can talk about it but there's no affordability calculator, savings tracker, IELTS skill scorer, etc.Missin//Honest gaps relative to the docs
+
+These are the spots where the docs ask for more than what's there:
+
+Reminders are local-only. If the OS kills the schedule or the user is on web, nothing fires. The vision implies a system that proactively reaches out — that means server-side push (Expo push tokens + a cron / scheduled job).
+
+No historical reporting view. The Account tab shows the current snapshot of the behavioral profile, not "your completion rate over the last 8 weeks" or "your motivation trend chart." The docs talk about AI-generated behavioral reports as a deliverable.
+
+Attachments are theatrical. The paperclip lets the user feel like they uploaded something, but the model never sees the file. If "uploaded data" is part of the workspace promise, this needs real handling (object storage + vision or document parsing).
+
+No real billing. Plans screen is a UI preview. Monthly subscription is in the vision; right now nobody can actually pay.
+
+No domain-specific tools. A car-buying user gets the same chat-and-plan system as an IELTS user. The vision in doc 2 implies the AI should be able to do finance math, not just talk about it. Same for skill-specific scoring.
+
+No explicit success-probability surface. The roadmap shows risks; there's no "based on the last 4 weeks, your odds of hitting your milestone on time are X%."
