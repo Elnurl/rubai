@@ -19,7 +19,9 @@ export function AtlasLogo({ size = "md" }: Props) {
   const dotColor = isDark ? colors.primary : colors.foreground;
 
   const titleSize = size === "lg" ? 32 : size === "md" ? 24 : 18;
-  const dotSize = Math.round(titleSize * 0.198);
+  // +5% size vs the previous 0.198 multiplier so the dot reads a touch
+  // bolder above the i-stem at every breakpoint.
+  const dotSize = Math.round(titleSize * 0.208);
 
   // Wordmark is "ruba" + dotless-i (U+0131) so the green BrandDot can sit
   // alone above the i-stem. Inter is bundled as a custom font (not a system
@@ -52,7 +54,7 @@ export function AtlasLogo({ size = "md" }: Props) {
           pointerEvents="none"
           style={{
             position: "absolute",
-            top: Math.round(titleSize * 0.04),
+            top: Math.round(titleSize * 0.06),
             left: 0,
             right: 0,
             alignItems: "center",
@@ -64,7 +66,7 @@ export function AtlasLogo({ size = "md" }: Props) {
               height: dotSize,
               borderRadius: dotSize / 2,
               backgroundColor: dotColor,
-              marginLeft: Math.round(titleSize * 0.05),
+              marginLeft: Math.round(titleSize * 0.07),
             }}
           />
         </View>
