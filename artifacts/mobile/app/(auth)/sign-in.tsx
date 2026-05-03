@@ -1,4 +1,4 @@
-import { useSignIn, useSSO } from "@clerk/expo";
+import { useAuth, useSignIn, useSSO } from "@clerk/expo";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import { Link, useRouter } from "expo-router";
@@ -69,6 +69,17 @@ export default function SignInScreen() {
   const router = useRouter();
   const { signIn, errors, fetchStatus } = useSignIn();
   const { startSSOFlow } = useSSO();
+  const { isLoaded: authLoaded, isSignedIn } = useAuth();
+
+  // If a session already exists (e.g. user navigated back to /sign-in after a
+  // prior successful login, or restored a cached Clerk session), Clerk will
+  // reject any new sign-in attempt with "You're already signed in." Send
+  // them straight to the app instead of letting them re-enter credentials.
+  useEffect(() => {
+    if (authLoaded && isSignedIn) {
+      router.replace("/");
+    }
+  }, [authLoaded, isSignedIn, router]);
 
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
@@ -81,10 +92,27 @@ export default function SignInScreen() {
     setSubmitError(null);
     setSubmitting(true);
     try {
+      // Defensive: if a session already exists (Clerk hydrated late or the
+      // user navigated back here from inside the app), don't even attempt
+      // signIn.password — it will fail with "You're already signed in."
+      // Just route them into the app.
+      if (isSignedIn) {
+        router.replace("/");
+        return;
+      }
       debug("password attempt", { email: emailAddress });
       const { error } = await signIn.password({ emailAddress, password });
       if (error) {
         debug("password error", error);
+        // Clerk surfaces this as `session_exists` in error.code. If we
+        // somehow got here despite the guards above (race), still recover
+        // gracefully instead of dead-ending the user on the sign-in form.
+        const code = (error as { code?: string }).code;
+        const msg = (error as { message?: string }).message ?? "";
+        if (code === "session_exists" || /already signed in/i.test(msg)) {
+          router.replace("/");
+          return;
+        }
         setSubmitError(friendlyAuthError(error));
         return;
       }
