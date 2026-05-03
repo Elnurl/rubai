@@ -5,3 +5,4 @@ export * from "./messages";
 export * from "./subscriptions";
 export * from "./users";
 export * from "./user_state";
+export * from "./legal_acceptances";

@@ -260,6 +260,13 @@ export default function AccountScreen() {
             subtitle="Control what's stored"
             onPress={() => router.push("/account/privacy")}
           />
+          <Divider />
+          <NavRow
+            icon="file-text"
+            title="Legal"
+            subtitle="Privacy Policy & Terms of Service"
+            onPress={() => router.push("/legal/document?type=privacy_policy")}
+          />
         </Group>
 
         {/* EXPERIENCE */}

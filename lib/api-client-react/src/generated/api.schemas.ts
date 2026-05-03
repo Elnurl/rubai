@@ -694,7 +694,103 @@ export interface RoadmapEvolutionResponse {
   evolvedAt: string;
 }
 
+export type LegalDocumentType =
+  (typeof LegalDocumentType)[keyof typeof LegalDocumentType];
+
+export const LegalDocumentType = {
+  privacy_policy: "privacy_policy",
+  terms_of_service: "terms_of_service",
+} as const;
+
+export type LegalLocale = (typeof LegalLocale)[keyof typeof LegalLocale];
+
+export const LegalLocale = {
+  en: "en",
+  az: "az",
+  ru: "ru",
+  ar: "ar",
+  zh: "zh",
+  es: "es",
+} as const;
+
+export interface LegalCurrentVersionEntry {
+  type: LegalDocumentType;
+  version: string;
+}
+
+export interface LegalCurrentResponse {
+  documents: LegalCurrentVersionEntry[];
+  supportedLocales: LegalLocale[];
+  fallbackLocale: LegalLocale;
+}
+
+export interface LegalDocumentResponse {
+  type: LegalDocumentType;
+  version: string;
+  locale: LegalLocale;
+  title: string;
+  body: string;
+  /**
+   * Convenience-translation notice when the requested locale is not the authoritative one (English).
+   * @nullable
+   */
+  authoritativeNotice: string | null;
+}
+
+export interface LegalAcceptanceRecord {
+  type: LegalDocumentType;
+  /** @nullable */
+  acceptedVersion: string | null;
+  currentVersion: string;
+  /** @nullable */
+  acceptedAt: string | null;
+  /** @nullable */
+  locale: string | null;
+  upToDate: boolean;
+}
+
+export interface LegalAcceptancesState {
+  documents: LegalAcceptanceRecord[];
+  allUpToDate: boolean;
+}
+
+export interface LegalAcceptItem {
+  type: LegalDocumentType;
+  version: string;
+}
+
+export interface LegalAcceptInput {
+  locale: LegalLocale;
+  /** @minItems 1 */
+  documents: LegalAcceptItem[];
+}
+
 export type GoogleCalendarTodayEventsParams = {
   calendarId: string;
   timeZone?: string;
 };
+
+export type LegalGetDocumentParams = {
+  type: LegalGetDocumentType;
+  locale?: LegalGetDocumentLocale;
+};
+
+export type LegalGetDocumentType =
+  (typeof LegalGetDocumentType)[keyof typeof LegalGetDocumentType];
+
+export const LegalGetDocumentType = {
+  privacy_policy: "privacy_policy",
+  terms_of_service: "terms_of_service",
+} as const;
+
+export type LegalGetDocumentLocale =
+  (typeof LegalGetDocumentLocale)[keyof typeof LegalGetDocumentLocale];
+
+export const LegalGetDocumentLocale = {
+  en: "en",
+  az: "az",
+  ru: "ru",
+  ar: "ar",
+  zh: "zh",
+  es: "es",
+} as const;

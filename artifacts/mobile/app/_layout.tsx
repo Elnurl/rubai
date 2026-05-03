@@ -18,7 +18,11 @@ import { Platform, useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
+import {
+  setAuthTokenGetter,
+  setBaseUrl,
+  useLegalMyAcceptances,
+} from "@workspace/api-client-react";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import colors from "@/constants/colors";
@@ -113,9 +117,20 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     };
   }, [getToken]);
 
+  // Only fetch the legal-acceptance state once we know the user is signed in,
+  // and let the AuthGate fall through (i.e. permit any route) until the
+  // result is back so we don't bounce them unnecessarily on cold start.
+  // The hook only fires its underlying request once an auth token is
+  // available (customFetch awaits the registered token getter), so we don't
+  // need to gate it manually with `enabled` — and gating with `enabled`
+  // would otherwise force us to also supply a queryKey. Once signed-out the
+  // token getter returns null and the call short-circuits.
+  const { data: legalState, isFetched: legalFetched } = useLegalMyAcceptances();
+
   useEffect(() => {
     if (!isLoaded) return;
     const inAuthGroup = segments[0] === "(auth)";
+    const inLegalGroup = segments[0] === "legal";
 
     // ---- Auth gate ----
     if (!isSignedIn) {
@@ -127,11 +142,39 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // ---- Legal gate ----
+    // After sign-in but before any other gating, require the user to accept
+    // the current Privacy Policy + Terms of Service. We only act once the
+    // /legal/me query has resolved, so a slow network never traps users on a
+    // blank gate.
+    if (legalFetched && legalState && !legalState.allUpToDate) {
+      if (!inLegalGroup) {
+        router.replace("/legal/consent");
+      }
+      return;
+    }
+    // Conversely, if the user *is* up to date but somehow lands on the
+    // legal flow (e.g. via deep link), let them out.
+    if (
+      legalFetched &&
+      legalState &&
+      legalState.allUpToDate &&
+      inLegalGroup &&
+      segments[1] === "consent"
+    ) {
+      router.replace("/");
+      return;
+    }
+
     const currentRoute = segments[0];
     const isIndex = currentRoute === undefined;
     const inOnboarding =
       currentRoute !== undefined && ONBOARDING_ROUTES.has(currentRoute);
     const hasGoals = goals.length > 0;
+
+    // Don't apply the goal gate while we're inside the legal flow — the
+    // user is already being held there by the block above.
+    if (inLegalGroup) return;
 
     // ---- Pre-hydration holding pattern ----
     // Until AtlasProvider has loaded goals from cache + server we don't yet
@@ -174,6 +217,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     atlasLoaded,
     goals.length,
     pendingDraft,
+    legalFetched,
+    legalState,
   ]);
 
   return <>{children}</>;
@@ -199,6 +244,7 @@ function RootLayoutNav() {
       <Stack.Screen name="account/settings" />
       <Stack.Screen name="account/privacy" />
       <Stack.Screen name="account/notifications" />
+      <Stack.Screen name="legal" />
       <Stack.Screen name="(tabs)" />
     </Stack>
   );

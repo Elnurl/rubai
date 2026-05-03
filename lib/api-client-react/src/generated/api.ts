@@ -39,6 +39,11 @@ import type {
   IntakeQuestionsResponse,
   IntakeSubmitRequest,
   IntakeSubmitResponse,
+  LegalAcceptInput,
+  LegalAcceptancesState,
+  LegalCurrentResponse,
+  LegalDocumentResponse,
+  LegalGetDocumentParams,
   MeResponse,
   MeStateConflictResponse,
   MeStateRequest,
@@ -1836,4 +1841,337 @@ export const useGoogleCalendarSyncPlan = <
   TContext
 > => {
   return useMutation(getGoogleCalendarSyncPlanMutationOptions(options));
+};
+
+/**
+ * @summary Current versions of each legal document and the supported locales
+ */
+export const getLegalCurrentVersionsUrl = () => {
+  return `/api/legal/current`;
+};
+
+export const legalCurrentVersions = async (
+  options?: RequestInit,
+): Promise<LegalCurrentResponse> => {
+  return customFetch<LegalCurrentResponse>(getLegalCurrentVersionsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getLegalCurrentVersionsQueryKey = () => {
+  return [`/api/legal/current`] as const;
+};
+
+export const getLegalCurrentVersionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof legalCurrentVersions>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof legalCurrentVersions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getLegalCurrentVersionsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof legalCurrentVersions>>
+  > = ({ signal }) => legalCurrentVersions({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof legalCurrentVersions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type LegalCurrentVersionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof legalCurrentVersions>>
+>;
+export type LegalCurrentVersionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Current versions of each legal document and the supported locales
+ */
+
+export function useLegalCurrentVersions<
+  TData = Awaited<ReturnType<typeof legalCurrentVersions>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof legalCurrentVersions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getLegalCurrentVersionsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Full text of a legal document in a given locale
+ */
+export const getLegalGetDocumentUrl = (params: LegalGetDocumentParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/legal/document?${stringifiedParams}`
+    : `/api/legal/document`;
+};
+
+export const legalGetDocument = async (
+  params: LegalGetDocumentParams,
+  options?: RequestInit,
+): Promise<LegalDocumentResponse> => {
+  return customFetch<LegalDocumentResponse>(getLegalGetDocumentUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getLegalGetDocumentQueryKey = (
+  params?: LegalGetDocumentParams,
+) => {
+  return [`/api/legal/document`, ...(params ? [params] : [])] as const;
+};
+
+export const getLegalGetDocumentQueryOptions = <
+  TData = Awaited<ReturnType<typeof legalGetDocument>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: LegalGetDocumentParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof legalGetDocument>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getLegalGetDocumentQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof legalGetDocument>>
+  > = ({ signal }) => legalGetDocument(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof legalGetDocument>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type LegalGetDocumentQueryResult = NonNullable<
+  Awaited<ReturnType<typeof legalGetDocument>>
+>;
+export type LegalGetDocumentQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Full text of a legal document in a given locale
+ */
+
+export function useLegalGetDocument<
+  TData = Awaited<ReturnType<typeof legalGetDocument>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: LegalGetDocumentParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof legalGetDocument>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getLegalGetDocumentQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Latest acceptance per document for the signed-in user
+ */
+export const getLegalMyAcceptancesUrl = () => {
+  return `/api/legal/me`;
+};
+
+export const legalMyAcceptances = async (
+  options?: RequestInit,
+): Promise<LegalAcceptancesState> => {
+  return customFetch<LegalAcceptancesState>(getLegalMyAcceptancesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getLegalMyAcceptancesQueryKey = () => {
+  return [`/api/legal/me`] as const;
+};
+
+export const getLegalMyAcceptancesQueryOptions = <
+  TData = Awaited<ReturnType<typeof legalMyAcceptances>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof legalMyAcceptances>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getLegalMyAcceptancesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof legalMyAcceptances>>
+  > = ({ signal }) => legalMyAcceptances({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof legalMyAcceptances>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type LegalMyAcceptancesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof legalMyAcceptances>>
+>;
+export type LegalMyAcceptancesQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Latest acceptance per document for the signed-in user
+ */
+
+export function useLegalMyAcceptances<
+  TData = Awaited<ReturnType<typeof legalMyAcceptances>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof legalMyAcceptances>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getLegalMyAcceptancesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Record acceptance of one or more legal documents at their current versions
+ */
+export const getLegalAcceptUrl = () => {
+  return `/api/legal/accept`;
+};
+
+export const legalAccept = async (
+  legalAcceptInput: LegalAcceptInput,
+  options?: RequestInit,
+): Promise<LegalAcceptancesState> => {
+  return customFetch<LegalAcceptancesState>(getLegalAcceptUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(legalAcceptInput),
+  });
+};
+
+export const getLegalAcceptMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof legalAccept>>,
+    TError,
+    { data: BodyType<LegalAcceptInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof legalAccept>>,
+  TError,
+  { data: BodyType<LegalAcceptInput> },
+  TContext
+> => {
+  const mutationKey = ["legalAccept"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof legalAccept>>,
+    { data: BodyType<LegalAcceptInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return legalAccept(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type LegalAcceptMutationResult = NonNullable<
+  Awaited<ReturnType<typeof legalAccept>>
+>;
+export type LegalAcceptMutationBody = BodyType<LegalAcceptInput>;
+export type LegalAcceptMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Record acceptance of one or more legal documents at their current versions
+ */
+export const useLegalAccept = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof legalAccept>>,
+    TError,
+    { data: BodyType<LegalAcceptInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof legalAccept>>,
+  TError,
+  { data: BodyType<LegalAcceptInput> },
+  TContext
+> => {
+  return useMutation(getLegalAcceptMutationOptions(options));
 };

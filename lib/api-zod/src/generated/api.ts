@@ -1571,3 +1571,86 @@ export const GoogleCalendarSyncPlanResponse = zod.object({
     .array(zod.number())
     .describe("Input task indices (0-based) that were successfully written."),
 });
+
+/**
+ * @summary Current versions of each legal document and the supported locales
+ */
+export const LegalCurrentVersionsResponse = zod.object({
+  documents: zod.array(
+    zod.object({
+      type: zod.enum(["privacy_policy", "terms_of_service"]),
+      version: zod.string(),
+    }),
+  ),
+  supportedLocales: zod.array(zod.enum(["en", "az", "ru", "ar", "zh", "es"])),
+  fallbackLocale: zod.enum(["en", "az", "ru", "ar", "zh", "es"]),
+});
+
+/**
+ * @summary Full text of a legal document in a given locale
+ */
+export const LegalGetDocumentQueryParams = zod.object({
+  type: zod.enum(["privacy_policy", "terms_of_service"]),
+  locale: zod.enum(["en", "az", "ru", "ar", "zh", "es"]).optional(),
+});
+
+export const LegalGetDocumentResponse = zod.object({
+  type: zod.enum(["privacy_policy", "terms_of_service"]),
+  version: zod.string(),
+  locale: zod.enum(["en", "az", "ru", "ar", "zh", "es"]),
+  title: zod.string(),
+  body: zod.string(),
+  authoritativeNotice: zod
+    .string()
+    .nullable()
+    .describe(
+      "Convenience-translation notice when the requested locale is not the authoritative one (English).",
+    ),
+});
+
+/**
+ * @summary Latest acceptance per document for the signed-in user
+ */
+export const LegalMyAcceptancesResponse = zod.object({
+  documents: zod.array(
+    zod.object({
+      type: zod.enum(["privacy_policy", "terms_of_service"]),
+      acceptedVersion: zod.string().nullable(),
+      currentVersion: zod.string(),
+      acceptedAt: zod.string().nullable(),
+      locale: zod.string().nullable(),
+      upToDate: zod.boolean(),
+    }),
+  ),
+  allUpToDate: zod.boolean(),
+});
+
+/**
+ * @summary Record acceptance of one or more legal documents at their current versions
+ */
+
+export const LegalAcceptBody = zod.object({
+  locale: zod.enum(["en", "az", "ru", "ar", "zh", "es"]),
+  documents: zod
+    .array(
+      zod.object({
+        type: zod.enum(["privacy_policy", "terms_of_service"]),
+        version: zod.string(),
+      }),
+    )
+    .min(1),
+});
+
+export const LegalAcceptResponse = zod.object({
+  documents: zod.array(
+    zod.object({
+      type: zod.enum(["privacy_policy", "terms_of_service"]),
+      acceptedVersion: zod.string().nullable(),
+      currentVersion: zod.string(),
+      acceptedAt: zod.string().nullable(),
+      locale: zod.string().nullable(),
+      upToDate: zod.boolean(),
+    }),
+  ),
+  allUpToDate: zod.boolean(),
+});

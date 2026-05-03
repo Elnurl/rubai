@@ -16,6 +16,8 @@ tags:
     description: Authenticated user state and profile
   - name: google-calendar
     description: Google Calendar integration via Replit connector
+  - name: legal
+    description: Versioned Privacy Policy and Terms of Service acceptance
 paths:
   /healthz:
     get:
@@ -419,6 +421,101 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GCalSyncPlanResult"
+
+  /legal/current:
+    get:
+      operationId: legalCurrentVersions
+      tags: [legal]
+      summary: Current versions of each legal document and the supported locales
+      responses:
+        "200":
+          description: Versions and locales
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegalCurrentResponse"
+
+  /legal/document:
+    get:
+      operationId: legalGetDocument
+      tags: [legal]
+      summary: Full text of a legal document in a given locale
+      parameters:
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [privacy_policy, terms_of_service]
+        - name: locale
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [en, az, ru, ar, zh, es]
+      responses:
+        "200":
+          description: Document text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegalDocumentResponse"
+        "400":
+          description: Invalid type or locale
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /legal/me:
+    get:
+      operationId: legalMyAcceptances
+      tags: [legal]
+      summary: Latest acceptance per document for the signed-in user
+      responses:
+        "200":
+          description: Acceptance state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegalAcceptancesState"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /legal/accept:
+    post:
+      operationId: legalAccept
+      tags: [legal]
+      summary: Record acceptance of one or more legal documents at their current versions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LegalAcceptInput"
+      responses:
+        "200":
+          description: Updated acceptance state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegalAcceptancesState"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   schemas:
@@ -1487,3 +1584,110 @@ components:
         evolvedAt:
           type: string
       required: [evolvedRoadmap, hasChanged, changeSummary, phaseChanges, rationale, evolvedAt]
+
+    LegalDocumentType:
+      type: string
+      enum: [privacy_policy, terms_of_service]
+
+    LegalLocale:
+      type: string
+      enum: [en, az, ru, ar, zh, es]
+
+    LegalCurrentVersionEntry:
+      type: object
+      properties:
+        type:
+          $ref: "#/components/schemas/LegalDocumentType"
+        version:
+          type: string
+      required: [type, version]
+
+    LegalCurrentResponse:
+      type: object
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: "#/components/schemas/LegalCurrentVersionEntry"
+        supportedLocales:
+          type: array
+          items:
+            $ref: "#/components/schemas/LegalLocale"
+        fallbackLocale:
+          $ref: "#/components/schemas/LegalLocale"
+      required: [documents, supportedLocales, fallbackLocale]
+
+    LegalDocumentResponse:
+      type: object
+      properties:
+        type:
+          $ref: "#/components/schemas/LegalDocumentType"
+        version:
+          type: string
+        locale:
+          $ref: "#/components/schemas/LegalLocale"
+        title:
+          type: string
+        body:
+          type: string
+        authoritativeNotice:
+          type:
+            - string
+            - "null"
+          description: Convenience-translation notice when the requested locale is not the authoritative one (English).
+      required: [type, version, locale, title, body, authoritativeNotice]
+
+    LegalAcceptanceRecord:
+      type: object
+      properties:
+        type:
+          $ref: "#/components/schemas/LegalDocumentType"
+        acceptedVersion:
+          type:
+            - string
+            - "null"
+        currentVersion:
+          type: string
+        acceptedAt:
+          type:
+            - string
+            - "null"
+        locale:
+          type:
+            - string
+            - "null"
+        upToDate:
+          type: boolean
+      required: [type, acceptedVersion, currentVersion, acceptedAt, locale, upToDate]
+
+    LegalAcceptancesState:
+      type: object
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: "#/components/schemas/LegalAcceptanceRecord"
+        allUpToDate:
+          type: boolean
+      required: [documents, allUpToDate]
+
+    LegalAcceptItem:
+      type: object
+      properties:
+        type:
+          $ref: "#/components/schemas/LegalDocumentType"
+        version:
+          type: string
+      required: [type, version]
+
+    LegalAcceptInput:
+      type: object
+      properties:
+        locale:
+          $ref: "#/components/schemas/LegalLocale"
+        documents:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/LegalAcceptItem"
+      required: [locale, documents]
