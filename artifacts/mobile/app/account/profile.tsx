@@ -463,6 +463,13 @@ function ModalShell(props: {
   primaryDisabled?: boolean;
   busy?: boolean;
   destructive?: boolean;
+  /**
+   * Inline error rendered above the action row. Use this instead of
+   * `Alert.alert` for failure feedback because Alert.alert is unreliable
+   * on react-native-web (often silent), which leaves the user staring at
+   * an apparently-broken Save button.
+   */
+  error?: string | null;
 }) {
   const colors = useColors();
   return (
@@ -502,6 +509,30 @@ function ModalShell(props: {
             {props.title}
           </Text>
           {props.children}
+          {props.error ? (
+            <View
+              style={{
+                backgroundColor: "#B43E3E14",
+                borderColor: "#B43E3E55",
+                borderWidth: 1,
+                borderRadius: 8,
+                paddingHorizontal: 10,
+                paddingVertical: 8,
+                marginBottom: 10,
+              }}
+            >
+              <Text
+                style={{
+                  color: "#B43E3E",
+                  fontFamily: "Inter_500Medium",
+                  fontSize: 12.5,
+                  lineHeight: 17,
+                }}
+              >
+                {props.error}
+              </Text>
+            </View>
+          ) : null}
           <View style={styles.modalActions}>
             <Pressable
               onPress={props.busy ? undefined : props.onClose}
@@ -621,11 +652,13 @@ function NameModal(props: {
   const [first, setFirst] = useState(props.firstName);
   const [last, setLast] = useState(props.lastName);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (props.visible) {
       setFirst(props.firstName);
       setLast(props.lastName);
+      setError(null);
     }
   }, [props.visible, props.firstName, props.lastName]);
 
@@ -640,13 +673,16 @@ function NameModal(props: {
       primaryLabel="Save"
       primaryDisabled={!dirty || (!first.trim() && !last.trim())}
       busy={busy}
+      error={error}
       onPrimary={async () => {
         setBusy(true);
+        setError(null);
         try {
           await props.onSave(first.trim(), last.trim());
           props.onClose();
         } catch (err) {
-          Alert.alert("Couldn't save", friendlyAuthError(err));
+          console.warn("[profile] name update failed", err);
+          setError(friendlyAuthError(err));
         } finally {
           setBusy(false);
         }
@@ -695,6 +731,7 @@ function VerifyModal(props: {
   const [value, setValue] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingResource | null>(null);
 
   // Reset on open. On close, if we still hold an unverified pending resource
@@ -706,6 +743,7 @@ function VerifyModal(props: {
       setStep("input");
       setValue("");
       setCode("");
+      setError(null);
       setPending(null);
     } else if (pending) {
       const stale = pending;
@@ -724,6 +762,7 @@ function VerifyModal(props: {
   const sendCode = async () => {
     if (!user) return;
     setBusy(true);
+    setError(null);
     try {
       if (isEmail) {
         const created = await user.createEmailAddress({ email: value.trim() });
@@ -748,7 +787,8 @@ function VerifyModal(props: {
       }
       setStep("code");
     } catch (err) {
-      Alert.alert("Couldn't send code", friendlyAuthError(err));
+      console.warn("[profile] send code failed", err);
+      setError(friendlyAuthError(err));
     } finally {
       setBusy(false);
     }
@@ -757,6 +797,7 @@ function VerifyModal(props: {
   const verifyAndPromote = async () => {
     if (!user || !pending) return;
     setBusy(true);
+    setError(null);
     try {
       await pending.attempt(code.trim());
       // Defensive: confirm Clerk really marked it verified before promoting.
@@ -790,7 +831,8 @@ function VerifyModal(props: {
       setPending(null);
       props.onClose();
     } catch (err) {
-      Alert.alert("Verification failed", friendlyAuthError(err));
+      console.warn("[profile] verify/promote failed", err);
+      setError(friendlyAuthError(err));
     } finally {
       setBusy(false);
     }
@@ -818,6 +860,7 @@ function VerifyModal(props: {
       primaryLabel={primaryLabel}
       primaryDisabled={primaryDisabled}
       busy={busy}
+      error={error}
       onPrimary={step === "input" ? sendCode : verifyAndPromote}
     >
       {step === "input" ? (
@@ -865,12 +908,14 @@ function PasswordModal(props: {
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (props.visible) {
       setCurrent("");
       setNext("");
       setConfirm("");
+      setError(null);
     }
   }, [props.visible]);
 
@@ -884,19 +929,25 @@ function PasswordModal(props: {
   const save = async () => {
     if (!user) return;
     setBusy(true);
+    setError(null);
     try {
       await user.updatePassword({
         ...(props.passwordEnabled ? { currentPassword: current } : {}),
         newPassword: next,
         signOutOfOtherSessions: true,
       });
-      Alert.alert(
-        "Password updated",
-        "You have been signed out of other devices.",
-      );
+      // Success — close, then briefly notify on native (Alert.alert is
+      // unreliable on web, so we don't rely on it as the only signal).
       props.onClose();
+      if (Platform.OS !== "web") {
+        Alert.alert(
+          "Password updated",
+          "You have been signed out of other devices.",
+        );
+      }
     } catch (err) {
-      Alert.alert("Couldn't update password", friendlyAuthError(err));
+      console.warn("[profile] password update failed", err);
+      setError(friendlyAuthError(err));
     } finally {
       setBusy(false);
     }
@@ -910,6 +961,7 @@ function PasswordModal(props: {
       primaryLabel="Save"
       primaryDisabled={disabled}
       busy={busy}
+      error={error}
       onPrimary={save}
     >
       {props.passwordEnabled && (
