@@ -109,7 +109,21 @@ export default function GoalsScreen() {
                     : undefined
                 }
                 onPress={() => {
-                  if (g.id !== activeGoalId) void setActiveGoal(g.id);
+                  // Switch to the tapped goal (no-op if already active) and
+                  // jump straight to its roadmap so the user lands on the
+                  // page they expected when tapping a goal card.
+                  void (async () => {
+                    if (g.id !== activeGoalId) {
+                      try {
+                        await setActiveGoal(g.id);
+                      } catch {
+                        // setActiveGoal preserves the previous active goal
+                        // on failure; still navigate so the user sees that
+                        // goal's roadmap (it's persisted independently).
+                      }
+                    }
+                    router.navigate("/roadmap");
+                  })();
                 }}
                 onDelete={() =>
                   onDelete(

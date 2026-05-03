@@ -4,6 +4,7 @@ import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeIn } from "react-native-reanimated";
 
+import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { AdaptiveEngineCard } from "@/components/AdaptiveEngineCard";
 import { AskCoachPill } from "@/components/AskCoachPill";
 import { EmptyState } from "@/components/EmptyState";
@@ -87,6 +88,10 @@ export default function RoadmapScreen() {
       >
         <View style={styles.headerRow}>
           <AskCoachPill />
+          {/* Mirrors the Today screen: lets the user switch which goal's
+              roadmap they're viewing without bouncing back to Goals. The
+              chip auto-hides when there's fewer than 2 goals. */}
+          <ActiveGoalChip />
         </View>
 
         <Text
