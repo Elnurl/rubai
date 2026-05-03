@@ -311,7 +311,7 @@ async function* fallbackStreamFromAnthropic(
   } as ChatCompletionChunk;
 }
 
-type RecordInput = {
+export type RecordInput = {
   userId: number;
   route: string;
   model: string;
@@ -322,7 +322,7 @@ type RecordInput = {
   errorMessage: string | null;
 };
 
-async function recordUsage(input: RecordInput): Promise<void> {
+export async function recordUsage(input: RecordInput): Promise<void> {
   try {
     await db.insert(aiUsageTable).values({
       userId: input.userId,

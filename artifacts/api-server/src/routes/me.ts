@@ -8,6 +8,7 @@ import {
   PutMeStateResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
+import { indexUserGoalsAsync } from "../lib/embeddingsIndexer";
 
 const router: IRouter = Router();
 
@@ -159,6 +160,10 @@ router.put("/me/state", async (req, res): Promise<void> => {
       .returning();
 
     if (updated) {
+      // Fire-and-forget RAG indexing. The indexer is internally
+      // idempotent and only re-embeds chunks whose text changed, so
+      // calling on every successful PUT is cheap.
+      indexUserGoalsAsync(req, user.id, updated.goals);
       res.json(buildSuccess(updated));
       return;
     }
@@ -196,6 +201,7 @@ router.put("/me/state", async (req, res): Promise<void> => {
     .returning();
 
   if (insertedRows.length > 0) {
+    indexUserGoalsAsync(req, user.id, insertedRows[0]!.goals);
     res.json(buildSuccess(insertedRows[0]!));
     return;
   }
