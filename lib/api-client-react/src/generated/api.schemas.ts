@@ -581,11 +581,13 @@ export type BehavioralProfileRequestRecentHistoryItem = {
   taskTitle: string;
   date: string;
   completed: boolean;
+  /** Real focused-work minutes accumulated on this task entry, if tracked. */
+  focusMinutes?: number;
 };
 
 export interface BehavioralProfileRequest {
   profile: UserProfile;
-  /** Last ~60 task history entries (taskTitle, date, completed). */
+  /** Last ~60 task history entries (taskTitle, date, completed, optional focusMinutes). */
   recentHistory: BehavioralProfileRequestRecentHistoryItem[];
   /** Last ~20 reflection entries. */
   reflections: ReflectionEntry[];

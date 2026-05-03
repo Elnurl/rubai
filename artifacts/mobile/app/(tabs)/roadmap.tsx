@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { AdaptiveEngineCard } from "@/components/AdaptiveEngineCard";
+import { AtlasLogo } from "@/components/AtlasLogo";
 import { EmptyState } from "@/components/EmptyState";
 import { PhaseCard } from "@/components/PhaseCard";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -84,17 +85,19 @@ export default function RoadmapScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.topRow}>
-          <Text
-            style={[
-              styles.eyebrow,
-              { color: colors.primary, fontFamily: "Inter_600SemiBold" },
-            ]}
-          >
-            ROADMAP
-          </Text>
+        <View style={styles.headerRow}>
+          <AtlasLogo size="sm" />
           <ActiveGoalChip />
         </View>
+
+        <Text
+          style={[
+            styles.eyebrow,
+            { color: colors.primary, fontFamily: "Inter_600SemiBold" },
+          ]}
+        >
+          ROADMAP
+        </Text>
         <View style={styles.hero}>
           <SectionHeader
             title={activeRoadmap.headline}
@@ -260,7 +263,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     gap: 20,
   },
-  topRow: {
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

@@ -167,6 +167,12 @@ export type TaskHistoryEntry = {
   reasonTag?: string;
   note?: string;
   reflectedAt?: string;
+  /**
+   * Total focused-work minutes the user accumulated on this task on this
+   * date, captured from the in-app focus timer. Optional — older entries and
+   * tasks the user never started a focus session on simply omit it.
+   */
+  focusMinutes?: number;
 };
 
 export function todayISO(): string {

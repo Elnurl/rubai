@@ -1,8 +1,11 @@
 import { Feather } from "@expo/vector-icons";
+import { useUser } from "@clerk/expo";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
+  Image,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -13,41 +16,22 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useUser } from "@clerk/expo";
-
-import { AtlasButton } from "@/components/AtlasButton";
-import { SectionHeader } from "@/components/SectionHeader";
-import { profileGoalLabel } from "@/constants/atlas";
+import { AtlasLogo } from "@/components/AtlasLogo";
 import { useColors } from "@/hooks/useColors";
-import { AWARD_DEFS } from "@/lib/awards";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { TIER_INFO, type SubscriptionTier } from "@/types/atlas";
-import {
-  useAtlasAdaptPlan,
-  useAtlasBehavioralProfile,
-  type AdaptResponse,
-  type BehavioralProfile,
-} from "@workspace/api-client-react";
 
-const consistencyCopy: Record<BehavioralProfile["consistencyLevel"], string> = {
-  very_low: "Very low",
-  low: "Low",
-  moderate: "Moderate",
-  high: "High",
-  very_high: "Very high",
+// Local-only visual toggles for sync/privacy features that don't have a
+// backend yet. They persist in component state for this session — when the
+// real services land, swap them onto `account` fields the same way Smart
+// Nudges already wires to `account.notificationsEnabled`.
+type LocalPrefs = {
+  realtimeSync: boolean;
+  privacyShield: boolean;
 };
 
-const workloadCopy: Record<BehavioralProfile["workloadTolerance"], string> = {
-  light: "Light",
-  moderate: "Moderate",
-  heavy: "Heavy",
-};
-
-const motivationCopy: Record<BehavioralProfile["motivationTrend"], string> = {
-  rising: "Rising",
-  steady: "Steady",
-  declining: "Declining",
-};
+const APP_VERSION = "rubai v2.4.0-stable";
+const APP_TAGLINE = "Evolving with you since 2023";
 
 export default function AccountScreen() {
   const colors = useColors();
@@ -58,21 +42,13 @@ export default function AccountScreen() {
   const bottomTab = isWeb ? 100 : 110;
 
   const {
-    goals,
     tier,
+    goals,
     goalLimit,
     account,
-    activeGoal,
-    activeProfile,
-    activeRoadmap,
     activeBehavioral,
-    activeBehavioralProfile,
-    activeReflections,
-    activeTaskHistory,
-    activeEarnedAwards,
     syncStatus,
     syncMessage,
-    setActiveBehavioralProfile,
     updateAccount,
     resetAll,
     signOut,
@@ -80,34 +56,44 @@ export default function AccountScreen() {
   } = useAtlas();
   const { user } = useUser();
 
-  const adapt = useAtlasAdaptPlan();
-  const refreshProfile = useAtlasBehavioralProfile();
-  const [adaptResult, setAdaptResult] = useState<AdaptResponse | null>(null);
-  const [insightMsg, setInsightMsg] = useState<string | null>(null);
+  const [localPrefs, setLocalPrefs] = useState<LocalPrefs>({
+    realtimeSync: true,
+    privacyShield: false,
+  });
 
-  const onRefreshInsights = async () => {
-    if (!activeProfile) return;
-    setInsightMsg(null);
-    try {
-      const recent = activeTaskHistory.slice(-60).map((e) => ({
-        taskId: e.taskId,
-        taskTitle: e.taskTitle,
-        date: e.date,
-        completed: e.completed,
-      }));
-      const res = await refreshProfile.mutateAsync({
-        data: {
-          profile: activeProfile,
-          recentHistory: recent,
-          reflections: activeReflections.slice(-20),
-          ...(activeBehavioralProfile ? { previous: activeBehavioralProfile } : {}),
-        },
-      });
-      await setActiveBehavioralProfile(res.profile);
-      setInsightMsg(res.aiInsight);
-    } catch {
-      setInsightMsg("Couldn't refresh insights. Try again in a moment.");
+  const tierInfo =
+    TIER_INFO[(tier as SubscriptionTier) in TIER_INFO ? (tier as SubscriptionTier) : "free"];
+  const accountEmail = user?.primaryEmailAddress?.emailAddress ?? "Signed in";
+  const fullName =
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() ||
+    user?.username ||
+    accountEmail.split("@")[0] ||
+    "Your account";
+  const initials =
+    (user?.firstName?.[0] ?? "") + (user?.lastName?.[0] ?? "") ||
+    fullName.slice(0, 2);
+  const avatarUrl = user?.imageUrl ?? null;
+  const streakDays = activeBehavioral.currentStreakDays;
+
+  const syncSubtitle =
+    syncStatus === "error"
+      ? "Sync error — tap to retry"
+      : syncStatus === "syncing"
+        ? "Syncing now…"
+        : syncMessage
+          ? syncMessage
+          : "Last synced just now";
+
+  const comingSoon = (label: string) => {
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined") {
+        window.alert(`${label} is on the way. We're building it for the next release.`);
+      }
+      return;
     }
+    Alert.alert(`${label} — coming soon`, "We're building this for the next release.", [
+      { text: "OK" },
+    ]);
   };
 
   const onReset = () => {
@@ -134,8 +120,6 @@ export default function AccountScreen() {
   const onSignOut = () => {
     const doSignOut = async () => {
       await signOut();
-      // AuthGate will redirect to /(auth)/sign-in once Clerk reports
-      // signed-out, so we don't need to navigate here.
     };
     if (Platform.OS === "web") {
       if (typeof window !== "undefined" && window.confirm("Sign out of rubai?")) {
@@ -149,24 +133,9 @@ export default function AccountScreen() {
     }
   };
 
-  const tierInfo =
-    TIER_INFO[(tier as SubscriptionTier) in TIER_INFO ? (tier as SubscriptionTier) : "free"];
-  const accountEmail = user?.primaryEmailAddress?.emailAddress ?? null;
-
-  const onAdapt = async () => {
-    if (!activeProfile || !activeRoadmap) return;
-    try {
-      const res = await adapt.mutateAsync({
-        data: {
-          profile: activeProfile,
-          roadmap: activeRoadmap,
-          behavioral: activeBehavioral,
-        },
-      });
-      setAdaptResult(res);
-    } catch {
-      // ignore
-    }
+  const onKnowledgeBase = () => {
+    const url = "https://rubai.app/help";
+    Linking.openURL(url).catch(() => comingSoon("Knowledge Base & Support"));
   };
 
   return (
@@ -178,11 +147,19 @@ export default function AccountScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <SectionHeader
-          eyebrow="ACCOUNT"
-          title="Your account"
-          subtitle={accountEmail ?? "Signed in"}
-        />
+        {/* Header — matches Today/Coach: AtlasLogo on left, centered title */}
+        <View style={styles.headerRow}>
+          <AtlasLogo size="sm" />
+          <Text
+            style={[
+              styles.headerTitle,
+              { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
+            ]}
+          >
+            System & Sync
+          </Text>
+          <View style={styles.headerSpacer} />
+        </View>
 
         {syncMessage ? (
           <Pressable
@@ -220,118 +197,214 @@ export default function AccountScreen() {
           </Pressable>
         ) : null}
 
-        <Pressable
-          onPress={() => router.push("/plans")}
-          style={({ pressed }) => [
-            styles.planCard,
+        {/* Profile card */}
+        <View
+          style={[
+            styles.profileCard,
             {
               backgroundColor: colors.card,
               borderColor: colors.border,
               borderRadius: colors.radius,
-              opacity: pressed ? 0.9 : 1,
             },
           ]}
-          accessibilityRole="button"
-          accessibilityLabel="Manage your plan"
         >
-          <View style={styles.planCardHeader}>
-            <View style={[styles.planBadge, { backgroundColor: colors.primary }]}>
-              <Feather name="award" size={14} color={colors.primaryForeground} />
-              <Text
-                style={[
-                  styles.planBadgeText,
-                  {
-                    color: colors.primaryForeground,
-                    fontFamily: "Inter_700Bold",
-                  },
-                ]}
-              >
-                {tierInfo.label.toUpperCase()}
-              </Text>
-            </View>
-            <Text
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+          ) : (
+            <View
               style={[
-                styles.planMeta,
-                { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
-              ]}
-            >
-              {goals.length} of {goalLimit} goals
-            </Text>
-          </View>
-          <Text
-            style={[
-              styles.planTagline,
-              { color: colors.foreground, fontFamily: "Inter_400Regular" },
-            ]}
-          >
-            {tierInfo.tagline}
-          </Text>
-          <View style={styles.planManageRow}>
-            <Text
-              style={[
-                styles.planManageText,
-                { color: colors.primary, fontFamily: "Inter_600SemiBold" },
-              ]}
-            >
-              Manage plan
-            </Text>
-            <Feather name="chevron-right" size={16} color={colors.primary} />
-          </View>
-        </Pressable>
-
-        <Pressable
-          onPress={() => router.push("/behavioral-insights")}
-          style={({ pressed }) => [
-            styles.insightsLinkCard,
-            {
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-              borderRadius: colors.radius,
-              opacity: pressed ? 0.9 : 1,
-            },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Open behavioral insights"
-        >
-          <View
-            style={[
-              styles.insightsLinkIcon,
-              { backgroundColor: colors.primary + "1A" },
-            ]}
-          >
-            <Feather name="activity" size={16} color={colors.primary} />
-          </View>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text
-              style={[
-                styles.insightsLinkTitle,
+                styles.avatar,
                 {
-                  color: colors.foreground,
-                  fontFamily: "Inter_600SemiBold",
+                  backgroundColor: colors.primary,
+                  alignItems: "center",
+                  justifyContent: "center",
                 },
               ]}
             >
-              Behavioral Insights
+              <Text
+                style={{
+                  color: colors.primaryForeground,
+                  fontFamily: "Inter_700Bold",
+                  fontSize: 18,
+                  textTransform: "uppercase",
+                }}
+              >
+                {initials.slice(0, 2)}
+              </Text>
+            </View>
+          )}
+          <View style={styles.profileBody}>
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.profileName,
+                { color: colors.foreground, fontFamily: "Inter_700Bold" },
+              ]}
+            >
+              {fullName}
             </Text>
             <Text
+              numberOfLines={1}
               style={[
-                styles.insightsLinkSubtitle,
+                styles.profileEmail,
                 {
                   color: colors.mutedForeground,
                   fontFamily: "Inter_400Regular",
                 },
               ]}
             >
-              Focus intensity, peak hours, and rhythm trends.
+              {accountEmail}
             </Text>
+            <View
+              style={[
+                styles.streakChip,
+                {
+                  backgroundColor: colors.primary + "1A",
+                  borderColor: colors.primary + "40",
+                },
+              ]}
+            >
+              <Feather name="zap" size={11} color={colors.primary} />
+              <Text
+                style={{
+                  color: colors.primary,
+                  fontFamily: "Inter_600SemiBold",
+                  fontSize: 11.5,
+                  letterSpacing: 0.2,
+                }}
+              >
+                {streakDays} Day Growth Streak
+              </Text>
+            </View>
           </View>
-          <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
-        </Pressable>
+        </View>
 
+        {/* CLOUD & DEVICES */}
+        <SettingsGroup label="CLOUD & DEVICES">
+          <SettingsRow
+            icon="refresh-cw"
+            title="Real-time Sync"
+            subtitle={syncSubtitle}
+            trailing={
+              <Switch
+                value={localPrefs.realtimeSync}
+                onValueChange={(v) =>
+                  setLocalPrefs((p) => ({ ...p, realtimeSync: v }))
+                }
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.primaryForeground}
+              />
+            }
+          />
+          <Divider />
+          <SettingsRow
+            icon="smartphone"
+            title="Connected Devices"
+            subtitle="iPhone, Web"
+            chevron
+            onPress={() => comingSoon("Connected Devices")}
+          />
+          <Divider />
+          <SettingsRow
+            icon="cloud"
+            title="Coach Memory Backup"
+            subtitle="Securely encrypted in rubai Cloud"
+            chevron
+            onPress={() => comingSoon("Coach Memory Backup")}
+          />
+        </SettingsGroup>
+
+        {/* ADAPTIVE PREFERENCES */}
+        <SettingsGroup label="ADAPTIVE PREFERENCES">
+          <SettingsRow
+            icon="bell"
+            title="Smart Nudges"
+            subtitle={`AI-timed behavioral reminders at ${account.reminderTime}`}
+            trailing={
+              <Switch
+                value={account.notificationsEnabled}
+                onValueChange={(v) => void updateAccount({ notificationsEnabled: v })}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.primaryForeground}
+              />
+            }
+          />
+          <Divider />
+          <SettingsRow
+            icon="activity"
+            title="Behavioral Insights"
+            subtitle="Focus intensity, peak hours, and rhythm trends"
+            chevron
+            onPress={() => router.push("/behavioral-insights")}
+          />
+          <Divider />
+          <SettingsRow
+            icon="message-circle"
+            title="Coach Persona"
+            subtitle="Empathetic & Direct"
+            chevron
+            onPress={() => comingSoon("Coach Persona")}
+          />
+          <Divider />
+          <SettingsRow
+            icon="moon"
+            title="Appearance"
+            subtitle="Soft Organic (System)"
+            chevron
+            onPress={() => comingSoon("Appearance")}
+          />
+        </SettingsGroup>
+
+        {/* DATA SOVEREIGNTY */}
+        <SettingsGroup label="DATA SOVEREIGNTY">
+          <SettingsRow
+            icon="shield"
+            title="Privacy Shield"
+            subtitle={localPrefs.privacyShield ? "Biometric lock enabled" : "Biometric lock off"}
+            trailing={
+              <Switch
+                value={localPrefs.privacyShield}
+                onValueChange={(v) => {
+                  setLocalPrefs((p) => ({ ...p, privacyShield: v }));
+                  if (v) comingSoon("Privacy Shield");
+                }}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.primaryForeground}
+              />
+            }
+          />
+          <Divider />
+          <SettingsRow
+            icon="download"
+            title="Export My Patterns"
+            subtitle="Download CSV/JSON data"
+            chevron
+            onPress={() => comingSoon("Export My Patterns")}
+          />
+          <Divider />
+          <SettingsRow
+            icon="award"
+            title="Manage Plan"
+            subtitle={`${tierInfo.label} • ${goals.length}/${goalLimit} goals`}
+            chevron
+            onPress={() => router.push("/plans")}
+          />
+          <Divider />
+          <SettingsRow
+            icon="trash-2"
+            title="Reset All Data"
+            subtitle="Erase every goal, roadmap, and reflection"
+            chevron
+            destructive
+            onPress={onReset}
+          />
+        </SettingsGroup>
+
+        {/* Knowledge Base button */}
         <Pressable
-          onPress={onSignOut}
+          onPress={onKnowledgeBase}
           style={({ pressed }) => [
-            styles.signOutBtn,
+            styles.kbButton,
             {
               borderColor: colors.border,
               borderRadius: colors.radius,
@@ -340,661 +413,223 @@ export default function AccountScreen() {
             },
           ]}
         >
-          <Feather name="log-out" size={16} color={colors.foreground} />
+          <Feather name="book-open" size={15} color={colors.foreground} />
           <Text
             style={[
-              styles.signOutText,
+              styles.kbText,
               { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
             ]}
           >
-            Sign out
+            Knowledge Base & Support
           </Text>
         </Pressable>
 
-        <SectionHeader
-          eyebrow="PREFERENCES"
-          title="Notifications"
-          subtitle="Local-only preferences for this device."
-        />
-
-        <View
-          style={[
-            styles.prefsCard,
-            {
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-              borderRadius: colors.radius,
-            },
-          ]}
-        >
-          <PrefRow
-            icon="bell"
-            title="Daily plan reminder"
-            description={`Sends a nudge each morning at ${account.reminderTime}.`}
-            value={account.notificationsEnabled}
-            onChange={(v) => void updateAccount({ notificationsEnabled: v })}
-          />
-          <View style={[styles.prefDivider, { backgroundColor: colors.border }]} />
-          <PrefRow
-            icon="trending-up"
-            title="Weekly performance summary"
-            description="A short note on streaks and completion rate."
-            value={account.performanceUpdates}
-            onChange={(v) => void updateAccount({ performanceUpdates: v })}
-          />
-        </View>
-
-        {activeGoal && activeProfile ? (
-          <>
-            <SectionHeader
-              eyebrow="INSIGHTS"
-              title="What rubai has learned"
-              subtitle="Built from your reflections and history."
-            />
-
-            <View
-              style={[
-                styles.insightsCard,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                  borderRadius: colors.radius,
-                },
-              ]}
-            >
-              {activeBehavioralProfile ? (
-                <>
-                  <Text
-                    style={[
-                      styles.insightsSummary,
-                      { color: colors.foreground, fontFamily: "Inter_400Regular" },
-                    ]}
-                  >
-                    {activeBehavioralProfile.summary}
-                  </Text>
-
-                  <View style={styles.traitGrid}>
-                    <Trait
-                      label="Consistency"
-                      value={consistencyCopy[activeBehavioralProfile.consistencyLevel]}
-                    />
-                    <Trait
-                      label="Workload"
-                      value={workloadCopy[activeBehavioralProfile.workloadTolerance]}
-                    />
-                    <Trait
-                      label="Trend"
-                      value={motivationCopy[activeBehavioralProfile.motivationTrend]}
-                    />
-                    <Trait
-                      label="Focus"
-                      value={activeBehavioralProfile.focusStyle}
-                    />
-                  </View>
-
-                  {activeBehavioralProfile.peakHours.length > 0 && (
-                    <InsightRow
-                      icon="sun"
-                      label="Peak hours"
-                      items={activeBehavioralProfile.peakHours}
-                    />
-                  )}
-                  {activeBehavioralProfile.strengths.length > 0 && (
-                    <InsightRow
-                      icon="award"
-                      label="Strengths"
-                      items={activeBehavioralProfile.strengths}
-                    />
-                  )}
-                  {activeBehavioralProfile.failurePatterns.length > 0 && (
-                    <InsightRow
-                      icon="alert-triangle"
-                      label="Watch outs"
-                      items={activeBehavioralProfile.failurePatterns}
-                    />
-                  )}
-                </>
-              ) : (
-                <Text
-                  style={[
-                    styles.insightsEmpty,
-                    { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-                  ]}
-                >
-                  No insights yet. Long-press a task on Today and add a quick
-                  reflection — rubai will start building your profile after the
-                  first refresh.
-                </Text>
-              )}
-
-              {insightMsg && (
-                <View
-                  style={[
-                    styles.insightBanner,
-                    {
-                      backgroundColor: colors.primary + "14",
-                      borderRadius: colors.radius,
-                    },
-                  ]}
-                >
-                  <Feather name="zap" size={13} color={colors.primary} />
-                  <Text
-                    style={[
-                      styles.insightBannerText,
-                      { color: colors.primary, fontFamily: "Inter_500Medium" },
-                    ]}
-                  >
-                    {insightMsg}
-                  </Text>
-                </View>
-              )}
-
-              <AtlasButton
-                label={refreshProfile.isPending ? "Refreshing" : "Refresh insights"}
-                variant="secondary"
-                onPress={onRefreshInsights}
-                loading={refreshProfile.isPending}
-                disabled={refreshProfile.isPending}
-                icon={
-                  <Feather name="refresh-cw" size={16} color={colors.foreground} />
-                }
-              />
-            </View>
-
-            {activeReflections.length > 0 && (
-              <View
-                style={[
-                  styles.reflectionList,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                    borderRadius: colors.radius,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.reflectionTitle,
-                    { color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
-                  ]}
-                >
-                  RECENT REFLECTIONS
-                </Text>
-                {[...activeReflections]
-                  .slice(-3)
-                  .reverse()
-                  .map((r, i, arr) => (
-                    <View
-                      key={`${r.taskId}-${r.date}-${i}`}
-                      style={[
-                        styles.reflectionRow,
-                        i < arr.length - 1
-                          ? { borderBottomColor: colors.border, borderBottomWidth: 1 }
-                          : null,
-                      ]}
-                    >
-                      <Feather
-                        name={r.completed ? "check-circle" : "x-circle"}
-                        size={14}
-                        color={r.completed ? colors.primary : colors.mutedForeground}
-                        style={{ marginTop: 2 }}
-                      />
-                      <View style={{ flex: 1, gap: 3 }}>
-                        <Text
-                          style={[
-                            styles.reflectionTask,
-                            { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {r.taskTitle}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.reflectionMeta,
-                            { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-                          ]}
-                        >
-                          {r.date}
-                          {r.reasonTag ? ` • ${r.reasonTag.replace(/_/g, " ")}` : ""}
-                        </Text>
-                        {r.note ? (
-                          <Text
-                            style={[
-                              styles.reflectionNote,
-                              { color: colors.foreground, fontFamily: "Inter_400Regular" },
-                            ]}
-                            numberOfLines={3}
-                          >
-                            “{r.note}”
-                          </Text>
-                        ) : null}
-                      </View>
-                    </View>
-                  ))}
-              </View>
-            )}
-
-            <SectionHeader
-              eyebrow="AWARDS"
-              title="Earned along the way"
-              subtitle={
-                activeEarnedAwards.length > 0
-                  ? `${activeEarnedAwards.length} of ${AWARD_DEFS.length} unlocked.`
-                  : "Complete tasks to unlock awards."
-              }
-            />
-
-            <View
-              style={[
-                styles.awardsCard,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                  borderRadius: colors.radius,
-                },
-              ]}
-            >
-              {AWARD_DEFS.map((def, i) => {
-                const earned = activeEarnedAwards.find((a) => a.id === def.id);
-                const isLast = i === AWARD_DEFS.length - 1;
-                return (
-                  <View
-                    key={def.id}
-                    style={[
-                      styles.awardRow,
-                      !isLast
-                        ? { borderBottomColor: colors.border, borderBottomWidth: 1 }
-                        : null,
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.awardIcon,
-                        {
-                          backgroundColor: earned ? colors.primary : colors.muted,
-                          opacity: earned ? 1 : 0.6,
-                        },
-                      ]}
-                    >
-                      <Feather
-                        name={def.icon}
-                        size={14}
-                        color={
-                          earned ? colors.primaryForeground : colors.mutedForeground
-                        }
-                      />
-                    </View>
-                    <View style={styles.awardText}>
-                      <Text
-                        style={[
-                          styles.awardTitle,
-                          {
-                            color: earned ? colors.foreground : colors.mutedForeground,
-                            fontFamily: "Inter_600SemiBold",
-                          },
-                        ]}
-                      >
-                        {def.title}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.awardSubtitle,
-                          {
-                            color: colors.mutedForeground,
-                            fontFamily: "Inter_400Regular",
-                          },
-                        ]}
-                      >
-                        {earned
-                          ? `Unlocked on ${earned.earnedOn}.`
-                          : def.subtitle}
-                      </Text>
-                    </View>
-                    {earned ? (
-                      <Feather
-                        name="check-circle"
-                        size={16}
-                        color={colors.primary}
-                      />
-                    ) : (
-                      <Feather
-                        name="lock"
-                        size={14}
-                        color={colors.mutedForeground}
-                      />
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-
-            <SectionHeader
-              eyebrow="ACTIVE GOAL"
-              title={profileGoalLabel(activeProfile)}
-              subtitle={activeRoadmap?.headline}
-            />
-
-            <View
-              style={[
-                styles.adaptCard,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                  borderRadius: colors.radius,
-                },
-              ]}
-            >
-              <View style={styles.adaptHeader}>
-                <Feather name="cpu" size={16} color={colors.primary} />
-                <Text
-                  style={[
-                    styles.adaptLabel,
-                    { color: colors.primary, fontFamily: "Inter_600SemiBold" },
-                  ]}
-                >
-                  ADAPTIVE ENGINE
-                </Text>
-              </View>
-              <Text
-                style={[
-                  styles.adaptBody,
-                  { color: colors.foreground, fontFamily: "Inter_400Regular" },
-                ]}
-              >
-                Run a quick re-evaluation. rubai will look at your last two
-                weeks and decide whether to soften, hold, or push the plan.
-              </Text>
-              <AtlasButton
-                label={adapt.isPending ? "Analyzing" : "Re-evaluate this goal"}
-                variant="secondary"
-                onPress={onAdapt}
-                loading={adapt.isPending}
-                disabled={!activeRoadmap || adapt.isPending}
-                icon={
-                  <Feather name="refresh-cw" size={16} color={colors.foreground} />
-                }
-              />
-
-              {adaptResult && (
-                <View style={styles.adaptResult}>
-                  <View style={styles.adaptDifficulty}>
-                    <Feather
-                      name={
-                        adaptResult.difficultyAdjustment === "harder"
-                          ? "trending-up"
-                          : adaptResult.difficultyAdjustment === "easier"
-                            ? "trending-down"
-                            : "minus"
-                      }
-                      size={16}
-                      color={
-                        adaptResult.difficultyAdjustment === "harder"
-                          ? colors.accent
-                          : adaptResult.difficultyAdjustment === "easier"
-                            ? colors.primary
-                            : colors.mutedForeground
-                      }
-                    />
-                    <Text
-                      style={[
-                        styles.adaptDifficultyText,
-                        { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
-                      ]}
-                    >
-                      {adaptResult.difficultyAdjustment === "harder"
-                        ? "Pushing harder"
-                        : adaptResult.difficultyAdjustment === "easier"
-                          ? "Easing back"
-                          : "Holding the line"}
-                    </Text>
-                  </View>
-                  <View style={{ gap: 6 }}>
-                    {adaptResult.adjustments.map((a, i) => (
-                      <View key={i} style={styles.adjRow}>
-                        <View
-                          style={[styles.adjDot, { backgroundColor: colors.primary }]}
-                        />
-                        <Text
-                          style={[
-                            styles.adjText,
-                            { color: colors.foreground, fontFamily: "Inter_400Regular" },
-                          ]}
-                        >
-                          {a}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                  <Text
-                    style={[
-                      styles.encouragement,
-                      { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
-                    ]}
-                  >
-                    {adaptResult.encouragement}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            <View
-              style={[
-                styles.statsRow,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                  borderRadius: colors.radius,
-                },
-              ]}
-            >
-              <Stat
-                label="Streak"
-                value={String(activeBehavioral.currentStreakDays)}
-                unit="days"
-                color={colors.primary}
-              />
-              <Divider />
-              <Stat
-                label="Done rate"
-                value={`${Math.round(activeBehavioral.completionRate * 100)}`}
-                unit="%"
-                color={colors.accent}
-              />
-              <Divider />
-              <Stat
-                label="Daily time"
-                value={String(activeProfile.availableTimePerDayMinutes)}
-                unit="min"
-                color={colors.foreground}
-              />
-            </View>
-          </>
-        ) : null}
-
+        {/* Sign Out link */}
         <Pressable
-          onPress={onReset}
+          onPress={onSignOut}
           style={({ pressed }) => [
-            styles.resetButton,
-            {
-              borderColor: colors.border,
-              borderRadius: colors.radius,
-              opacity: pressed ? 0.8 : 1,
-            },
+            styles.signOutLink,
+            { opacity: pressed ? 0.6 : 1 },
           ]}
         >
-          <Feather name="rotate-ccw" size={16} color={colors.destructive} />
           <Text
             style={[
-              styles.resetText,
-              { color: colors.destructive, fontFamily: "Inter_600SemiBold" },
+              styles.signOutText,
+              {
+                color: colors.mutedForeground,
+                fontFamily: "Inter_500Medium",
+              },
             ]}
           >
-            Reset all data
+            Sign Out of rubai
           </Text>
         </Pressable>
+
+        {/* Version footer */}
+        <View style={styles.footer}>
+          <Text
+            style={[
+              styles.footerVersion,
+              {
+                color: colors.mutedForeground,
+                fontFamily: "Inter_600SemiBold",
+              },
+            ]}
+          >
+            {APP_VERSION}
+          </Text>
+          <Text
+            style={[
+              styles.footerTagline,
+              {
+                color: colors.mutedForeground,
+                fontFamily: "Inter_400Regular",
+              },
+            ]}
+          >
+            {APP_TAGLINE}
+          </Text>
+        </View>
       </ScrollView>
     </View>
   );
 }
 
-function PrefRow({
-  icon,
-  title,
-  description,
-  value,
-  onChange,
-}: {
-  icon: React.ComponentProps<typeof Feather>["name"];
-  title: string;
-  description: string;
-  value: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  const colors = useColors();
-  return (
-    <View style={styles.prefRow}>
-      <View style={[styles.prefIcon, { backgroundColor: colors.muted }]}>
-        <Feather name={icon} size={16} color={colors.foreground} />
-      </View>
-      <View style={{ flex: 1, gap: 3 }}>
-        <Text
-          style={[
-            styles.prefTitle,
-            { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
-          ]}
-        >
-          {title}
-        </Text>
-        <Text
-          style={[
-            styles.prefDesc,
-            { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-          ]}
-        >
-          {description}
-        </Text>
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        trackColor={{ false: colors.border, true: colors.primary }}
-        thumbColor={Platform.OS === "android" ? colors.background : undefined}
-      />
-    </View>
-  );
-}
+/* -------------------------------------------------------------------------- */
+/*  Settings building blocks                                                  */
+/* -------------------------------------------------------------------------- */
 
-function Stat({
+function SettingsGroup({
   label,
-  value,
-  unit,
-  color,
+  children,
 }: {
   label: string;
-  value: string;
-  unit: string;
-  color: string;
+  children: React.ReactNode;
 }) {
   const colors = useColors();
   return (
-    <View style={statStyles.container}>
-      <Text style={[statStyles.value, { color, fontFamily: "Inter_700Bold" }]}>
-        {value}
-        <Text
-          style={[
-            statStyles.unit,
-            { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
-          ]}
-        >
-          {" "}
-          {unit}
-        </Text>
-      </Text>
+    <View style={styles.group}>
       <Text
         style={[
-          statStyles.label,
-          { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
+          styles.groupLabel,
+          { color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
         ]}
       >
-        {label.toUpperCase()}
+        {label}
       </Text>
+      <View
+        style={[
+          styles.groupCard,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            borderRadius: colors.radius,
+          },
+        ]}
+      >
+        {children}
+      </View>
     </View>
   );
 }
 
 function Divider() {
   const colors = useColors();
-  return <View style={[statStyles.divider, { backgroundColor: colors.border }]} />;
-}
-
-function Trait({ label, value }: { label: string; value: string }) {
-  const colors = useColors();
   return (
-    <View style={traitStyles.cell}>
-      <Text
-        style={[
-          traitStyles.label,
-          { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
-        ]}
-      >
-        {label.toUpperCase()}
-      </Text>
-      <Text
-        style={[
-          traitStyles.value,
-          { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
-        ]}
-        numberOfLines={2}
-      >
-        {value}
-      </Text>
-    </View>
+    <View
+      style={[
+        styles.divider,
+        { backgroundColor: colors.border },
+      ]}
+    />
   );
 }
 
-function InsightRow({
-  icon,
-  label,
-  items,
-}: {
+type SettingsRowProps = {
   icon: React.ComponentProps<typeof Feather>["name"];
-  label: string;
-  items: string[];
-}) {
+  title: string;
+  subtitle?: string;
+  trailing?: React.ReactNode;
+  chevron?: boolean;
+  onPress?: () => void;
+  destructive?: boolean;
+};
+
+function SettingsRow({
+  icon,
+  title,
+  subtitle,
+  trailing,
+  chevron,
+  onPress,
+  destructive,
+}: SettingsRowProps) {
   const colors = useColors();
-  return (
-    <View style={insightRowStyles.row}>
-      <View style={[insightRowStyles.icon, { backgroundColor: colors.muted }]}>
-        <Feather name={icon} size={13} color={colors.foreground} />
+  const titleColor = destructive ? colors.destructive : colors.foreground;
+  const iconBg = destructive
+    ? colors.destructive + "1A"
+    : colors.primary + "14";
+  const iconColor = destructive ? colors.destructive : colors.primary;
+
+  const Inner = (
+    <View style={styles.row}>
+      <View style={[styles.rowIcon, { backgroundColor: iconBg }]}>
+        <Feather name={icon} size={15} color={iconColor} />
       </View>
-      <View style={{ flex: 1, gap: 4 }}>
+      <View style={styles.rowBody}>
         <Text
+          numberOfLines={1}
           style={[
-            insightRowStyles.label,
-            { color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
+            styles.rowTitle,
+            { color: titleColor, fontFamily: "Inter_600SemiBold" },
           ]}
         >
-          {label.toUpperCase()}
+          {title}
         </Text>
-        <Text
-          style={[
-            insightRowStyles.value,
-            { color: colors.foreground, fontFamily: "Inter_400Regular" },
-          ]}
-        >
-          {items.join(" · ")}
-        </Text>
+        {subtitle && (
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.rowSubtitle,
+              {
+                color: colors.mutedForeground,
+                fontFamily: "Inter_400Regular",
+              },
+            ]}
+          >
+            {subtitle}
+          </Text>
+        )}
       </View>
+      {trailing
+        ? trailing
+        : chevron && (
+            <Feather
+              name="chevron-right"
+              size={18}
+              color={colors.mutedForeground}
+            />
+          )}
     </View>
   );
+
+  if (onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        android_ripple={{ color: colors.muted }}
+        style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+      >
+        {Inner}
+      </Pressable>
+    );
+  }
+  return Inner;
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Styles                                                                    */
+/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: {
     paddingHorizontal: 22,
-    gap: 16,
+    gap: 18,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: 4,
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 16,
+    textAlign: "center",
+    letterSpacing: -0.2,
+  },
+  headerSpacer: {
+    width: 48,
   },
   syncBanner: {
     flexDirection: "row",
@@ -1009,46 +644,84 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     lineHeight: 17,
   },
-  planCard: {
+  profileCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
     padding: 16,
     borderWidth: 1,
-    gap: 10,
   },
-  planCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
   },
-  planBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
+  profileBody: {
+    flex: 1,
+    gap: 4,
   },
-  planBadgeText: {
-    fontSize: 11,
-    letterSpacing: 1.2,
+  profileName: {
+    fontSize: 17,
+    letterSpacing: -0.3,
   },
-  planMeta: {
+  profileEmail: {
     fontSize: 12.5,
   },
-  planTagline: {
-    fontSize: 13.5,
-    lineHeight: 19,
-  },
-  planManageRow: {
+  streakChip: {
+    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 2,
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
     marginTop: 4,
   },
-  planManageText: {
-    fontSize: 13,
+  group: {
+    gap: 10,
   },
-  signOutBtn: {
+  groupLabel: {
+    fontSize: 10.5,
+    letterSpacing: 1.6,
+    paddingHorizontal: 4,
+  },
+  groupCard: {
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 62,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    minHeight: 64,
+  },
+  rowIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rowBody: {
+    flex: 1,
+    gap: 2,
+  },
+  rowTitle: {
+    fontSize: 14.5,
+    letterSpacing: -0.1,
+  },
+  rowSubtitle: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  kbButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1056,283 +729,30 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
   },
-  insightsLinkCard: {
-    flexDirection: "row",
+  kbText: {
+    fontSize: 13.5,
+    letterSpacing: 0.2,
+  },
+  signOutLink: {
     alignItems: "center",
-    gap: 14,
-    padding: 16,
-    borderWidth: 1,
-  },
-  insightsLinkIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  insightsLinkTitle: {
-    fontSize: 14.5,
-  },
-  insightsLinkSubtitle: {
-    fontSize: 12.5,
-    lineHeight: 17,
+    paddingVertical: 6,
   },
   signOutText: {
-    fontSize: 14,
-    letterSpacing: 0.2,
-  },
-  prefsCard: {
-    borderWidth: 1,
-    paddingVertical: 4,
-  },
-  prefRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  prefIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  prefTitle: {
-    fontSize: 14.5,
-  },
-  prefDesc: {
-    fontSize: 12.5,
-    lineHeight: 17,
-  },
-  prefDivider: {
-    height: 1,
-    marginHorizontal: 16,
-  },
-  statsRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    borderWidth: 1,
-    padding: 16,
-  },
-  adaptCard: {
-    padding: 18,
-    borderWidth: 1,
-    gap: 12,
-  },
-  adaptHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  adaptLabel: {
-    fontSize: 11,
-    letterSpacing: 1.6,
-  },
-  adaptBody: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  adaptResult: {
-    gap: 10,
-    marginTop: 4,
-  },
-  adaptDifficulty: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  adaptDifficultyText: {
-    fontSize: 14.5,
-  },
-  adjRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-  },
-  adjDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    marginTop: 7,
-  },
-  adjText: {
-    flex: 1,
-    fontSize: 13.5,
-    lineHeight: 20,
-  },
-  encouragement: {
     fontSize: 13,
-    lineHeight: 19,
-    fontStyle: "italic",
-    marginTop: 4,
-  },
-  resetButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    padding: 16,
-    borderWidth: 1,
-    marginTop: 6,
-  },
-  resetText: {
-    fontSize: 14.5,
-    letterSpacing: 0.2,
-  },
-  insightsCard: {
-    padding: 18,
-    borderWidth: 1,
-    gap: 16,
-  },
-  awardsCard: {
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  awardRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-  },
-  awardIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  awardText: {
-    flex: 1,
-    gap: 2,
-  },
-  awardTitle: {
-    fontSize: 14,
-    lineHeight: 18,
-  },
-  awardSubtitle: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  insightsSummary: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  insightsEmpty: {
-    fontSize: 13.5,
-    lineHeight: 19,
-  },
-  traitGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    rowGap: 14,
-    columnGap: 12,
-  },
-  insightBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  insightBannerText: {
-    flex: 1,
-    fontSize: 12.5,
-    lineHeight: 17,
-  },
-  reflectionList: {
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 4,
-  },
-  reflectionTitle: {
-    fontSize: 10.5,
-    letterSpacing: 1.4,
-    paddingBottom: 6,
-  },
-  reflectionRow: {
-    flexDirection: "row",
-    gap: 10,
-    paddingVertical: 12,
-    alignItems: "flex-start",
-  },
-  reflectionTask: {
-    fontSize: 13.5,
-  },
-  reflectionMeta: {
-    fontSize: 11.5,
     letterSpacing: 0.3,
-    textTransform: "capitalize",
   },
-  reflectionNote: {
-    fontSize: 13,
-    lineHeight: 18,
-    fontStyle: "italic",
-  },
-});
-
-const traitStyles = StyleSheet.create({
-  cell: {
-    width: "47%",
-    gap: 4,
-  },
-  label: {
-    fontSize: 10,
-    letterSpacing: 1.4,
-  },
-  value: {
-    fontSize: 14,
-    lineHeight: 18,
-    textTransform: "capitalize",
-  },
-});
-
-const insightRowStyles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "flex-start",
-  },
-  icon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  footer: {
     alignItems: "center",
-    justifyContent: "center",
-  },
-  label: {
-    fontSize: 10.5,
-    letterSpacing: 1.3,
-  },
-  value: {
-    fontSize: 13.5,
-    lineHeight: 19,
-  },
-});
-
-const statStyles = StyleSheet.create({
-  container: {
-    flex: 1,
     gap: 4,
-    alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 4,
   },
-  value: {
-    fontSize: 22,
-    letterSpacing: -0.4,
+  footerVersion: {
+    fontSize: 11.5,
+    letterSpacing: 0.4,
   },
-  unit: {
-    fontSize: 12,
-    letterSpacing: 0.2,
-  },
-  label: {
-    fontSize: 10,
-    letterSpacing: 1.5,
-  },
-  divider: {
-    width: 1,
-    marginHorizontal: 8,
+  footerTagline: {
+    fontSize: 11,
+    letterSpacing: 0.3,
   },
 });

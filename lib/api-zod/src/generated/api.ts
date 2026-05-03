@@ -1081,9 +1081,17 @@ export const AtlasBehavioralProfileBody = zod.object({
         taskTitle: zod.string(),
         date: zod.string(),
         completed: zod.boolean(),
+        focusMinutes: zod
+          .number()
+          .optional()
+          .describe(
+            "Real focused-work minutes accumulated on this task entry, if tracked.",
+          ),
       }),
     )
-    .describe("Last ~60 task history entries (taskTitle, date, completed)."),
+    .describe(
+      "Last ~60 task history entries (taskTitle, date, completed, optional focusMinutes).",
+    ),
   reflections: zod
     .array(
       zod.object({

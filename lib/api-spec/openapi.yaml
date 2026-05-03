@@ -1189,7 +1189,7 @@ components:
           $ref: "#/components/schemas/UserProfile"
         recentHistory:
           type: array
-          description: Last ~60 task history entries (taskTitle, date, completed).
+          description: Last ~60 task history entries (taskTitle, date, completed, optional focusMinutes).
           items:
             type: object
             properties:
@@ -1201,6 +1201,9 @@ components:
                 type: string
               completed:
                 type: boolean
+              focusMinutes:
+                type: integer
+                description: Real focused-work minutes accumulated on this task entry, if tracked.
             required: [taskId, taskTitle, date, completed]
         reflections:
           type: array

@@ -5,6 +5,7 @@ import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AtlasButton } from "@/components/AtlasButton";
+import { AtlasLogo } from "@/components/AtlasLogo";
 import { EmptyState } from "@/components/EmptyState";
 import { GoalListItem } from "@/components/GoalListItem";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -68,6 +69,10 @@ export default function GoalsScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.headerRow}>
+          <AtlasLogo size="sm" />
+        </View>
+
         <SectionHeader
           eyebrow="GOALS"
           title="Your active goals"
@@ -181,6 +186,12 @@ const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: 22,
     gap: 14,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: 4,
+    paddingBottom: 4,
   },
   list: {
     gap: 10,

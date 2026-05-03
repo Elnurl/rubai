@@ -16,6 +16,10 @@ import { BarChart } from "@/components/charts/BarChart";
 import { FocusPulseCard } from "@/components/FocusPulseCard";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
+import {
+  useAtlasBehavioralProfile,
+  type BehavioralProfileRequestRecentHistoryItem,
+} from "@workspace/api-client-react";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const FULL_DAY_NAMES = [
@@ -41,8 +45,16 @@ export default function BehavioralInsightsScreen() {
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
 
-  const { activeBehavioral, activeBehavioralProfile, activeTaskHistory } =
-    useAtlas();
+  const {
+    activeBehavioral,
+    activeBehavioralProfile,
+    activeTaskHistory,
+    activeProfile,
+    activeReflections,
+    setActiveBehavioralProfile,
+  } = useAtlas();
+  const refreshProfile = useAtlasBehavioralProfile();
+  const [adoptedAt, setAdoptedAt] = React.useState<number | null>(null);
 
   const {
     intensitySeries,
@@ -99,10 +111,23 @@ export default function BehavioralInsightsScreen() {
       }
     }
 
-    // Deep work hours = total completed last-7d * 1.5h heuristic (mock until
-    // tracked) capped to 1 decimal
+    // Deep work hours: prefer real `focusMinutes` accumulated in last 7d.
+    // Fall back to the legacy 1.5h-per-completed-task heuristic only when
+    // the user hasn't run any focus sessions yet so the chart isn't empty.
     const last7Total = dayTotals.reduce((a, b) => a + b, 0);
-    const deep = Math.max(0, Math.round(last7Total * 1.5 * 10) / 10);
+    let last7FocusMinutes = 0;
+    for (let i = 0; i < 7; i++) {
+      const iso = isoForDaysAgo(i);
+      for (const e of activeTaskHistory) {
+        if (e.date === iso && typeof e.focusMinutes === "number") {
+          last7FocusMinutes += e.focusMinutes;
+        }
+      }
+    }
+    const hasRealFocus = last7FocusMinutes > 0;
+    const deep = hasRealFocus
+      ? Math.round((last7FocusMinutes / 60) * 10) / 10
+      : Math.max(0, Math.round(last7Total * 1.5 * 10) / 10);
 
     // Consistency = (days with >=1 completion in last 14d) / 14
     let activeDays = 0;
@@ -129,21 +154,26 @@ export default function BehavioralInsightsScreen() {
           : 0
         : Math.round(((activeDays - prevActiveDays) / prevActiveDays) * 100);
 
-    // Avg focus = avg completed/day in last 7d * 1.5h
-    const avgFocus = Math.max(0, Math.round((last7Total / 7) * 1.5 * 10) / 10);
-    const prev7Total = (() => {
-      let n = 0;
-      for (let i = 7; i < 14; i++) {
-        const iso = isoForDaysAgo(i);
-        n += activeTaskHistory.filter((e) => e.date === iso && e.completed)
-          .length;
+    // Avg focus: real avg if focus sessions exist, else legacy heuristic.
+    const avgFocus = hasRealFocus
+      ? Math.round((last7FocusMinutes / 7 / 60) * 10) / 10
+      : Math.max(0, Math.round((last7Total / 7) * 1.5 * 10) / 10);
+    let prev7FocusMinutes = 0;
+    let prev7Total = 0;
+    for (let i = 7; i < 14; i++) {
+      const iso = isoForDaysAgo(i);
+      for (const e of activeTaskHistory) {
+        if (e.date === iso) {
+          if (e.completed) prev7Total += 1;
+          if (typeof e.focusMinutes === "number") {
+            prev7FocusMinutes += e.focusMinutes;
+          }
+        }
       }
-      return n;
-    })();
-    const prevAvgFocus = Math.max(
-      0,
-      Math.round((prev7Total / 7) * 1.5 * 10) / 10,
-    );
+    }
+    const prevAvgFocus = hasRealFocus
+      ? Math.round((prev7FocusMinutes / 7 / 60) * 10) / 10
+      : Math.max(0, Math.round((prev7Total / 7) * 1.5 * 10) / 10);
     const avgDelta = Math.round((avgFocus - prevAvgFocus) * 60); // in minutes
 
     // Last 14 days completion bars
@@ -221,6 +251,93 @@ export default function BehavioralInsightsScreen() {
     activeBehavioralProfile?.summary ??
     "You tend to lose momentum after long stretches of uninterrupted work. Try inserting a 'micro-recovery' break to sustain your peak focus longer.";
 
+  const handleRefresh = React.useCallback(async () => {
+    if (!activeProfile) return;
+    const recentHistory: BehavioralProfileRequestRecentHistoryItem[] =
+      activeTaskHistory.slice(-60).map((e) => ({
+        taskId: e.taskId,
+        taskTitle: e.taskTitle,
+        date: e.date,
+        completed: e.completed,
+        ...(typeof e.focusMinutes === "number"
+          ? { focusMinutes: Math.round(e.focusMinutes) }
+          : {}),
+      }));
+    try {
+      const res = await refreshProfile.mutateAsync({
+        data: {
+          profile: activeProfile,
+          recentHistory,
+          reflections: activeReflections.slice(-20),
+          ...(activeBehavioralProfile ? { previous: activeBehavioralProfile } : {}),
+        },
+      });
+      await setActiveBehavioralProfile(res.profile);
+    } catch {
+      // Refresh errors stay silent — the existing profile is still shown.
+    }
+  }, [
+    activeProfile,
+    activeReflections,
+    activeTaskHistory,
+    activeBehavioralProfile,
+    refreshProfile,
+    setActiveBehavioralProfile,
+  ]);
+
+  const handleAdoptRhythm = React.useCallback(async () => {
+    const labels = peakRows.map((r) => r.title).slice(0, 3);
+    if (activeBehavioralProfile) {
+      await setActiveBehavioralProfile({
+        ...activeBehavioralProfile,
+        peakHours: labels,
+      });
+      setAdoptedAt(Date.now());
+      return;
+    }
+    // No profile yet — build one via refresh, then merge the adopted peak
+    // hours on top so the user's choice is actually persisted (and not lost
+    // to the freshly-generated profile).
+    if (!activeProfile) return;
+    const recentHistory: BehavioralProfileRequestRecentHistoryItem[] =
+      activeTaskHistory.slice(-60).map((e) => ({
+        taskId: e.taskId,
+        taskTitle: e.taskTitle,
+        date: e.date,
+        completed: e.completed,
+        ...(typeof e.focusMinutes === "number"
+          ? { focusMinutes: Math.round(e.focusMinutes) }
+          : {}),
+      }));
+    try {
+      const res = await refreshProfile.mutateAsync({
+        data: {
+          profile: activeProfile,
+          recentHistory,
+          reflections: activeReflections.slice(-20),
+        },
+      });
+      await setActiveBehavioralProfile({
+        ...res.profile,
+        peakHours: labels,
+      });
+      setAdoptedAt(Date.now());
+    } catch {
+      // Silent — leave UI unchanged so the user can retry.
+    }
+  }, [
+    peakRows,
+    activeBehavioralProfile,
+    activeProfile,
+    activeReflections,
+    activeTaskHistory,
+    refreshProfile,
+    setActiveBehavioralProfile,
+  ]);
+
+  const adopted =
+    adoptedAt !== null && Date.now() - adoptedAt < 30_000;
+
   const subtitleCopy =
     activeBehavioral.currentStreakDays >= 7
       ? "Your rhythm is stabilizing"
@@ -264,20 +381,44 @@ export default function BehavioralInsightsScreen() {
               {subtitleCopy}
             </Text>
           </View>
-          <Pressable
-            onPress={() => router.back()}
-            style={({ pressed }) => [
-              styles.closeBtn,
-              {
-                backgroundColor: colors.muted,
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
-            accessibilityLabel="Close"
-            accessibilityRole="button"
-          >
-            <Feather name="x" size={18} color={colors.foreground} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable
+              onPress={handleRefresh}
+              disabled={refreshProfile.isPending || !activeProfile}
+              style={({ pressed }) => [
+                styles.closeBtn,
+                {
+                  backgroundColor: colors.muted,
+                  opacity:
+                    pressed || refreshProfile.isPending || !activeProfile
+                      ? 0.55
+                      : 1,
+                },
+              ]}
+              accessibilityLabel="Refresh insights"
+              accessibilityRole="button"
+            >
+              <Feather
+                name="refresh-cw"
+                size={16}
+                color={colors.foreground}
+              />
+            </Pressable>
+            <Pressable
+              onPress={() => router.back()}
+              style={({ pressed }) => [
+                styles.closeBtn,
+                {
+                  backgroundColor: colors.muted,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+              accessibilityLabel="Close"
+              accessibilityRole="button"
+            >
+              <Feather name="x" size={18} color={colors.foreground} />
+            </Pressable>
+          </View>
         </View>
 
         {/* Focus Pulse */}
@@ -517,25 +658,32 @@ export default function BehavioralInsightsScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Adopt this rhythm"
+            onPress={handleAdoptRhythm}
             style={({ pressed }) => [
               styles.observationCta,
               {
-                borderColor: colors.border,
+                borderColor: adopted ? colors.primary : colors.border,
+                backgroundColor: adopted ? colors.primary + "14" : "transparent",
                 borderRadius: colors.radius,
                 opacity: pressed ? 0.85 : 1,
               },
             ]}
           >
+            <Feather
+              name={adopted ? "check-circle" : "compass"}
+              size={14}
+              color={adopted ? colors.primary : colors.foreground}
+            />
             <Text
               style={[
                 styles.observationCtaText,
                 {
-                  color: colors.foreground,
+                  color: adopted ? colors.primary : colors.foreground,
                   fontFamily: "Inter_600SemiBold",
                 },
               ]}
             >
-              Adopt This Rhythm
+              {adopted ? "Rhythm adopted — daily plans will favor these windows" : "Adopt This Rhythm"}
             </Text>
           </Pressable>
         </View>
@@ -679,6 +827,11 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     lineHeight: 19,
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   closeBtn: {
     width: 32,
     height: 32,
@@ -800,9 +953,13 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   observationCta: {
-    paddingVertical: 12,
-    borderWidth: 1,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
   },
   observationCtaText: {
     fontSize: 13.5,

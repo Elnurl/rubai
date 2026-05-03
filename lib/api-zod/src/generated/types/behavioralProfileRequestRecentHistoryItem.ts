@@ -11,4 +11,6 @@ export type BehavioralProfileRequestRecentHistoryItem = {
   taskTitle: string;
   date: string;
   completed: boolean;
+  /** Real focused-work minutes accumulated on this task entry, if tracked. */
+  focusMinutes?: number;
 };

@@ -162,6 +162,9 @@ export default function TodayScreen() {
       taskTitle: e.taskTitle,
       date: e.date,
       completed: e.completed,
+      ...(typeof e.focusMinutes === "number"
+        ? { focusMinutes: Math.round(e.focusMinutes) }
+        : {}),
     }));
     // Include the just-submitted reflection explicitly so the request never
     // misses it due to closure timing on the activeReflections state update.

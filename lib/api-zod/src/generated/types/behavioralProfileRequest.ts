@@ -12,7 +12,7 @@ import type { UserProfile } from "./userProfile";
 
 export interface BehavioralProfileRequest {
   profile: UserProfile;
-  /** Last ~60 task history entries (taskTitle, date, completed). */
+  /** Last ~60 task history entries (taskTitle, date, completed, optional focusMinutes). */
   recentHistory: BehavioralProfileRequestRecentHistoryItem[];
   /** Last ~20 reflection entries. */
   reflections: ReflectionEntry[];

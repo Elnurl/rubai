@@ -117,6 +117,18 @@ type AtlasContextValue = AtlasState & {
   recordActiveTask: (entry: TaskHistoryEntry) => Promise<void>;
   recordActiveReflection: (entry: ReflectionEntry) => Promise<void>;
   setActiveBehavioralProfile: (profile: BehavioralProfile | null) => Promise<void>;
+  /**
+   * Add focused-work minutes to the active goal's history entry for the
+   * given task on the given date. Creates a stub history entry (completed
+   * = false) when none exists yet so the focus session is preserved even if
+   * the user stops the timer before checking the task off.
+   */
+  appendActiveFocusMinutes: (
+    taskId: string,
+    taskTitle: string,
+    date: string,
+    minutes: number,
+  ) => Promise<void>;
   applyRoadmapEvolution: (
     goalId: string,
     evolvedRoadmap: Roadmap,
@@ -910,16 +922,32 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     async (entry: TaskHistoryEntry) => {
       let toQueue: EarnedAward[] = [];
       await updateActiveGoal((g) => {
+        // Carry forward fields the toggle path doesn't know about (focus
+        // minutes, reflection note/tag) so completing/uncompleting a task
+        // never silently wipes accumulated focus sessions or reflections.
+        const existing = g.taskHistory.find(
+          (e) => e.taskId === entry.taskId && e.date === entry.date,
+        );
+        const merged: TaskHistoryEntry = existing
+          ? {
+              ...existing,
+              ...entry,
+              focusMinutes: entry.focusMinutes ?? existing.focusMinutes,
+              reasonTag: entry.reasonTag ?? existing.reasonTag,
+              note: entry.note ?? existing.note,
+              reflectedAt: entry.reflectedAt ?? existing.reflectedAt,
+            }
+          : entry;
         const filtered = g.taskHistory.filter(
           (e) => !(e.taskId === entry.taskId && e.date === entry.date),
         );
         const next: Goal = {
           ...g,
-          taskHistory: [...filtered, entry].slice(-200),
+          taskHistory: [...filtered, merged].slice(-200),
         };
         // Evaluate after the new history is in place so awards reflect this
         // toggle. Cap stored awards at 50 to keep the snapshot bounded.
-        const fresh = evaluateNewAwards(next, entry.date);
+        const fresh = evaluateNewAwards(next, merged.date);
         if (fresh.length > 0) {
           toQueue = fresh;
           return {
@@ -946,6 +974,41 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
           }
         }
       }
+    },
+    [updateActiveGoal],
+  );
+
+  const appendActiveFocusMinutes = useCallback(
+    async (taskId: string, taskTitle: string, date: string, minutes: number) => {
+      if (minutes <= 0) return;
+      const rounded = Math.max(0, Math.round(minutes));
+      await updateActiveGoal((g) => {
+        const existing = g.taskHistory.find(
+          (e) => e.taskId === taskId && e.date === date,
+        );
+        if (existing) {
+          const taskHistory = g.taskHistory.map((e) =>
+            e.taskId === taskId && e.date === date
+              ? { ...e, focusMinutes: (e.focusMinutes ?? 0) + rounded }
+              : e,
+          );
+          return { ...g, taskHistory };
+        }
+        // No history entry yet — create one as not-completed so the focus
+        // session is still preserved if the user closes the timer before
+        // checking the task off.
+        const stub: TaskHistoryEntry = {
+          taskId,
+          taskTitle,
+          date,
+          completed: false,
+          focusMinutes: rounded,
+        };
+        return {
+          ...g,
+          taskHistory: [...g.taskHistory, stub].slice(-200),
+        };
+      });
     },
     [updateActiveGoal],
   );
@@ -1212,6 +1275,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     recordActiveTask,
     recordActiveReflection,
     setActiveBehavioralProfile,
+    appendActiveFocusMinutes,
     applyRoadmapEvolution,
     setActiveCoachHistory,
     appendActiveCoachMessage,
