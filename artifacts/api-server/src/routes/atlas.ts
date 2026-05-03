@@ -28,6 +28,7 @@ import {
   setCached,
 } from "../lib/dailyPlanCache";
 import { sendPushTo } from "../lib/pushScheduler";
+import { retrieveRelevantContext } from "../lib/ragRetrieval";
 import {
   AtlasOnboardingChatBody as atlasOnboardingChatBody,
   AtlasGenerateRoadmapBody as atlasGenerateRoadmapBody,
@@ -588,13 +589,31 @@ const coachProposedActionValidator = z
 // `suggestedReplies` keeps the original wire-schema bounds (≤3 tap-targets,
 // ≤50 chars each) — these are length/count constraints OpenAI strict mode
 // preserves, and runtime Zod enforces them on Anthropic failover output too.
-const coachResponseValidator = z.object({
+export const coachResponseValidator = z.object({
   reply: z.string(),
   suggestedReplies: z.array(z.string().max(50)).max(3),
   actionSuggestion: coachActionSuggestionValidator,
   memoryUpdate: coachMemoryUpdateValidator,
   proposedAction: coachProposedActionValidator,
 });
+
+/**
+ * Stream fallback resolver. Pulled out as a pure exported helper so the
+ * `/coach/stream` end-of-stream degradation path is unit-testable: when the
+ * accumulated SSE JSON fails to parse/validate, we MUST keep the reply text
+ * the user already saw stream-in instead of replacing it with
+ * `normalizeCoachOutput({})`'s generic English fallback.
+ */
+export function pickStreamFallbackReply(
+  parsedJson: CoachRawOutput,
+  streamedReply: string,
+  parseFailed: boolean,
+): CoachRawOutput {
+  if (parseFailed && streamedReply.trim().length > 0) {
+    return { reply: streamedReply };
+  }
+  return parsedJson;
+}
 
 const profileFieldsValidator = z.object({
   goalStatement: z.string(),
@@ -686,7 +705,7 @@ const intakeQuestionValidator = z.object({
 // strict mode, and runtime Zod enforces them on Anthropic failover output
 // too. strictJsonCompletion's single retry handles the rare case where the
 // model emits a count outside the bound.
-const intakeQuestionsValidator = z.object({
+export const intakeQuestionsValidator = z.object({
   introMessage: z.string(),
   questions: z.array(intakeQuestionValidator).min(6).max(10),
 });
@@ -901,6 +920,16 @@ CONTEXT:
 ${contextBlock}${
       calendarContext && calendarContext.trim().length > 0
         ? `\n\nTODAY'S CALENDAR:\n${calendarContext.trim()}`
+        : ""
+    }${
+      typeof req.userId === "number"
+        ? await retrieveRelevantContext(req, req.userId, message)
+            .then((b) =>
+              b
+                ? `\n\nRELEVANT MEMORY (semantic retrieval — surface only when it directly helps):\n${b}`
+                : "",
+            )
+            .catch(() => "")
         : ""
     }`;
 
@@ -1269,6 +1298,16 @@ ${contextBlock}${
     calendarContext && calendarContext.trim().length > 0
       ? `\n\nTODAY'S CALENDAR:\n${calendarContext.trim()}`
       : ""
+  }${
+    typeof req.userId === "number"
+      ? await retrieveRelevantContext(req, req.userId, message)
+          .then((b) =>
+            b
+              ? `\n\nRELEVANT MEMORY (semantic retrieval — surface only when it directly helps):\n${b}`
+              : "",
+          )
+          .catch(() => "")
+      : ""
   }`;
 
   // SSE headers. `X-Accel-Buffering: no` disables nginx-style proxy
@@ -1398,9 +1437,7 @@ ${contextBlock}${
     // overwrite the user-visible turn with a generic "I'm here. Tell me a
     // bit more…" fallback even though the user saw a real streamed answer.
     // Only structured fields (action, memory, etc) degrade to null.
-    if (parseFailed && streamedReply.trim().length > 0) {
-      parsedJson = { reply: streamedReply };
-    }
+    parsedJson = pickStreamFallbackReply(parsedJson, streamedReply, parseFailed);
     const normalized = normalizeCoachOutput(parsedJson, todayPlan);
 
     writeEvent({

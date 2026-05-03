@@ -17,6 +17,12 @@ export const usersTable = pgTable("users", {
   // ISO date (YYYY-MM-DD) of the most recent morning nudge in the user's
   // local timezone. Used to dedupe — at most one morning nudge per day.
   lastMorningNudgeDate: text("last_morning_nudge_date"),
+  // SHA-256 hash of the canonical goals slice last successfully indexed
+  // by embeddingsIndexer. When the next /me/state PUT presents the same
+  // hash we skip re-indexing entirely (no chunk extraction, no DB reads,
+  // no embedding API calls). Cleared whenever index logic changes (bump
+  // EMBEDDING_INDEX_VERSION in embeddingsIndexer.ts to invalidate).
+  embeddingFingerprint: text("embedding_fingerprint"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

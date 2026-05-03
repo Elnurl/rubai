@@ -3,10 +3,26 @@ import { createHash } from "node:crypto";
 import type { Request } from "express";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 
-import { db, embeddingsTable } from "@workspace/db";
+import { db, embeddingsTable, usersTable } from "@workspace/db";
 
 import { EMBEDDING_MODEL, embedTexts } from "./embeddings";
 import { logger } from "./logger";
+
+/**
+ * Bump this when the chunking logic, content types, or fingerprint
+ * canonicalisation changes. The version is mixed into the fingerprint
+ * so a deploy with new logic invalidates every cached fingerprint and
+ * forces a one-time full re-index.
+ */
+const EMBEDDING_INDEX_VERSION = "v1";
+
+/**
+ * Per-batch upsert size. The transaction wrapping the upserts runs in
+ * groups of this size so a 200-chunk re-index commits four small
+ * transactions (one per ~50 rows) instead of one giant one — cheaper
+ * locks, partial progress on failure, and bounded memory.
+ */
+const UPSERT_BATCH_SIZE = 50;
 
 /**
  * Content types this indexer owns. Pruning is scoped to these so that
@@ -55,7 +71,36 @@ export async function indexUserGoals(
   userId: number,
   goals: unknown,
 ): Promise<void> {
+  // Phase 3 perf: short-circuit the whole pipeline when the indexable
+  // chunk set is unchanged from the last successful pass. We compare
+  // against `computeChunkFingerprint(chunks)` below, after extracting
+  // chunks, so the fingerprint only invalidates on changes that would
+  // actually affect what gets embedded.
+  let cachedFingerprint: string | null = null;
+  try {
+    const [row] = await db
+      .select({ fp: usersTable.embeddingFingerprint })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId));
+    cachedFingerprint = row?.fp ?? null;
+  } catch (err) {
+    // Fingerprint lookup is best-effort. On failure, fall through and
+    // do the normal indexing pass so we never silently stop indexing.
+    logger.warn({ err, userId }, "Embedding fingerprint lookup failed");
+  }
+
   const chunks = extractIndexableChunks(goals);
+
+  // Recompute fingerprint from the actual indexable projection of the
+  // chunks (sorted by stable contentId). This is the precise input to
+  // the indexing pipeline — any change here is the *only* thing that
+  // can affect what gets embedded. Compared to a coarse subtree hash
+  // this avoids false invalidations from sibling-field churn (e.g. UI
+  // flags inside learnedProfile that we don't index).
+  const chunkFingerprint = computeChunkFingerprint(chunks);
+  if (cachedFingerprint && cachedFingerprint === chunkFingerprint) {
+    return;
+  }
 
   // -- Prune stale rows BEFORE embedding so a deletion (e.g. a
   // reflection the user removed) is reflected in retrieval even if all
@@ -64,7 +109,13 @@ export async function indexUserGoals(
   // unaffected.
   await pruneStaleChunks(userId, chunks);
 
-  if (chunks.length === 0) return;
+  if (chunks.length === 0) {
+    // Empty after prune: stamp the fingerprint so a subsequent call
+    // with the same (still-empty) state can short-circuit before the
+    // prune query.
+    await persistFingerprint(userId, chunkFingerprint);
+    return;
+  }
 
   // Compare against existing rows so we only embed new/changed chunks.
   const contentIds = chunks.map((c) => c.contentId);
@@ -94,51 +145,135 @@ export async function indexUserGoals(
     const prev = existingHash.get(`${c.contentType}::${c.contentId}`);
     return prev !== hash;
   });
-  if (toIndex.length === 0) return;
+  if (toIndex.length === 0) {
+    // Nothing to embed but the prune step may have touched rows; still
+    // record the fingerprint so the next call can short-circuit.
+    await persistFingerprint(userId, chunkFingerprint);
+    return;
+  }
 
   const vectors = await embedTexts(
     req,
     toIndex.map((c) => c.sourceText),
   );
 
-  // Upsert one row per chunk. We do this inside a transaction so a
-  // partial failure rolls back; embeddings are much smaller than the
-  // user_state row so the txn stays cheap.
-  await db.transaction(async (tx) => {
-    for (let i = 0; i < toIndex.length; i++) {
-      const c = toIndex[i]!;
-      const v = vectors[i];
-      if (!v) continue; // failed batch — try again next pass
-      const hash = sha256(c.sourceText);
-      await tx
-        .insert(embeddingsTable)
-        .values({
-          userId,
-          goalId: c.goalId,
-          contentType: c.contentType,
-          contentId: c.contentId,
-          sourceText: c.sourceText,
-          embedding: v,
-          metadata: { ...c.metadata, text_hash: hash },
-          model: EMBEDDING_MODEL,
-        })
-        .onConflictDoUpdate({
-          target: [
-            embeddingsTable.userId,
-            embeddingsTable.contentType,
-            embeddingsTable.contentId,
-          ],
-          set: {
+  // Upsert in bounded batches. Each transaction commits ~UPSERT_BATCH_SIZE
+  // rows so a large re-index produces several small commits instead of
+  // one long-running transaction holding row locks. If a batch throws
+  // we propagate after letting earlier batches commit — the next pass
+  // will re-attempt only the still-stale chunks (text_hash compare).
+  let anyVectorPersisted = false;
+  let anyVectorMissing = false;
+  for (let start = 0; start < toIndex.length; start += UPSERT_BATCH_SIZE) {
+    const sliceEnd = Math.min(start + UPSERT_BATCH_SIZE, toIndex.length);
+    await db.transaction(async (tx) => {
+      for (let i = start; i < sliceEnd; i++) {
+        const c = toIndex[i]!;
+        const v = vectors[i];
+        if (!v) {
+          anyVectorMissing = true;
+          continue; // failed embedding batch — try again next pass
+        }
+        const hash = sha256(c.sourceText);
+        await tx
+          .insert(embeddingsTable)
+          .values({
+            userId,
+            goalId: c.goalId,
+            contentType: c.contentType,
+            contentId: c.contentId,
             sourceText: c.sourceText,
             embedding: v,
             metadata: { ...c.metadata, text_hash: hash },
             model: EMBEDDING_MODEL,
-            goalId: c.goalId,
-            updatedAt: sql`now()`,
-          },
-        });
-    }
-  });
+          })
+          .onConflictDoUpdate({
+            target: [
+              embeddingsTable.userId,
+              embeddingsTable.contentType,
+              embeddingsTable.contentId,
+            ],
+            set: {
+              sourceText: c.sourceText,
+              embedding: v,
+              metadata: { ...c.metadata, text_hash: hash },
+              model: EMBEDDING_MODEL,
+              goalId: c.goalId,
+              updatedAt: sql`now()`,
+            },
+          });
+        anyVectorPersisted = true;
+      }
+    });
+  }
+
+  // Only stamp the fingerprint when every chunk that needed an
+  // embedding actually got one. If embedding failures left holes we
+  // want the next pass to retry those chunks.
+  if (anyVectorPersisted && !anyVectorMissing) {
+    await persistFingerprint(userId, chunkFingerprint);
+  }
+}
+
+/**
+ * Canonical SHA-256 over the precise list of chunks we'd write. Two
+ * passes producing the same `(contentType, contentId, sourceText)`
+ * triples — in any order — produce the same fingerprint. This is the
+ * tightest possible cache key: nothing that doesn't change the chunk
+ * set can invalidate it, and any change that does will invalidate it.
+ * The version prefix lets us bump indexing logic without a data
+ * migration.
+ */
+export function computeChunkFingerprint(chunks: Chunk[]): string {
+  const sorted = [...chunks]
+    .map((c) => ({
+      t: c.contentType,
+      i: c.contentId,
+      s: c.sourceText,
+    }))
+    .sort((a, b) => {
+      if (a.t !== b.t) return a.t < b.t ? -1 : 1;
+      if (a.i !== b.i) return a.i < b.i ? -1 : 1;
+      return a.s < b.s ? -1 : a.s > b.s ? 1 : 0;
+    });
+  const canonical = stableStringify(sorted);
+  return createHash("sha256")
+    .update(`${EMBEDDING_INDEX_VERSION}\n${canonical}`)
+    .digest("hex");
+}
+
+async function persistFingerprint(
+  userId: number,
+  fingerprint: string,
+): Promise<void> {
+  try {
+    await db
+      .update(usersTable)
+      .set({ embeddingFingerprint: fingerprint })
+      .where(eq(usersTable.id, userId));
+  } catch (err) {
+    logger.warn({ err, userId }, "Embedding fingerprint persist failed");
+  }
+}
+
+/**
+ * Deterministic JSON stringify with sorted object keys. JSON.stringify
+ * preserves insertion order which is brittle across goal-shape edits;
+ * sorting keys keeps the fingerprint stable as long as the *values*
+ * are unchanged.
+ */
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  return `{${keys
+    .map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`)
+    .join(",")}}`;
 }
 
 /**
