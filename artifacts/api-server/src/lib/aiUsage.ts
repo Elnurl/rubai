@@ -124,15 +124,21 @@ export async function* trackedStream(
   const model = typeof params.model === "string" ? params.model : "unknown";
 
   let usage: ChatCompletionChunk["usage"] | null = null;
-  let stream: Stream<ChatCompletionChunk> | null = null;
-
-  // ---- Phase 1: open the OpenAI stream. Failover is only safe here.
-  try {
-    stream = await openai.chat.completions.create({
+  // openai SDK v6 widened the streaming return type with private brand
+  // fields. Use the call-site return type via a const-init pattern so we
+  // never need to pin a hand-rolled Stream<ChatCompletionChunk> type.
+  let stream: Awaited<ReturnType<typeof openStream>> | null = null;
+  async function openStream() {
+    return openai.chat.completions.create({
       ...params,
       stream: true,
       stream_options: { include_usage: true, ...(params.stream_options ?? {}) },
     });
+  }
+
+  // ---- Phase 1: open the OpenAI stream. Failover is only safe here.
+  try {
+    stream = await openStream();
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Unknown OpenAI failure";
@@ -160,6 +166,8 @@ export async function* trackedStream(
   }
 
   // ---- Phase 2: drain. Once we've yielded a chunk we cannot fail over.
+  // stream is non-null here: Phase 1 either assigned it or returned/threw.
+  if (!stream) return;
   try {
     for await (const chunk of stream) {
       if (chunk.usage) usage = chunk.usage;

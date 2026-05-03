@@ -2,10 +2,16 @@ import crypto from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import multer from "multer";
+import { z } from "zod";
 import { toFile } from "openai/uploads";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { db, usersTable } from "@workspace/db";
 import { trackedCreate, trackedStream } from "../lib/aiUsage";
+import {
+  parseAndValidate,
+  strictJsonCompletion,
+  StrictJsonError,
+} from "../lib/strictJson";
 import {
   MODEL_SMART,
   MODEL_FAST,
@@ -762,6 +768,63 @@ const coachResponseSchema = {
   ],
 } as const;
 
+// Runtime validator mirroring coachResponseSchema. Kept loose (passthrough,
+// optional fields on nested action payloads) so we accept every valid strict-
+// mode output, including failover via Anthropic tool_use which round-trips
+// JSON without OpenAI's strict guarantee. The only HARD requirement is `reply`
+// — without it normalizeCoachOutput cannot produce a usable turn.
+const coachResponseValidator = z
+  .object({
+    // No min length: the OpenAI strict schema only enforces type:"string",
+    // so an empty reply is schema-valid and must not be flagged here.
+    // normalizeCoachOutput tolerates empty replies downstream.
+    reply: z.string(),
+    suggestedReplies: z.array(z.string()).optional(),
+    actionSuggestion: z
+      .union([
+        z
+          .object({
+            kind: z.string(),
+            label: z.string().optional(),
+            rationale: z.string().optional(),
+          })
+          .passthrough(),
+        z.null(),
+      ])
+      .optional(),
+    memoryUpdate: z
+      .union([
+        z
+          .object({
+            summary: z.string().optional(),
+            newFacts: z.array(z.string()).optional(),
+          })
+          .passthrough(),
+        z.null(),
+      ])
+      .optional(),
+    proposedAction: z
+      .union([
+        z
+          .object({
+            kind: z.string(),
+            label: z.string().optional(),
+            rationale: z.string().optional(),
+            task: z
+              .union([z.object({}).passthrough(), z.null()])
+              .optional(),
+            taskId: z.union([z.string(), z.null()]).optional(),
+            taskTitle: z.union([z.string(), z.null()]).optional(),
+            newTitle: z.union([z.string(), z.null()]).optional(),
+            removeTaskIds: z.array(z.string()).optional(),
+          })
+          .passthrough(),
+        z.null(),
+      ])
+      .optional(),
+  })
+  .passthrough();
+
 router.post("/coach", async (req, res) => {
   const parsed = atlasCoachBody.safeParse(req.body);
   if (!parsed.success) {
@@ -931,39 +994,48 @@ ${contextBlock}${
         : ""
     }`;
 
-    const completion = await trackedCreate(req, {
-      // Vision turns need a multimodal model; gpt-4o supports both
-      // image_url content and json_schema response_format.
-      model: pickCoachModel({
-        choice: modelChoice,
-        userMessageLength: message.length,
-        historyTurns: history.length,
-        hasImage,
-      }),
-      max_completion_tokens: 1200,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "coach_reply",
-          strict: true,
-          schema: coachResponseSchema,
+    const parsedJson = await strictJsonCompletion(
+      req,
+      {
+        // Vision turns need a multimodal model; gpt-4o supports both
+        // image_url content and json_schema response_format.
+        model: pickCoachModel({
+          choice: modelChoice,
+          userMessageLength: message.length,
+          historyTurns: history.length,
+          hasImage,
+        }),
+        max_completion_tokens: 1200,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "coach_reply",
+            strict: true,
+            schema: coachResponseSchema,
+          },
         },
+        messages: [
+          { role: "system", content: systemContext },
+          ...history.map((m: { role: string; content: string }) => ({
+            role: m.role as "user" | "assistant",
+            content: m.content,
+          })),
+          { role: "user", content: userMessageContent },
+        ],
       },
-      messages: [
-        { role: "system", content: systemContext },
-        ...history.map((m: { role: string; content: string }) => ({
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        })),
-        { role: "user", content: userMessageContent },
-      ],
-    });
-
-    const raw = completion.choices[0]?.message?.content ?? "{}";
-    const parsedJson = JSON.parse(raw) as CoachRawOutput;
-    const normalized = normalizeCoachOutput(parsedJson, todayPlan);
+      coachResponseValidator,
+    );
+    const normalized = normalizeCoachOutput(
+      parsedJson as CoachRawOutput,
+      todayPlan,
+    );
     res.json(normalized);
   } catch (err) {
+    if (err instanceof StrictJsonError && err.kind === "refusal") {
+      req.log.warn({ details: err.details }, "coach refusal from model");
+      res.status(400).json({ error: "Model refused to respond" });
+      return;
+    }
     req.log.error({ err }, "coach request failed");
     res.status(500).json({ error: "AI request failed" });
   }
@@ -1320,6 +1392,7 @@ ${contextBlock}${
 
   const extractor = new ReplyTextExtractor();
   let accumulated = "";
+  let refusalAccumulated = "";
 
   try {
     const stream = trackedStream(req, {
@@ -1351,7 +1424,17 @@ ${contextBlock}${
 
     for await (const chunk of stream) {
       if (aborted) break;
-      const delta = chunk.choices[0]?.delta?.content;
+      const choice = chunk.choices[0];
+      const delta = choice?.delta?.content;
+      // OpenAI streams safety refusals in delta.refusal. Accumulate so we
+      // can surface them as a typed refusal at end-of-stream instead of
+      // silently degrading to an empty fallback reply.
+      const refusalDelta = (
+        choice?.delta as { refusal?: string | null } | undefined
+      )?.refusal;
+      if (typeof refusalDelta === "string" && refusalDelta.length > 0) {
+        refusalAccumulated += refusalDelta;
+      }
       if (typeof delta === "string" && delta.length > 0) {
         accumulated += delta;
         const replyDelta = extractor.feed(delta);
@@ -1365,16 +1448,43 @@ ${contextBlock}${
       return;
     }
 
-    // End of stream. Parse the full JSON object we accumulated and run
-    // the SAME normalization as the non-streaming /coach handler so the
-    // mobile UI sees identical semantics (clamps, whitelisted action
-    // kinds, fresh server-issued task IDs, taskId membership checks
-    // against todayPlan, etc.).
+    // End of stream. Parse + Zod-validate the full JSON object we
+    // accumulated and run the SAME normalization as the non-streaming
+    // /coach handler so the mobile UI sees identical semantics (clamps,
+    // whitelisted action kinds, fresh server-issued task IDs, taskId
+    // membership checks against todayPlan, etc.). Streaming cannot
+    // retry mid-flight, so on parse/validation failure we degrade
+    // gracefully — the user already saw the streamed reply tokens via
+    // ReplyTextExtractor; the final event simply lacks structured
+    // action fields.
     let parsedJson: CoachRawOutput = {};
     try {
-      parsedJson = JSON.parse(accumulated || "{}") as CoachRawOutput;
+      parsedJson = parseAndValidate(
+        accumulated,
+        refusalAccumulated.length > 0 ? refusalAccumulated : null,
+        coachResponseValidator,
+      ) as CoachRawOutput;
     } catch (parseErr) {
-      req.log.warn({ parseErr }, "coach stream produced invalid JSON");
+      const kind =
+        parseErr instanceof StrictJsonError ? parseErr.kind : "unknown";
+      req.log.warn(
+        { parseErr, kind },
+        "coach stream output failed parse/validate",
+      );
+      // Refusals deserve a distinct SSE signal so the mobile UI can show a
+      // proper "model declined to respond" state instead of an empty turn.
+      if (parseErr instanceof StrictJsonError && parseErr.kind === "refusal") {
+        if (!res.writableEnded) {
+          try {
+            writeEvent({ type: "error", error: "Model refused to respond" });
+            writeEvent({ type: "done" });
+          } catch {
+            // client likely disconnected
+          }
+          res.end();
+        }
+        return;
+      }
     }
     const normalized = normalizeCoachOutput(parsedJson, todayPlan);
 
