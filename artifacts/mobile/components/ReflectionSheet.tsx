@@ -1,15 +1,16 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
 import type { ReflectionEntry } from "@workspace/api-client-react";
@@ -62,6 +63,7 @@ export function ReflectionSheet({
   onSubmit,
 }: Props) {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   const [reasonTag, setReasonTag] = useState<ReflectionEntry["reasonTag"]>(initialReasonTag);
   const [note, setNote] = useState(initialNote ?? "");
 
@@ -96,13 +98,14 @@ export function ReflectionSheet({
       visible={visible}
       animationType="fade"
       transparent
+      statusBarTranslucent
       onRequestClose={onClose}
     >
       <Pressable style={styles.backdrop} onPress={onClose}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.kbWrap}
-          pointerEvents="box-none"
+          behavior="padding"
+          keyboardVerticalOffset={0}
+          style={[styles.kbWrap, { pointerEvents: "box-none" }]}
         >
           <Pressable
             onPress={(e) => e.stopPropagation()}
@@ -112,8 +115,15 @@ export function ReflectionSheet({
                 backgroundColor: colors.card,
                 borderColor: colors.border,
                 borderRadius: colors.radius,
+                marginBottom: 12 + insets.bottom,
               },
             ]}
+          >
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+            bounces={false}
           >
             <View style={styles.headerRow}>
               <View
@@ -275,6 +285,7 @@ export function ReflectionSheet({
                 </Text>
               </Pressable>
             </View>
+          </ScrollView>
           </Pressable>
         </KeyboardAvoidingView>
       </Pressable>
@@ -292,9 +303,14 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   sheet: {
-    margin: 12,
-    padding: 20,
+    marginHorizontal: 12,
+    marginTop: 12,
     borderWidth: 1,
+    overflow: "hidden",
+    maxHeight: "92%",
+  },
+  scrollContent: {
+    padding: 20,
     gap: 14,
   },
   headerRow: {
