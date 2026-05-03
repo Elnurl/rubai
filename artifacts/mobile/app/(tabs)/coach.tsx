@@ -9,6 +9,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -500,7 +501,12 @@ export default function CoachScreen() {
           </Pressable>
         ) : null}
         {lastSuggestedReplies.length > 0 ? (
-          <View style={styles.suggestedRepliesRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.suggestedRepliesRow}
+          >
             {lastSuggestedReplies.map((s) => (
               <Pressable
                 key={s}
@@ -512,6 +518,7 @@ export default function CoachScreen() {
                 testID={`suggested-reply-${s}`}
               >
                 <Text
+                  numberOfLines={1}
                   style={[
                     styles.suggestedReplyText,
                     { color: colors.primary, fontFamily: "Inter_600SemiBold" },
@@ -521,7 +528,7 @@ export default function CoachScreen() {
                 </Text>
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
         ) : null}
       </View>
     );
@@ -694,7 +701,12 @@ export default function CoachScreen() {
         ]}
       >
         {activeCoachHistory.length <= 1 && lastSuggestedReplies.length === 0 && (
-          <View style={styles.suggestions}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.suggestions}
+          >
             {COLD_START_SUGGESTIONS.map((s) => (
               <Pressable
                 key={s}
@@ -708,6 +720,7 @@ export default function CoachScreen() {
                 ]}
               >
                 <Text
+                  numberOfLines={1}
                   style={[
                     styles.suggestionText,
                     { color: colors.foreground, fontFamily: "Inter_500Medium" },
@@ -717,7 +730,7 @@ export default function CoachScreen() {
                 </Text>
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
         )}
 
         {/* Status caption: tappable inline toggles for model + voice mode.
@@ -1190,8 +1203,10 @@ const styles = StyleSheet.create({
   },
   suggestedRepliesRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "center",
     gap: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
   },
   suggestedReply: {
     paddingHorizontal: 12,
@@ -1210,9 +1225,10 @@ const styles = StyleSheet.create({
   },
   suggestions: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "center",
     gap: 8,
     paddingHorizontal: 4,
+    paddingVertical: 2,
   },
   suggestion: {
     paddingHorizontal: 14,
