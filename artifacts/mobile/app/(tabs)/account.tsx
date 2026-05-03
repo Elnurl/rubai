@@ -98,10 +98,7 @@ export default function AccountScreen() {
   };
 
   return (
-    <Animated.View
-      entering={FadeIn.duration(260)}
-      style={[styles.root, { backgroundColor: colors.background }]}
-    >
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
@@ -358,7 +355,7 @@ export default function AccountScreen() {
           {APP_VERSION}
         </Text>
       </ScrollView>
-    </Animated.View>
+    </View>
   );
 }
 

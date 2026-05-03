@@ -78,10 +78,7 @@ export default function RoadmapScreen() {
   const goalLabel = activeProfile ? profileGoalLabel(activeProfile) : "";
 
   return (
-    <Animated.View
-      entering={FadeIn.duration(260)}
-      style={[styles.root, { backgroundColor: colors.background }]}
-    >
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
@@ -257,7 +254,7 @@ export default function RoadmapScreen() {
           </View>
         )}
       </ScrollView>
-    </Animated.View>
+    </View>
   );
 }
 

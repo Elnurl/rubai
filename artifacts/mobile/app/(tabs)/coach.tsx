@@ -521,10 +521,7 @@ export default function CoachScreen() {
   const recordingSeconds = Math.floor(recorder.durationMs / 1000);
 
   return (
-    <Animated.View
-      entering={FadeIn.duration(260)}
-      style={[styles.root, { backgroundColor: colors.background }]}
-    >
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
     <KeyboardAvoidingView
       behavior="padding"
       keyboardVerticalOffset={0}
@@ -900,7 +897,7 @@ export default function CoachScreen() {
         </View>
       </View>
     </KeyboardAvoidingView>
-    </Animated.View>
+    </View>
   );
 }
 

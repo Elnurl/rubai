@@ -217,10 +217,7 @@ export default function TodayScreen() {
   }
 
   return (
-    <Animated.View
-      entering={FadeIn.duration(260)}
-      style={[styles.root, { backgroundColor: colors.background }]}
-    >
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
@@ -451,7 +448,7 @@ export default function TodayScreen() {
           }, 150);
         }}
       />
-    </Animated.View>
+    </View>
   );
 }
 

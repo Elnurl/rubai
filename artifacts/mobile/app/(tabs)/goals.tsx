@@ -62,10 +62,7 @@ export default function GoalsScreen() {
   };
 
   return (
-    <Animated.View
-      entering={FadeIn.duration(260)}
-      style={[styles.root, { backgroundColor: colors.background }]}
-    >
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
@@ -182,7 +179,7 @@ export default function GoalsScreen() {
           </Pressable>
         )}
       </ScrollView>
-    </Animated.View>
+    </View>
   );
 }
 
