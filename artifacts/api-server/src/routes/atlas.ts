@@ -4,6 +4,7 @@ import { Router, type IRouter } from "express";
 import multer from "multer";
 import { z } from "zod";
 import { toFile } from "openai/uploads";
+import { zodResponseFormat } from "openai/helpers/zod";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { db, usersTable } from "@workspace/db";
 import { trackedCreate, trackedStream } from "../lib/aiUsage";
@@ -159,47 +160,6 @@ Rules:
 - Keep replies under 70 words.`;
 };
 
-const profileExtractorSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    isComplete: { type: "boolean" },
-    nextMessage: { type: "string" },
-    profile: {
-      anyOf: [
-        { type: "null" },
-        {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            goalStatement: { type: "string" },
-            currentLevel: { type: "string" },
-            availableTimePerDayMinutes: { type: "integer" },
-            financialCondition: { type: "string" },
-            productivityPattern: { type: "string" },
-            consistencyLevel: { type: "string" },
-            constraints: { type: "array", items: { type: "string" } },
-            targetTimelineWeeks: { type: "integer" },
-            notes: { type: "string" },
-          },
-          required: [
-            "goalStatement",
-            "currentLevel",
-            "availableTimePerDayMinutes",
-            "financialCondition",
-            "productivityPattern",
-            "consistencyLevel",
-            "constraints",
-            "targetTimelineWeeks",
-            "notes",
-          ],
-        },
-      ],
-    },
-  },
-  required: ["isComplete", "nextMessage", "profile"],
-} as const;
-
 router.post("/onboarding-chat", async (req, res) => {
   const parsed = atlasOnboardingChatBody.safeParse(req.body);
   if (!parsed.success) {
@@ -239,14 +199,10 @@ router.post("/onboarding-chat", async (req, res) => {
       {
         model: MODEL,
         max_completion_tokens: 1500,
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "onboarding_extraction",
-            strict: true,
-            schema: profileExtractorSchema,
-          },
-        },
+        response_format: zodResponseFormat(
+          profileExtractorValidator,
+          "onboarding_extraction",
+        ),
         messages: [
           {
             role: "system",
@@ -307,48 +263,6 @@ When isComplete=false, set nextMessage to: ${JSON.stringify(nextMessage)}`,
   }
 });
 
-const roadmapSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    headline: { type: "string" },
-    summary: { type: "string" },
-    totalWeeks: { type: "integer" },
-    strategy: { type: "string" },
-    riskAnalysis: { type: "array", items: { type: "string" } },
-    phases: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          id: { type: "string" },
-          title: { type: "string" },
-          focus: { type: "string" },
-          startWeek: { type: "integer" },
-          endWeek: { type: "integer" },
-          milestones: {
-            type: "array",
-            items: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                id: { type: "string" },
-                title: { type: "string" },
-                description: { type: "string" },
-                weekNumber: { type: "integer" },
-              },
-              required: ["id", "title", "description", "weekNumber"],
-            },
-          },
-        },
-        required: ["id", "title", "focus", "startWeek", "endWeek", "milestones"],
-      },
-    },
-  },
-  required: ["headline", "summary", "totalWeeks", "strategy", "riskAnalysis", "phases"],
-} as const;
-
 router.post("/roadmap", async (req, res) => {
   const parsed = atlasGenerateRoadmapBody.safeParse(req.body);
   if (!parsed.success) {
@@ -363,14 +277,7 @@ router.post("/roadmap", async (req, res) => {
       {
         model: MODEL,
         max_completion_tokens: 4000,
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "roadmap",
-            strict: true,
-            schema: roadmapSchema,
-          },
-        },
+        response_format: zodResponseFormat(roadmapValidator, "roadmap"),
         messages: [
           {
             role: "system",
@@ -406,35 +313,6 @@ Constraints:
     res.status(500).json({ error: "AI request failed" });
   }
 });
-
-const dailyPlanSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    focusOfTheDay: { type: "string" },
-    coachNote: { type: "string" },
-    tasks: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          id: { type: "string" },
-          title: { type: "string" },
-          description: { type: "string" },
-          durationMinutes: { type: "integer" },
-          category: { type: "string" },
-          priority: {
-            type: "string",
-            enum: ["critical", "high", "normal"],
-          },
-        },
-        required: ["id", "title", "description", "durationMinutes", "category", "priority"],
-      },
-    },
-  },
-  required: ["focusOfTheDay", "coachNote", "tasks"],
-} as const;
 
 router.post("/daily-plan", async (req, res) => {
   const parsed = atlasGenerateDailyPlanBody.safeParse(req.body);
@@ -476,14 +354,7 @@ router.post("/daily-plan", async (req, res) => {
       {
         model: MODEL,
         max_completion_tokens: 2500,
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "daily_plan",
-            strict: true,
-            schema: dailyPlanSchema,
-          },
-        },
+        response_format: zodResponseFormat(dailyPlanValidator, "daily_plan"),
         messages: [
           {
             role: "system",
@@ -638,308 +509,231 @@ function buildCoachContext(input: CoachContextInput): string {
   return blocks.join("\n\n");
 }
 
-const coachResponseSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    reply: {
-      type: "string",
-      description:
-        "The coach's reply in plain prose. Under 110 words unless the user explicitly asked for detail. No markdown, headings, bullets, or emojis.",
-    },
-    suggestedReplies: {
-      type: "array",
-      maxItems: 3,
-      description:
-        "0-3 short follow-up prompts the user can tap to send back. Each MUST be <= 50 chars and reference real context (a phase, a reflection, a fact). Empty array when nothing fits.",
-      items: { type: "string", maxLength: 50 },
-    },
-    actionSuggestion: {
-      anyOf: [
-        {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            kind: {
-              type: "string",
-              // "none" is accepted from the model (matches the OpenAPI enum)
-              // and normalized to null below so the client only ever sees a
-              // concrete actionable kind or null.
-              enum: [
-                "evolve_roadmap",
-                "refresh_insights",
-                "reflect_on_task",
-                "none",
-              ],
-            },
-            label: { type: "string" },
-            rationale: { type: "string" },
-          },
-          required: ["kind", "label", "rationale"],
-        },
-        { type: "null" },
-      ],
-      description:
-        "Set to a non-null object only when the conversation makes one of these app actions clearly relevant. Otherwise null.",
-    },
-    memoryUpdate: {
-      anyOf: [
-        {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            summary: {
-              type: "string",
-              description:
-                "1-3 sentence rolling summary of what we've discussed and what matters to this user.",
-            },
-            newFacts: {
-              type: "array",
-              description:
-                "Brand-new durable facts the user revealed THIS turn (e.g. 'has a knee injury'). Do not repeat existing facts.",
-              items: { type: "string" },
-            },
-          },
-          required: ["summary", "newFacts"],
-        },
-        { type: "null" },
-      ],
-      description:
-        "Set ONLY when the user revealed something durable this turn. Otherwise null.",
-    },
-    proposedAction: {
-      anyOf: [
-        {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            kind: {
-              type: "string",
-              enum: [
-                "addTaskToday",
-                "removeTaskToday",
-                "renameGoal",
-                "lightenToday",
-                "syncToCalendar",
-                "none",
-              ],
-            },
-            label: { type: "string" },
-            rationale: { type: "string" },
-            // Strict-mode requires every property to appear in `required`, so
-            // every action carries every payload field — populate the ones
-            // relevant to the chosen kind, leave the others null/empty.
-            task: {
-              anyOf: [
-                {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: {
-                    title: { type: "string" },
-                    description: { type: "string" },
-                    durationMinutes: { type: "integer" },
-                    category: { type: "string" },
-                    priority: {
-                      type: "string",
-                      enum: ["critical", "high", "normal"],
-                    },
-                  },
-                  required: [
-                    "title",
-                    "description",
-                    "durationMinutes",
-                    "category",
-                    "priority",
-                  ],
-                },
-                { type: "null" },
-              ],
-            },
-            taskId: { type: ["string", "null"] },
-            taskTitle: { type: ["string", "null"] },
-            newTitle: { type: ["string", "null"] },
-            removeTaskIds: { type: "array", items: { type: "string" } },
-          },
-          required: [
-            "kind",
-            "label",
-            "rationale",
-            "task",
-            "taskId",
-            "taskTitle",
-            "newTitle",
-            "removeTaskIds",
-          ],
-        },
-        { type: "null" },
-      ],
-      description:
-        "Set ONLY when the user is asking to MODIFY their plan/goal this turn (add task, drop task, lighten the day, rename the goal). Otherwise null.",
-    },
-  },
-  required: [
-    "reply",
-    "suggestedReplies",
-    "actionSuggestion",
-    "memoryUpdate",
-    "proposedAction",
-  ],
-} as const;
-
-// Runtime validator mirroring coachResponseSchema. Kept loose (passthrough,
-// optional fields on nested action payloads) so we accept every valid strict-
-// mode output, including failover via Anthropic tool_use which round-trips
-// JSON without OpenAI's strict guarantee. The only HARD requirement is `reply`
-// — without it normalizeCoachOutput cannot produce a usable turn.
-const coachResponseValidator = z
-  .object({
-    // No min length: the OpenAI strict schema only enforces type:"string",
-    // so an empty reply is schema-valid and must not be flagged here.
-    // normalizeCoachOutput tolerates empty replies downstream.
-    reply: z.string(),
-    suggestedReplies: z.array(z.string()).optional(),
-    actionSuggestion: z
-      .union([
-        z
-          .object({
-            kind: z.string(),
-            label: z.string().optional(),
-            rationale: z.string().optional(),
-          })
-          .passthrough(),
-        z.null(),
-      ])
-      .optional(),
-    memoryUpdate: z
-      .union([
-        z
-          .object({
-            summary: z.string().optional(),
-            newFacts: z.array(z.string()).optional(),
-          })
-          .passthrough(),
-        z.null(),
-      ])
-      .optional(),
-    proposedAction: z
-      .union([
-        z
-          .object({
-            kind: z.string(),
-            label: z.string().optional(),
-            rationale: z.string().optional(),
-            task: z
-              .union([z.object({}).passthrough(), z.null()])
-              .optional(),
-            taskId: z.union([z.string(), z.null()]).optional(),
-            taskTitle: z.union([z.string(), z.null()]).optional(),
-            newTitle: z.union([z.string(), z.null()]).optional(),
-            removeTaskIds: z.array(z.string()).optional(),
-          })
-          .passthrough(),
-        z.null(),
-      ])
-      .optional(),
-  })
-  .passthrough();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Zod validators for the remaining 9 structured AI calls. All are loose
-// passthrough mirrors of their corresponding hand-written JSON schemas above —
-// strict enough to catch refusal/empty/parse failures and gross shape
-// mismatches (e.g. Anthropic failover dropping a top-level field), but
-// generous enough to never false-reject a valid OpenAI strict-mode payload.
-// Phase 3 will collapse these into single zodToJsonSchema-derived shapes.
+// Phase 3: Zod is the SINGLE source of truth for every structured AI call.
+// `zodResponseFormat(validator, name)` (OpenAI helper) converts each schema
+// into the strict JSON-schema OpenAI expects on the wire (additionalProperties
+// false, every property required, `.nullable()` → `type:[..., "null"]`) AND
+// the SAME validator runs at runtime inside `strictJsonCompletion`, so the
+// shape used to constrain the model and the shape parsed afterwards can never
+// drift. Anthropic failover routes through the same validators — failures
+// there are real shape mismatches worth surfacing, not validator looseness.
+//
+// Hard rules for editing these:
+// - Never use `.optional()` (would emit a property as not-required, which
+//   OpenAI strict mode rejects). Use `.nullable()` for fields that may be
+//   absent in semantics, and have the model pass `null`.
+// - Never use `.passthrough()` (the JSON schema sets additionalProperties
+//   false, so unknown keys would be rejected on the wire anyway).
+// - Keep enums in sync with downstream consumers (normalizeCoachOutput etc).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const profileExtractorValidator = z
+const coachActionSuggestionValidator = z
   .object({
-    isComplete: z.boolean().optional(),
-    nextMessage: z.string().optional(),
-    profile: z
-      .union([
-        z
-          .object({
-            goalStatement: z.string().optional(),
-            currentLevel: z.string().optional(),
-            availableTimePerDayMinutes: z.number().optional(),
-            financialCondition: z.string().optional(),
-            productivityPattern: z.string().optional(),
-            consistencyLevel: z.string().optional(),
-            constraints: z.array(z.string()).optional(),
-            targetTimelineWeeks: z.number().optional(),
-            notes: z.string().optional(),
-          })
-          .passthrough(),
-        z.null(),
-      ])
-      .optional(),
+    // "none" is accepted from the model and normalized to null downstream so
+    // the client only ever sees a concrete actionable kind or null.
+    kind: z.enum([
+      "evolve_roadmap",
+      "refresh_insights",
+      "reflect_on_task",
+      "none",
+    ]),
+    label: z.string(),
+    rationale: z.string(),
   })
-  .passthrough();
+  .nullable();
 
-const roadmapValidator = z
+const coachMemoryUpdateValidator = z
   .object({
-    headline: z.string().optional(),
-    summary: z.string().optional(),
-    totalWeeks: z.number().optional(),
-    strategy: z.string().optional(),
-    riskAnalysis: z.array(z.string()).optional(),
-    phases: z.array(z.object({}).passthrough()).optional(),
+    summary: z.string(),
+    newFacts: z.array(z.string()),
   })
-  .passthrough();
+  .nullable();
 
-const dailyPlanValidator = z
+const coachProposedTaskValidator = z
   .object({
-    focusOfTheDay: z.string().optional(),
-    coachNote: z.string().optional(),
-    tasks: z.array(z.object({}).passthrough()).optional(),
+    title: z.string(),
+    description: z.string(),
+    durationMinutes: z.number().int(),
+    category: z.string(),
+    priority: z.enum(["critical", "high", "normal"]),
   })
-  .passthrough();
+  .nullable();
 
-const adaptValidator = z
+const coachProposedActionValidator = z
   .object({
-    difficultyAdjustment: z.string().optional(),
-    adjustments: z.array(z.string()).optional(),
-    encouragement: z.string().optional(),
+    kind: z.enum([
+      "addTaskToday",
+      "removeTaskToday",
+      "renameGoal",
+      "lightenToday",
+      "syncToCalendar",
+      "none",
+    ]),
+    label: z.string(),
+    rationale: z.string(),
+    // Strict-mode requires every property to appear in `required`, so every
+    // action carries every payload field — populate the ones relevant to the
+    // chosen kind, leave the others null/empty.
+    task: coachProposedTaskValidator,
+    taskId: z.string().nullable(),
+    taskTitle: z.string().nullable(),
+    newTitle: z.string().nullable(),
+    removeTaskIds: z.array(z.string()),
   })
-  .passthrough();
+  .nullable();
 
-const generateTitleValidator = z
-  .object({
-    title: z.string().optional(),
-  })
-  .passthrough();
+// Reply may be empty in degenerate cases — normalizeCoachOutput tolerates it.
+// `suggestedReplies` keeps the original wire-schema bounds (≤3 tap-targets,
+// ≤50 chars each) — these are length/count constraints OpenAI strict mode
+// preserves, and runtime Zod enforces them on Anthropic failover output too.
+const coachResponseValidator = z.object({
+  reply: z.string(),
+  suggestedReplies: z.array(z.string().max(50)).max(3),
+  actionSuggestion: coachActionSuggestionValidator,
+  memoryUpdate: coachMemoryUpdateValidator,
+  proposedAction: coachProposedActionValidator,
+});
 
-const intakeQuestionsValidator = z
-  .object({
-    introMessage: z.string().optional(),
-    questions: z.array(z.object({}).passthrough()).optional(),
-  })
-  .passthrough();
+const profileFieldsValidator = z.object({
+  goalStatement: z.string(),
+  currentLevel: z.string(),
+  availableTimePerDayMinutes: z.number().int(),
+  financialCondition: z.string(),
+  productivityPattern: z.string(),
+  consistencyLevel: z.string(),
+  constraints: z.array(z.string()),
+  targetTimelineWeeks: z.number().int(),
+  notes: z.string(),
+});
 
-const intakeProfileValidator = z
-  .object({
-    profile: z.object({}).passthrough().optional(),
-    followUp: z.string().optional(),
-  })
-  .passthrough();
+const profileExtractorValidator = z.object({
+  isComplete: z.boolean(),
+  nextMessage: z.string(),
+  profile: profileFieldsValidator.nullable(),
+});
 
-const behavioralProfileValidator = z
-  .object({
-    profile: z.object({}).passthrough().optional(),
-    aiInsight: z.string().optional(),
-  })
-  .passthrough();
+const roadmapMilestoneValidator = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string(),
+  weekNumber: z.number().int(),
+});
 
-const roadmapEvolutionValidator = z
-  .object({
-    evolvedRoadmap: z.object({}).passthrough().optional(),
-    hasChanged: z.boolean().optional(),
-    changeSummary: z.string().optional(),
-    phaseChanges: z.array(z.object({}).passthrough()).optional(),
-    rationale: z.string().optional(),
-  })
-  .passthrough();
+const roadmapPhaseValidator = z.object({
+  id: z.string(),
+  title: z.string(),
+  focus: z.string(),
+  startWeek: z.number().int(),
+  endWeek: z.number().int(),
+  milestones: z.array(roadmapMilestoneValidator),
+});
+
+const roadmapValidator = z.object({
+  headline: z.string(),
+  summary: z.string(),
+  totalWeeks: z.number().int(),
+  strategy: z.string(),
+  riskAnalysis: z.array(z.string()),
+  phases: z.array(roadmapPhaseValidator),
+});
+
+const dailyPlanTaskValidator = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string(),
+  durationMinutes: z.number().int(),
+  category: z.string(),
+  priority: z.enum(["critical", "high", "normal"]),
+});
+
+const dailyPlanValidator = z.object({
+  focusOfTheDay: z.string(),
+  coachNote: z.string(),
+  tasks: z.array(dailyPlanTaskValidator),
+});
+
+const adaptValidator = z.object({
+  difficultyAdjustment: z.enum(["easier", "same", "harder"]),
+  adjustments: z.array(z.string()),
+  encouragement: z.string(),
+});
+
+const generateTitleValidator = z.object({
+  title: z.string(),
+});
+
+const intakeQuestionValidator = z.object({
+  id: z.string(),
+  label: z.string(),
+  helper: z.string(),
+  type: z.enum([
+    "short_text",
+    "long_text",
+    "single_select",
+    "multi_select",
+    "number",
+  ]),
+  placeholder: z.string(),
+  options: z.array(z.string()),
+  unit: z.string(),
+  required: z.boolean(),
+});
+
+// `questions` keeps the original wire-schema bounds (6-10) — these
+// length/count constraints are preserved by zod-to-json-schema under OpenAI
+// strict mode, and runtime Zod enforces them on Anthropic failover output
+// too. strictJsonCompletion's single retry handles the rare case where the
+// model emits a count outside the bound.
+const intakeQuestionsValidator = z.object({
+  introMessage: z.string(),
+  questions: z.array(intakeQuestionValidator).min(6).max(10),
+});
+
+const intakeProfileValidator = z.object({
+  profile: profileFieldsValidator,
+  followUp: z.string(),
+});
+
+const behavioralProfileFieldsValidator = z.object({
+  summary: z.string(),
+  consistencyLevel: z.enum([
+    "very_low",
+    "low",
+    "moderate",
+    "high",
+    "very_high",
+  ]),
+  workloadTolerance: z.enum(["light", "moderate", "heavy"]),
+  motivationTrend: z.enum(["rising", "steady", "declining"]),
+  focusStyle: z.string(),
+  learningPreference: z.string(),
+  peakHours: z.array(z.string()),
+  failurePatterns: z.array(z.string()),
+  strengths: z.array(z.string()),
+  recommendedAdjustments: z.array(z.string()),
+});
+
+const behavioralProfileValidator = z.object({
+  profile: behavioralProfileFieldsValidator,
+  aiInsight: z.string(),
+});
+
+const roadmapPhaseChangeValidator = z.object({
+  phaseId: z.string(),
+  phaseTitle: z.string(),
+  changeType: z.enum(["added", "removed", "modified", "unchanged"]),
+  summary: z.string(),
+});
+
+const roadmapEvolutionValidator = z.object({
+  evolvedRoadmap: roadmapValidator,
+  hasChanged: z.boolean(),
+  changeSummary: z.string(),
+  phaseChanges: z.array(roadmapPhaseChangeValidator),
+  rationale: z.string(),
+});
 
 router.post("/coach", async (req, res) => {
   const parsed = atlasCoachBody.safeParse(req.body);
@@ -1122,14 +916,7 @@ ${contextBlock}${
           hasImage,
         }),
         max_completion_tokens: 1200,
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "coach_reply",
-            strict: true,
-            schema: coachResponseSchema,
-          },
-        },
+        response_format: zodResponseFormat(coachResponseValidator, "coach_reply"),
         messages: [
           { role: "system", content: systemContext },
           ...history.map((m: { role: string; content: string }) => ({
@@ -1508,6 +1295,12 @@ ${contextBlock}${
 
   const extractor = new ReplyTextExtractor();
   let accumulated = "";
+  // Mirror of every reply token actually emitted to the client. If end-of-
+  // stream parse/validation fails (more likely now that Phase 3 strict Zod
+  // rejects shape regressions), we use this as the canonical `reply` in the
+  // final SSE event so the persisted chat history matches what the user saw,
+  // instead of replacing it with normalizeCoachOutput's generic fallback.
+  let streamedReply = "";
   let refusalAccumulated = "";
 
   try {
@@ -1520,14 +1313,7 @@ ${contextBlock}${
         hasImage,
       }),
       max_completion_tokens: 1200,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "coach_reply",
-          strict: true,
-          schema: coachResponseSchema,
-        },
-      },
+      response_format: zodResponseFormat(coachResponseValidator, "coach_reply"),
       messages: [
         { role: "system", content: systemContext },
         ...history.map((m: { role: string; content: string }) => ({
@@ -1554,7 +1340,10 @@ ${contextBlock}${
       if (typeof delta === "string" && delta.length > 0) {
         accumulated += delta;
         const replyDelta = extractor.feed(delta);
-        if (replyDelta.length > 0) writeEvent({ type: "delta", text: replyDelta });
+        if (replyDelta.length > 0) {
+          streamedReply += replyDelta;
+          writeEvent({ type: "delta", text: replyDelta });
+        }
       }
     }
 
@@ -1574,6 +1363,7 @@ ${contextBlock}${
     // ReplyTextExtractor; the final event simply lacks structured
     // action fields.
     let parsedJson: CoachRawOutput = {};
+    let parseFailed = false;
     try {
       parsedJson = parseAndValidate(
         accumulated,
@@ -1601,6 +1391,15 @@ ${contextBlock}${
         }
         return;
       }
+      parseFailed = true;
+    }
+    // Inject the already-streamed reply text as the canonical reply when
+    // parse/validation fails — otherwise normalizeCoachOutput({}) would
+    // overwrite the user-visible turn with a generic "I'm here. Tell me a
+    // bit more…" fallback even though the user saw a real streamed answer.
+    // Only structured fields (action, memory, etc) degrade to null.
+    if (parseFailed && streamedReply.trim().length > 0) {
+      parsedJson = { reply: streamedReply };
     }
     const normalized = normalizeCoachOutput(parsedJson, todayPlan);
 
@@ -1625,20 +1424,6 @@ ${contextBlock}${
   }
 });
 
-const adaptSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    difficultyAdjustment: {
-      type: "string",
-      enum: ["easier", "same", "harder"],
-    },
-    adjustments: { type: "array", items: { type: "string" } },
-    encouragement: { type: "string" },
-  },
-  required: ["difficultyAdjustment", "adjustments", "encouragement"],
-} as const;
-
 router.post("/adapt", async (req, res) => {
   const parsed = atlasAdaptPlanBody.safeParse(req.body);
   if (!parsed.success) {
@@ -1653,14 +1438,7 @@ router.post("/adapt", async (req, res) => {
       {
         model: MODEL,
         max_completion_tokens: 700,
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "adaptation",
-            strict: true,
-            schema: adaptSchema,
-          },
-        },
+        response_format: zodResponseFormat(adaptValidator, "adaptation"),
         messages: [
           {
             role: "system",
@@ -1692,72 +1470,7 @@ router.post("/adapt", async (req, res) => {
 // chat flow for users who prefer to fill everything in a single screen.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const intakeQuestionsSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    introMessage: { type: "string" },
-    questions: {
-      type: "array",
-      minItems: 6,
-      maxItems: 10,
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          id: { type: "string" },
-          label: { type: "string" },
-          helper: { type: "string" },
-          type: {
-            type: "string",
-            enum: ["short_text", "long_text", "single_select", "multi_select", "number"],
-          },
-          placeholder: { type: "string" },
-          options: { type: "array", items: { type: "string" } },
-          unit: { type: "string" },
-          required: { type: "boolean" },
-        },
-        required: ["id", "label", "helper", "type", "placeholder", "options", "unit", "required"],
-      },
-    },
-  },
-  required: ["introMessage", "questions"],
-} as const;
 
-const intakeProfileSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    profile: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        goalStatement: { type: "string" },
-        currentLevel: { type: "string" },
-        availableTimePerDayMinutes: { type: "integer" },
-        financialCondition: { type: "string" },
-        productivityPattern: { type: "string" },
-        consistencyLevel: { type: "string" },
-        constraints: { type: "array", items: { type: "string" } },
-        targetTimelineWeeks: { type: "integer" },
-        notes: { type: "string" },
-      },
-      required: [
-        "goalStatement",
-        "currentLevel",
-        "availableTimePerDayMinutes",
-        "financialCondition",
-        "productivityPattern",
-        "consistencyLevel",
-        "constraints",
-        "targetTimelineWeeks",
-        "notes",
-      ],
-    },
-    followUp: { type: "string" },
-  },
-  required: ["profile", "followUp"],
-} as const;
 
 /**
  * Refine a raw user goal description into a short, brand-neutral title.
@@ -1768,14 +1481,6 @@ const intakeProfileSchema = {
  * Template goals (ielts, fitness, etc.) already have polished labels so the
  * mobile client only invokes this for `goalType === "custom"`.
  */
-const generateTitleSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    title: { type: "string" },
-  },
-  required: ["title"],
-} as const;
 
 router.post("/generate-title", async (req, res) => {
   const parsed = atlasGenerateTitleBody.safeParse(req.body);
@@ -1799,10 +1504,10 @@ router.post("/generate-title", async (req, res) => {
       req,
       {
         model: MODEL_FAST,
-        response_format: {
-          type: "json_schema",
-          json_schema: { name: "generated_title", strict: true, schema: generateTitleSchema },
-        },
+        response_format: zodResponseFormat(
+          generateTitleValidator,
+          "generated_title",
+        ),
         messages: [
           {
             role: "system",
@@ -1852,10 +1557,10 @@ router.post("/intake-questions", async (req, res) => {
       req,
       {
         model: MODEL,
-        response_format: {
-          type: "json_schema",
-          json_schema: { name: "intake_questions", strict: true, schema: intakeQuestionsSchema },
-        },
+        response_format: zodResponseFormat(
+          intakeQuestionsValidator,
+          "intake_questions",
+        ),
         messages: [
           {
             role: "system",
@@ -1929,10 +1634,10 @@ router.post("/intake-submit", async (req, res) => {
       req,
       {
         model: MODEL,
-        response_format: {
-          type: "json_schema",
-          json_schema: { name: "intake_profile", strict: true, schema: intakeProfileSchema },
-        },
+        response_format: zodResponseFormat(
+          intakeProfileValidator,
+          "intake_profile",
+        ),
         messages: [
           {
             role: "system",
@@ -1976,51 +1681,6 @@ Rules:
 // every roadmap, daily plan, and coaching reply.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const behavioralProfileSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    profile: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        summary: { type: "string" },
-        consistencyLevel: {
-          type: "string",
-          enum: ["very_low", "low", "moderate", "high", "very_high"],
-        },
-        workloadTolerance: {
-          type: "string",
-          enum: ["light", "moderate", "heavy"],
-        },
-        motivationTrend: {
-          type: "string",
-          enum: ["rising", "steady", "declining"],
-        },
-        focusStyle: { type: "string" },
-        learningPreference: { type: "string" },
-        peakHours: { type: "array", items: { type: "string" } },
-        failurePatterns: { type: "array", items: { type: "string" } },
-        strengths: { type: "array", items: { type: "string" } },
-        recommendedAdjustments: { type: "array", items: { type: "string" } },
-      },
-      required: [
-        "summary",
-        "consistencyLevel",
-        "workloadTolerance",
-        "motivationTrend",
-        "focusStyle",
-        "learningPreference",
-        "peakHours",
-        "failurePatterns",
-        "strengths",
-        "recommendedAdjustments",
-      ],
-    },
-    aiInsight: { type: "string" },
-  },
-  required: ["profile", "aiInsight"],
-} as const;
 
 router.post("/behavioral-profile", async (req, res) => {
   const parsed = atlasBehavioralProfileBody.safeParse(req.body);
@@ -2050,14 +1710,10 @@ router.post("/behavioral-profile", async (req, res) => {
       {
         model: MODEL,
         max_completion_tokens: 1500,
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "behavioral_profile",
-            strict: true,
-            schema: behavioralProfileSchema,
-          },
-        },
+        response_format: zodResponseFormat(
+          behavioralProfileValidator,
+          "behavioral_profile",
+        ),
         messages: [
           {
             role: "system",
@@ -2126,40 +1782,6 @@ ${reflectionLines || "(none yet)"}`,
   }
 });
 
-const roadmapEvolutionSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    evolvedRoadmap: roadmapSchema,
-    hasChanged: { type: "boolean" },
-    changeSummary: { type: "string" },
-    phaseChanges: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          phaseId: { type: "string" },
-          phaseTitle: { type: "string" },
-          changeType: {
-            type: "string",
-            enum: ["added", "removed", "modified", "unchanged"],
-          },
-          summary: { type: "string" },
-        },
-        required: ["phaseId", "phaseTitle", "changeType", "summary"],
-      },
-    },
-    rationale: { type: "string" },
-  },
-  required: [
-    "evolvedRoadmap",
-    "hasChanged",
-    "changeSummary",
-    "phaseChanges",
-    "rationale",
-  ],
-} as const;
 
 router.post("/evolve-roadmap", async (req, res) => {
   const parsed = atlasEvolveRoadmapBody.safeParse(req.body);
@@ -2194,14 +1816,10 @@ router.post("/evolve-roadmap", async (req, res) => {
       {
         model: MODEL,
         max_completion_tokens: 4500,
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "roadmap_evolution",
-            strict: true,
-            schema: roadmapEvolutionSchema,
-          },
-        },
+        response_format: zodResponseFormat(
+          roadmapEvolutionValidator,
+          "roadmap_evolution",
+        ),
         messages: [
           {
             role: "system",
