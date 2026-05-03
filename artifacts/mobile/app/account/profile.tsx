@@ -16,7 +16,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 
-const LANGUAGES = ["English", "Español", "Português", "Deutsch", "Français"];
+const LANGUAGES = [
+  "English",
+  "Azərbaycan",
+  "Español",
+  "Português",
+  "Deutsch",
+  "Français",
+];
 
 export default function ProfileScreen() {
   const colors = useColors();
