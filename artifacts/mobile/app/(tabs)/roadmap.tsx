@@ -6,7 +6,6 @@ import Animated, { FadeIn } from "react-native-reanimated";
 
 import { AdaptiveEngineCard } from "@/components/AdaptiveEngineCard";
 import { AskCoachPill } from "@/components/AskCoachPill";
-import { AtlasLogo } from "@/components/AtlasLogo";
 import { EmptyState } from "@/components/EmptyState";
 import { PhaseCard } from "@/components/PhaseCard";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -87,7 +86,6 @@ export default function RoadmapScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerRow}>
-          <AtlasLogo size="sm" />
           <AskCoachPill />
         </View>
 

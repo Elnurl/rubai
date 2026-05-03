@@ -7,7 +7,6 @@ import Animated, { FadeIn } from "react-native-reanimated";
 
 import { AtlasButton } from "@/components/AtlasButton";
 import { AskCoachPill } from "@/components/AskCoachPill";
-import { AtlasLogo } from "@/components/AtlasLogo";
 import { EmptyState } from "@/components/EmptyState";
 import { GoalListItem } from "@/components/GoalListItem";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -72,7 +71,6 @@ export default function GoalsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerRow}>
-          <AtlasLogo size="sm" />
           <AskCoachPill />
         </View>
 

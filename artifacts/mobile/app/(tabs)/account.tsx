@@ -18,7 +18,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeIn } from "react-native-reanimated";
 
 import { AskCoachPill } from "@/components/AskCoachPill";
-import { AtlasLogo } from "@/components/AtlasLogo";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { TIER_INFO, type SubscriptionTier } from "@/types/atlas";
@@ -109,9 +108,8 @@ export default function AccountScreen() {
       >
         {/* Header — same pattern as Today/Coach */}
         <View style={styles.headerRow}>
-          <AtlasLogo size="sm" />
-          <View style={styles.headerSpacer} />
           <AskCoachPill />
+          <View style={styles.headerSpacer} />
         </View>
 
         {syncMessage ? (
