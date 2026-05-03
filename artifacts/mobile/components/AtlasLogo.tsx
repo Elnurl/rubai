@@ -66,7 +66,7 @@ export function AtlasLogo({ size = "md" }: Props) {
               height: dotSize,
               borderRadius: dotSize / 2,
               backgroundColor: dotColor,
-              marginLeft: titleSize * 0.025,
+              marginLeft: titleSize * 0.03,
             }}
           />
         </View>
