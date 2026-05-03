@@ -819,7 +819,7 @@ export default function CoachScreen() {
             ]}
             testID="attach-button"
           >
-            <Ionicons name="sparkles" size={16} color={colors.primary} />
+            <Feather name="plus" size={18} color={colors.primary} />
           </Pressable>
 
           {isRecording ? (
