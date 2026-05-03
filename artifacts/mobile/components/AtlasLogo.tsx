@@ -32,25 +32,41 @@ export function AtlasLogo({ size = "md" }: Props) {
   } as const;
 
   return (
-    <View style={styles.row}>
+    <View
+      style={styles.row}
+      accessible
+      accessibilityRole="header"
+      accessibilityLabel="rubai"
+    >
       <Text style={[styles.text, textStyle]}>ruba</Text>
       <View>
         <Text style={[styles.text, textStyle]}>{"\u0131"}</Text>
+        {/*
+          Center the dot over the i-stem. We put it inside an absolutely-
+          positioned full-width overlay with alignItems:center so it follows
+          the rendered glyph box (not the font's advance width — which has
+          uneven side bearings on dotless-i and was pushing the dot right of
+          the stem).
+        */}
         <View
           pointerEvents="none"
-          style={[
-            styles.dot,
-            {
+          style={{
+            position: "absolute",
+            top: -Math.round(titleSize * 0.1),
+            left: 0,
+            right: 0,
+            alignItems: "center",
+          }}
+        >
+          <View
+            style={{
               width: dotSize,
               height: dotSize,
               borderRadius: dotSize / 2,
               backgroundColor: dotColor,
-              top: Math.round(titleSize * 0.18),
-              left: "50%",
-              marginLeft: -Math.round(dotSize / 2),
-            },
-          ]}
-        />
+            }}
+          />
+        </View>
       </View>
     </View>
   );
