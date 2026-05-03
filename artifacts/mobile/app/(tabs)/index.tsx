@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
-import Animated, { FadeIn } from "react-native-reanimated";
+import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ActiveGoalChip } from "@/components/ActiveGoalChip";
@@ -217,7 +217,10 @@ export default function TodayScreen() {
   }
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <Animated.View
+      entering={FadeIn.duration(260)}
+      style={[styles.root, { backgroundColor: colors.background }]}
+    >
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
@@ -448,7 +451,7 @@ export default function TodayScreen() {
           }, 150);
         }}
       />
-    </View>
+    </Animated.View>
   );
 }
 

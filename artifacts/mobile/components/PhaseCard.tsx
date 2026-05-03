@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { useColors } from "@/hooks/useColors";
 import type { RoadmapPhase } from "@workspace/api-client-react";
@@ -17,7 +18,8 @@ export function PhaseCard({ phase, index, isActive, updated = false }: Props) {
   const colors = useColors();
 
   return (
-    <View
+    <Animated.View
+      entering={FadeInDown.delay(index * 60).duration(320)}
       style={[
         styles.card,
         {
@@ -151,7 +153,7 @@ export function PhaseCard({ phase, index, isActive, updated = false }: Props) {
           </View>
         ))}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 

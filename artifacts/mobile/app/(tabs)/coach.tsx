@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ActiveGoalChip } from "@/components/ActiveGoalChip";
@@ -520,6 +521,10 @@ export default function CoachScreen() {
   const recordingSeconds = Math.floor(recorder.durationMs / 1000);
 
   return (
+    <Animated.View
+      entering={FadeIn.duration(260)}
+      style={[styles.root, { backgroundColor: colors.background }]}
+    >
     <KeyboardAvoidingView
       behavior="padding"
       keyboardVerticalOffset={0}
@@ -895,6 +900,7 @@ export default function CoachScreen() {
         </View>
       </View>
     </KeyboardAvoidingView>
+    </Animated.View>
   );
 }
 

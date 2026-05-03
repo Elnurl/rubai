@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React from "react";
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, { FadeIn } from "react-native-reanimated";
 
 import { AtlasButton } from "@/components/AtlasButton";
 import { AtlasLogo } from "@/components/AtlasLogo";
@@ -61,7 +62,10 @@ export default function GoalsScreen() {
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <Animated.View
+      entering={FadeIn.duration(260)}
+      style={[styles.root, { backgroundColor: colors.background }]}
+    >
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
@@ -96,9 +100,10 @@ export default function GoalsScreen() {
           />
         ) : (
           <View style={styles.list}>
-            {goals.map((g) => (
+            {goals.map((g, i) => (
               <GoalListItem
                 key={g.id}
+                index={i}
                 goal={g}
                 isActive={g.id === activeGoalId}
                 weekProgress={
@@ -177,7 +182,7 @@ export default function GoalsScreen() {
           </Pressable>
         )}
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 }
 

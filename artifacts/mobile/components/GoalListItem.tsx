@@ -1,6 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { GOAL_META, profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
@@ -10,6 +11,7 @@ type Props = {
   goal: Goal;
   isActive: boolean;
   weekProgress?: { current: number; total: number };
+  index?: number;
   onPress: () => void;
   onDelete: () => void;
 };
@@ -18,6 +20,7 @@ export function GoalListItem({
   goal,
   isActive,
   weekProgress,
+  index = 0,
   onPress,
   onDelete,
 }: Props) {
@@ -27,6 +30,7 @@ export function GoalListItem({
   const headline = goal.roadmap?.headline ?? "Roadmap pending";
 
   return (
+    <Animated.View entering={FadeInDown.delay(index * 50).duration(280)}>
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
@@ -116,6 +120,7 @@ export function GoalListItem({
         <Feather name="trash-2" size={15} color={colors.mutedForeground} />
       </Pressable>
     </Pressable>
+    </Animated.View>
   );
 }
 

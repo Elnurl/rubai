@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
 import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, { FadeIn } from "react-native-reanimated";
 
 import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { AdaptiveEngineCard } from "@/components/AdaptiveEngineCard";
@@ -77,7 +78,10 @@ export default function RoadmapScreen() {
   const goalLabel = activeProfile ? profileGoalLabel(activeProfile) : "";
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <Animated.View
+      entering={FadeIn.duration(260)}
+      style={[styles.root, { backgroundColor: colors.background }]}
+    >
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
@@ -253,7 +257,7 @@ export default function RoadmapScreen() {
           </View>
         )}
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 }
 

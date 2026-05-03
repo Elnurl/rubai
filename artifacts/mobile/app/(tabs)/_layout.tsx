@@ -6,8 +6,36 @@ import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import React from "react";
 import { Platform, Pressable, StyleSheet, View, useColorScheme } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 
 import { useColors } from "@/hooks/useColors";
+
+function AnimatedTabIcon({
+  focused,
+  children,
+}: {
+  focused: boolean;
+  children: React.ReactNode;
+}) {
+  const scale = useSharedValue(focused ? 1 : 0.92);
+  const translateY = useSharedValue(focused ? -1 : 0);
+  React.useEffect(() => {
+    scale.value = withSpring(focused ? 1.08 : 0.95, {
+      damping: 14,
+      stiffness: 220,
+    });
+    translateY.value = withTiming(focused ? -2 : 0, { duration: 180 });
+  }, [focused, scale, translateY]);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }, { translateY: translateY.value }],
+  }));
+  return <Animated.View style={style}>{children}</Animated.View>;
+}
 
 function NativeTabLayout() {
   return (
@@ -84,24 +112,30 @@ function ClassicTabLayout() {
         name="index"
         options={{
           title: "Today",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="sun.max" tintColor={color} size={24} />
-            ) : (
-              <Feather name="sun" size={22} color={color} />
-            ),
+          tabBarIcon: ({ color, focused }) => (
+            <AnimatedTabIcon focused={focused}>
+              {isIOS ? (
+                <SymbolView name="sun.max" tintColor={color} size={24} />
+              ) : (
+                <Feather name="sun" size={22} color={color} />
+              )}
+            </AnimatedTabIcon>
+          ),
         }}
       />
       <Tabs.Screen
         name="roadmap"
         options={{
           title: "Roadmap",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="map" tintColor={color} size={24} />
-            ) : (
-              <Feather name="map" size={22} color={color} />
-            ),
+          tabBarIcon: ({ color, focused }) => (
+            <AnimatedTabIcon focused={focused}>
+              {isIOS ? (
+                <SymbolView name="map" tintColor={color} size={24} />
+              ) : (
+                <Feather name="map" size={22} color={color} />
+              )}
+            </AnimatedTabIcon>
+          ),
         }}
       />
       <Tabs.Screen
@@ -142,24 +176,30 @@ function ClassicTabLayout() {
         name="goals"
         options={{
           title: "Goals",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="list.bullet" tintColor={color} size={24} />
-            ) : (
-              <Feather name="list" size={22} color={color} />
-            ),
+          tabBarIcon: ({ color, focused }) => (
+            <AnimatedTabIcon focused={focused}>
+              {isIOS ? (
+                <SymbolView name="list.bullet" tintColor={color} size={24} />
+              ) : (
+                <Feather name="list" size={22} color={color} />
+              )}
+            </AnimatedTabIcon>
+          ),
         }}
       />
       <Tabs.Screen
         name="account"
         options={{
           title: "Account",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="person.crop.circle" tintColor={color} size={24} />
-            ) : (
-              <Feather name="user" size={22} color={color} />
-            ),
+          tabBarIcon: ({ color, focused }) => (
+            <AnimatedTabIcon focused={focused}>
+              {isIOS ? (
+                <SymbolView name="person.crop.circle" tintColor={color} size={24} />
+              ) : (
+                <Feather name="user" size={22} color={color} />
+              )}
+            </AnimatedTabIcon>
+          ),
         }}
       />
     </Tabs>

@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, { FadeIn } from "react-native-reanimated";
 
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { useColors } from "@/hooks/useColors";
@@ -97,7 +98,10 @@ export default function AccountScreen() {
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <Animated.View
+      entering={FadeIn.duration(260)}
+      style={[styles.root, { backgroundColor: colors.background }]}
+    >
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
@@ -354,7 +358,7 @@ export default function AccountScreen() {
           {APP_VERSION}
         </Text>
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 }
 
