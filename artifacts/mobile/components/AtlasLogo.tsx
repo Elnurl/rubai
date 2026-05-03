@@ -21,7 +21,7 @@ export function AtlasLogo({ size = "md" }: Props) {
   const titleSize = size === "lg" ? 32 : size === "md" ? 24 : 18;
   // +5% size vs the previous 0.198 multiplier so the dot reads a touch
   // bolder above the i-stem at every breakpoint.
-  const dotSize = Math.round(titleSize * 0.218);
+  const dotSize = Math.round(titleSize * 0.238);
 
   // Wordmark is "ruba" + dotless-i (U+0131) so the green BrandDot can sit
   // alone above the i-stem. Inter is bundled as a custom font (not a system
