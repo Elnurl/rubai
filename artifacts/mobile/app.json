@@ -15,10 +15,12 @@
     },
     "ios": {
       "supportsTablet": false,
-      "icon": "./assets/images/icon.png"
+      "icon": "./assets/images/icon.png",
+      "bundleIdentifier": "com.rubai.mobile"
     },
     "android": {
       "icon": "./assets/images/icon.png",
+      "package": "com.rubai.mobile",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#15140F"

@@ -310,6 +310,36 @@ export default function IntakeScreen() {
             },
           ]}
         >
+          {missing.length > 0 ? (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                paddingHorizontal: 4,
+                paddingBottom: 8,
+              }}
+            >
+              <Feather
+                name="alert-circle"
+                size={13}
+                color={colors.destructive}
+              />
+              <Text
+                style={{
+                  flex: 1,
+                  color: colors.destructive,
+                  fontFamily: "Inter_500Medium",
+                  fontSize: 12.5,
+                  lineHeight: 17,
+                }}
+              >
+                {missing.length === 1
+                  ? "1 required question is missing — scroll up to find the highlighted card."
+                  : `${missing.length} required questions are missing — scroll up to find them.`}
+              </Text>
+            </View>
+          ) : null}
           <AtlasButton
             label={submit.isPending ? "Building your profile" : "Build my plan"}
             onPress={onSubmit}
