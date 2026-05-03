@@ -52,7 +52,7 @@ export function AtlasLogo({ size = "md" }: Props) {
           pointerEvents="none"
           style={{
             position: "absolute",
-            top: -Math.round(titleSize * 0.1),
+            top: Math.round(titleSize * 0.02),
             left: 0,
             right: 0,
             alignItems: "center",
@@ -64,6 +64,7 @@ export function AtlasLogo({ size = "md" }: Props) {
               height: dotSize,
               borderRadius: dotSize / 2,
               backgroundColor: dotColor,
+              marginLeft: Math.round(titleSize * 0.08),
             }}
           />
         </View>
