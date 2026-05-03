@@ -280,6 +280,55 @@ export default function AccountScreen() {
         </Pressable>
 
         <Pressable
+          onPress={() => router.push("/behavioral-insights")}
+          style={({ pressed }) => [
+            styles.insightsLinkCard,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderRadius: colors.radius,
+              opacity: pressed ? 0.9 : 1,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Open behavioral insights"
+        >
+          <View
+            style={[
+              styles.insightsLinkIcon,
+              { backgroundColor: colors.primary + "1A" },
+            ]}
+          >
+            <Feather name="activity" size={16} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text
+              style={[
+                styles.insightsLinkTitle,
+                {
+                  color: colors.foreground,
+                  fontFamily: "Inter_600SemiBold",
+                },
+              ]}
+            >
+              Behavioral Insights
+            </Text>
+            <Text
+              style={[
+                styles.insightsLinkSubtitle,
+                {
+                  color: colors.mutedForeground,
+                  fontFamily: "Inter_400Regular",
+                },
+              ]}
+            >
+              Focus intensity, peak hours, and rhythm trends.
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+        </Pressable>
+
+        <Pressable
           onPress={onSignOut}
           style={({ pressed }) => [
             styles.signOutBtn,
@@ -1006,6 +1055,27 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
     borderWidth: 1,
+  },
+  insightsLinkCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    padding: 16,
+    borderWidth: 1,
+  },
+  insightsLinkIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  insightsLinkTitle: {
+    fontSize: 14.5,
+  },
+  insightsLinkSubtitle: {
+    fontSize: 12.5,
+    lineHeight: 17,
   },
   signOutText: {
     fontSize: 14,
