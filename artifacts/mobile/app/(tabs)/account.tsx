@@ -323,6 +323,19 @@ export default function AccountScreen() {
           />
           <Divider />
           <NavRow
+            icon="calendar"
+            title="Calendar sync"
+            subtitle={
+              account.calendarSync.enabled && account.calendarSync.calendarTitle
+                ? `On · ${account.calendarSync.calendarTitle}`
+                : account.calendarSync.enabled
+                  ? "On · pick a calendar"
+                  : "Off"
+            }
+            onPress={() => router.push("/account/calendar")}
+          />
+          <Divider />
+          <NavRow
             icon="credit-card"
             title="Subscription"
             subtitle={`${tierInfo.label} · ${tierInfo.price}`}

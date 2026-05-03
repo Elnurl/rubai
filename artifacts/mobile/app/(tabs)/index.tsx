@@ -26,6 +26,10 @@ import { useEvolveRoadmap } from "@/hooks/useEvolveRoadmap";
 import { todayISO } from "@/lib/storage";
 import { useAtlas } from "@/providers/AtlasProvider";
 import {
+  loadCalendarContextIfEnabled,
+  writePlanToCalendarIfEnabled,
+} from "@/lib/calendar";
+import {
   useAtlasBehavioralProfile,
   useAtlasGenerateDailyPlan,
   type DailyTask,
@@ -49,6 +53,7 @@ export default function TodayScreen() {
     activeCurrentWeek,
     activeTaskHistory,
     activeReflections,
+    account,
     setActiveDailyPlan,
     recordActiveTask,
     recordActiveReflection,
@@ -76,31 +81,41 @@ export default function TodayScreen() {
     requestedRef.current = null;
   }, [activeGoalId]);
 
+  const generatePlan = async () => {
+    if (!activeProfile || !activeRoadmap) return;
+    const calendarContext = await loadCalendarContextIfEnabled(
+      account.calendarSync,
+    );
+    const plan = await generate.mutateAsync({
+      data: {
+        profile: activeProfile,
+        roadmap: activeRoadmap,
+        behavioral: activeBehavioral,
+        date: today,
+        currentWeek: activeCurrentWeek,
+        ...(activeBehavioralProfile
+          ? { learnedProfile: activeBehavioralProfile }
+          : {}),
+        ...(calendarContext ? { calendarContext } : {}),
+      },
+    });
+    await setActiveDailyPlan(plan);
+    void writePlanToCalendarIfEnabled(
+      account.calendarSync,
+      plan,
+      account.reminderTime,
+    );
+  };
+
   useEffect(() => {
     if (!activeProfile || !activeRoadmap) return;
     if (planIsForToday) return;
     const key = `${activeGoalId}:${today}`;
     if (requestedRef.current === key) return;
     requestedRef.current = key;
-    generate
-      .mutateAsync({
-        data: {
-          profile: activeProfile,
-          roadmap: activeRoadmap,
-          behavioral: activeBehavioral,
-          date: today,
-          currentWeek: activeCurrentWeek,
-          ...(activeBehavioralProfile
-            ? { learnedProfile: activeBehavioralProfile }
-            : {}),
-        },
-      })
-      .then((plan) => {
-        void setActiveDailyPlan(plan);
-      })
-      .catch(() => {
-        requestedRef.current = null;
-      });
+    generatePlan().catch(() => {
+      requestedRef.current = null;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeGoalId, activeProfile, activeRoadmap, planIsForToday, today, activeCurrentWeek]);
 
@@ -108,19 +123,7 @@ export default function TodayScreen() {
     if (!activeProfile || !activeRoadmap) return;
     requestedRef.current = `${activeGoalId}:${today}`;
     try {
-      const plan = await generate.mutateAsync({
-        data: {
-          profile: activeProfile,
-          roadmap: activeRoadmap,
-          behavioral: activeBehavioral,
-          date: today,
-          currentWeek: activeCurrentWeek,
-          ...(activeBehavioralProfile
-            ? { learnedProfile: activeBehavioralProfile }
-            : {}),
-        },
-      });
-      await setActiveDailyPlan(plan);
+      await generatePlan();
     } catch {
       requestedRef.current = null;
     }

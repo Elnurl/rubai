@@ -762,6 +762,9 @@ components:
           type: string
         currentWeek:
           type: integer
+        calendarContext:
+          type: string
+          description: Optional summary of the user's calendar events for today. Used to schedule plan around existing meetings.
       required: [profile, roadmap, behavioral, date, currentWeek]
 
     DailyTask:
@@ -940,6 +943,9 @@ components:
         attachmentNote:
           type: string
           description: Optional note about an attachment the user added this turn (e.g. an image filename). The reply should acknowledge it.
+        calendarContext:
+          type: string
+          description: Optional summary of the user's calendar events for today. Helps the coach reason about availability.
         attachmentImage:
           oneOf:
             - $ref: "#/components/schemas/CoachAttachmentImage"

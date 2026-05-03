@@ -280,6 +280,23 @@ function pickAccountPrefs(blob: unknown): AccountPrefs {
       typeof b.preferredLanguage === "string" && b.preferredLanguage.length > 0
         ? b.preferredLanguage
         : DEFAULT_ACCOUNT.preferredLanguage,
+    calendarSync: pickCalendarSync(b.calendarSync),
+  };
+}
+
+function pickCalendarSync(blob: unknown): AccountPrefs["calendarSync"] {
+  const def = DEFAULT_ACCOUNT.calendarSync;
+  if (!blob || typeof blob !== "object") return def;
+  const b = blob as Partial<AccountPrefs["calendarSync"]>;
+  return {
+    enabled: typeof b.enabled === "boolean" ? b.enabled : def.enabled,
+    calendarId:
+      typeof b.calendarId === "string" ? b.calendarId : def.calendarId,
+    calendarTitle:
+      typeof b.calendarTitle === "string" ? b.calendarTitle : def.calendarTitle,
+    contextRead:
+      typeof b.contextRead === "boolean" ? b.contextRead : def.contextRead,
+    autoWrite: typeof b.autoWrite === "boolean" ? b.autoWrite : def.autoWrite,
   };
 }
 

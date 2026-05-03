@@ -28,6 +28,7 @@ import { useEvolveRoadmap } from "@/hooks/useEvolveRoadmap";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 import { useVoiceRecorder, type RecordedClip } from "@/hooks/useVoiceRecorder";
 import { useAtlas } from "@/providers/AtlasProvider";
+import { loadCalendarContextIfEnabled } from "@/lib/calendar";
 import {
   customFetch,
   useAtlasCoach,
@@ -83,6 +84,7 @@ export default function CoachScreen() {
     applyCoachMemoryUpdate,
     setActiveDailyPlan,
     updateActiveGoal,
+    account,
   } = useAtlas();
 
   const coach = useAtlasCoach();
@@ -165,6 +167,9 @@ export default function CoachScreen() {
       await appendActiveCoachMessage(userMsg);
 
       try {
+        const calendarContext = await loadCalendarContextIfEnabled(
+          account.calendarSync,
+        );
         const res = await coach.mutateAsync({
           data: {
             profile: activeProfile,
@@ -174,6 +179,7 @@ export default function CoachScreen() {
             history: activeCoachHistory.slice(-10),
             message,
             modelChoice,
+            ...(calendarContext ? { calendarContext } : {}),
             currentWeek: activeCurrentWeek,
             recentReflections: activeReflections.slice(-5),
             recentEvolutions: activeRoadmapEvolutions.slice(0, 2),

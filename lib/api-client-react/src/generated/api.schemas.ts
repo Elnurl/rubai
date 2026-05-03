@@ -292,6 +292,8 @@ export interface DailyPlanRequest {
   learnedProfile?: BehavioralProfile | null;
   date: string;
   currentWeek: number;
+  /** Optional summary of the user's calendar events for today. Used to schedule plan around existing meetings. */
+  calendarContext?: string;
 }
 
 export type DailyTaskPriority =
@@ -484,6 +486,8 @@ export interface CoachRequest {
   modelChoice?: CoachRequestModelChoice;
   /** Optional note about an attachment the user added this turn (e.g. an image filename). The reply should acknowledge it. */
   attachmentNote?: string;
+  /** Optional summary of the user's calendar events for today. Helps the coach reason about availability. */
+  calendarContext?: string;
   /** Optional inline image the coach should look at this turn. Triggers a vision-capable model. */
   attachmentImage?: CoachAttachmentImage | null;
 }

@@ -513,6 +513,12 @@ export const AtlasGenerateDailyPlanBody = zod.object({
     ),
   date: zod.string(),
   currentWeek: zod.number(),
+  calendarContext: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional summary of the user's calendar events for today. Used to schedule plan around existing meetings.",
+    ),
 });
 
 export const AtlasGenerateDailyPlanResponse = zod.object({
@@ -832,6 +838,12 @@ export const AtlasCoachBody = zod.object({
     .optional()
     .describe(
       "Optional note about an attachment the user added this turn (e.g. an image filename). The reply should acknowledge it.",
+    ),
+  calendarContext: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional summary of the user's calendar events for today. Helps the coach reason about availability.",
     ),
   attachmentImage: zod
     .union([

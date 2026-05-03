@@ -412,8 +412,12 @@ router.post("/daily-plan", async (req, res) => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { profile, roadmap, behavioral, learnedProfile, date, currentWeek } = parsed.data;
+  const { profile, roadmap, behavioral, learnedProfile, date, currentWeek, calendarContext } = parsed.data;
   const learnedSummary = summarizeLearnedProfile(learnedProfile);
+  const calendarBlock =
+    calendarContext && calendarContext.trim().length > 0
+      ? `\n\nTODAY'S CALENDAR (schedule around these existing commitments; suggest concrete time slots in coachNote when helpful):\n${calendarContext.trim()}`
+      : "";
 
   try {
     const completion = await trackedCreate(req, {
@@ -445,7 +449,7 @@ Rules:
         },
         {
           role: "user",
-          content: `Date: ${date}\nProfile: ${JSON.stringify(profile)}\nRoadmap: ${JSON.stringify(roadmap)}\nBehavioral snapshot: ${JSON.stringify(behavioral)}${learnedSummary ? `\n\nLEARNED PROFILE:\n${learnedSummary}` : ""}`,
+          content: `Date: ${date}\nProfile: ${JSON.stringify(profile)}\nRoadmap: ${JSON.stringify(roadmap)}\nBehavioral snapshot: ${JSON.stringify(behavioral)}${learnedSummary ? `\n\nLEARNED PROFILE:\n${learnedSummary}` : ""}${calendarBlock}`,
         },
       ],
     });
@@ -745,6 +749,7 @@ router.post("/coach", async (req, res) => {
     modelChoice,
     attachmentNote,
     attachmentImage,
+    calendarContext,
   } = parsed.data;
 
   // Validate any attached image before we hand bytes to the vision model.
@@ -862,7 +867,11 @@ Hard rules:
 - If the user goes off-topic, steer back to their goal in one sentence.
 
 CONTEXT:
-${contextBlock}`;
+${contextBlock}${
+      calendarContext && calendarContext.trim().length > 0
+        ? `\n\nTODAY'S CALENDAR:\n${calendarContext.trim()}`
+        : ""
+    }`;
 
     const completion = await trackedCreate(req, {
       // Vision turns need a multimodal model; gpt-4o supports both

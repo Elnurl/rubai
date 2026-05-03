@@ -66,6 +66,14 @@ export type Subscription = {
 
 export type ThemeOverride = "system" | "light" | "dark";
 
+export type CalendarSyncPrefs = {
+  enabled: boolean;
+  calendarId: string | null;
+  calendarTitle: string | null;
+  contextRead: boolean;
+  autoWrite: boolean;
+};
+
 export type AccountPrefs = {
   notificationsEnabled: boolean;
   reminderTime: string;
@@ -75,6 +83,7 @@ export type AccountPrefs = {
   privacyShield: boolean;
   coachPersona: string;
   preferredLanguage: string;
+  calendarSync: CalendarSyncPrefs;
 };
 
 export type IntakeDraftStage =
@@ -129,6 +138,14 @@ export const DEFAULT_SUBSCRIPTION: Subscription = {
   startedAt: new Date().toISOString(),
 };
 
+export const DEFAULT_CALENDAR_SYNC: CalendarSyncPrefs = {
+  enabled: false,
+  calendarId: null,
+  calendarTitle: null,
+  contextRead: true,
+  autoWrite: false,
+};
+
 export const DEFAULT_ACCOUNT: AccountPrefs = {
   notificationsEnabled: true,
   reminderTime: "08:00",
@@ -138,4 +155,5 @@ export const DEFAULT_ACCOUNT: AccountPrefs = {
   privacyShield: false,
   coachPersona: "Empathetic & Direct",
   preferredLanguage: "English",
+  calendarSync: DEFAULT_CALENDAR_SYNC,
 };

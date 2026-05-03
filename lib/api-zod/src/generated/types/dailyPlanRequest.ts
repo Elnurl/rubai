@@ -18,4 +18,6 @@ export interface DailyPlanRequest {
   learnedProfile?: BehavioralProfile | null;
   date: string;
   currentWeek: number;
+  /** Optional summary of the user's calendar events for today. Used to schedule plan around existing meetings. */
+  calendarContext?: string;
 }

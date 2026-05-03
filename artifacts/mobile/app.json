@@ -56,6 +56,13 @@
         {
           "color": "#84CC16"
         }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Allow rubai to read your events so the AI can plan around your meetings.",
+          "remindersPermission": "Allow rubai to read your reminders so the AI can incorporate them into your daily plan."
+        }
       ]
     ],
     "experiments": {
