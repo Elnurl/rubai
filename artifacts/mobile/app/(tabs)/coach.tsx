@@ -838,7 +838,7 @@ export default function CoachScreen() {
             <TextInput
               value={draft}
               onChangeText={setDraft}
-              placeholder="Ask rubai"
+              placeholder="Talk to your coach"
               placeholderTextColor={colors.mutedForeground}
               multiline
               style={[
@@ -1158,7 +1158,8 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 15,
-    paddingVertical: 0,
+    paddingTop: 4,
+    paddingBottom: 0,
     maxHeight: 120,
   },
   micButton: {
