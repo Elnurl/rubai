@@ -52,7 +52,7 @@ export function AtlasLogo({ size = "md" }: Props) {
           pointerEvents="none"
           style={{
             position: "absolute",
-            top: Math.round(titleSize * 0.02),
+            top: Math.round(titleSize * 0.04),
             left: 0,
             right: 0,
             alignItems: "center",
