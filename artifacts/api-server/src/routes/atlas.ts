@@ -234,37 +234,38 @@ router.post("/onboarding-chat", async (req, res) => {
       return;
     }
 
-    const extraction = await trackedCreate(req, {
-      model: MODEL,
-      max_completion_tokens: 1500,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "onboarding_extraction",
-          strict: true,
-          schema: profileExtractorSchema,
+    const parsedExtraction = (await strictJsonCompletion(
+      req,
+      {
+        model: MODEL,
+        max_completion_tokens: 1500,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "onboarding_extraction",
+            strict: true,
+            schema: profileExtractorSchema,
+          },
         },
-      },
-      messages: [
-        {
-          role: "system",
-          content: `You analyze an onboarding chat and decide if enough has been gathered to build a realistic roadmap for the goal: ${resolveGoalLabel(goalType, customGoalTitle)}.
+        messages: [
+          {
+            role: "system",
+            content: `You analyze an onboarding chat and decide if enough has been gathered to build a realistic roadmap for the goal: ${resolveGoalLabel(goalType, customGoalTitle)}.
 
 If sufficient data is present (concrete goal, timeline, current level, daily time, productivity window, constraints), set isComplete=true and produce a structured profile. Otherwise isComplete=false and profile=null.
 
 When isComplete=true, set nextMessage to a brief confirmation (under 60 words, conversational, no lists, no emojis) summarizing what rabai understood and announcing the roadmap is being built.
 
 When isComplete=false, set nextMessage to: ${JSON.stringify(nextMessage)}`,
-        },
-        {
-          role: "user",
-          content: JSON.stringify({ goalType, history }),
-        },
-      ],
-    });
-
-    const raw = extraction.choices[0]?.message?.content ?? "{}";
-    const parsedExtraction = JSON.parse(raw) as {
+          },
+          {
+            role: "user",
+            content: JSON.stringify({ goalType, history }),
+          },
+        ],
+      },
+      profileExtractorValidator,
+    )) as {
       isComplete: boolean;
       nextMessage: string;
       profile:
@@ -296,6 +297,11 @@ When isComplete=false, set nextMessage to: ${JSON.stringify(nextMessage)}`,
         : null,
     });
   } catch (err) {
+    if (err instanceof StrictJsonError && err.kind === "refusal") {
+      req.log.warn({ details: err.details }, "onboarding-chat refusal from model");
+      res.status(400).json({ error: "Model refused to respond" });
+      return;
+    }
     req.log.error({ err }, "onboarding-chat failed");
     res.status(500).json({ error: "AI request failed" });
   }
@@ -352,21 +358,23 @@ router.post("/roadmap", async (req, res) => {
   const { profile } = parsed.data;
 
   try {
-    const completion = await trackedCreate(req, {
-      model: MODEL,
-      max_completion_tokens: 4000,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "roadmap",
-          strict: true,
-          schema: roadmapSchema,
+    const data = await strictJsonCompletion(
+      req,
+      {
+        model: MODEL,
+        max_completion_tokens: 4000,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "roadmap",
+            strict: true,
+            schema: roadmapSchema,
+          },
         },
-      },
-      messages: [
-        {
-          role: "system",
-          content: `You are rabai — an AI strategic execution coach. Build a personalized, realistic roadmap for whatever goal the user has set, in any domain (fitness, study, career, life-design, creative work, finance, relationships, side-projects — anything).
+        messages: [
+          {
+            role: "system",
+            content: `You are rabai — an AI strategic execution coach. Build a personalized, realistic roadmap for whatever goal the user has set, in any domain (fitness, study, career, life-design, creative work, finance, relationships, side-projects — anything).
 
 Constraints:
 - 3 to 5 phases. Each phase 2-6 weeks, with 2-4 milestones.
@@ -378,18 +386,22 @@ Constraints:
 - riskAnalysis: 2-4 short bullet strings identifying realistic obstacles for THIS user.
 - Adapt difficulty to the stated current level, available time, and consistency.
 - No emojis. No markdown.`,
-        },
-        {
-          role: "user",
-          content: `Build a roadmap for this user profile (goal: ${resolveGoalLabel(profile.goalType, profile.customGoalTitle)}):\n${JSON.stringify(profile, null, 2)}`,
-        },
-      ],
-    });
-
-    const raw = completion.choices[0]?.message?.content ?? "{}";
-    const data = JSON.parse(raw);
+          },
+          {
+            role: "user",
+            content: `Build a roadmap for this user profile (goal: ${resolveGoalLabel(profile.goalType, profile.customGoalTitle)}):\n${JSON.stringify(profile, null, 2)}`,
+          },
+        ],
+      },
+      roadmapValidator,
+    );
     res.json({ goalType: profile.goalType, ...data });
   } catch (err) {
+    if (err instanceof StrictJsonError && err.kind === "refusal") {
+      req.log.warn({ details: err.details }, "roadmap refusal from model");
+      res.status(400).json({ error: "Model refused to respond" });
+      return;
+    }
     req.log.error({ err }, "roadmap generation failed");
     res.status(500).json({ error: "AI request failed" });
   }
@@ -459,21 +471,23 @@ router.post("/daily-plan", async (req, res) => {
   }
 
   try {
-    const completion = await trackedCreate(req, {
-      model: MODEL,
-      max_completion_tokens: 2500,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "daily_plan",
-          strict: true,
-          schema: dailyPlanSchema,
+    const data = await strictJsonCompletion(
+      req,
+      {
+        model: MODEL,
+        max_completion_tokens: 2500,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "daily_plan",
+            strict: true,
+            schema: dailyPlanSchema,
+          },
         },
-      },
-      messages: [
-        {
-          role: "system",
-          content: `You are rabai. Generate today's actionable execution plan for the user.
+        messages: [
+          {
+            role: "system",
+            content: `You are rabai. Generate today's actionable execution plan for the user.
 
 Rules:
 - 3 to 5 tasks. Each task practical, real-world, finishable today.
@@ -485,19 +499,23 @@ Rules:
 - focusOfTheDay: 5-9 word headline.
 - coachNote: 1-2 sentence personal nudge from rabai referencing the user's recent behaviour or learned profile.
 - No emojis. No markdown.`,
-        },
-        {
-          role: "user",
-          content: `Date: ${date}\nProfile: ${JSON.stringify(profile)}\nRoadmap: ${JSON.stringify(roadmap)}\nBehavioral snapshot: ${JSON.stringify(behavioral)}${learnedSummary ? `\n\nLEARNED PROFILE:\n${learnedSummary}` : ""}${calendarBlock}`,
-        },
-      ],
-    });
-
-    const raw = completion.choices[0]?.message?.content ?? "{}";
-    const data = JSON.parse(raw);
+          },
+          {
+            role: "user",
+            content: `Date: ${date}\nProfile: ${JSON.stringify(profile)}\nRoadmap: ${JSON.stringify(roadmap)}\nBehavioral snapshot: ${JSON.stringify(behavioral)}${learnedSummary ? `\n\nLEARNED PROFILE:\n${learnedSummary}` : ""}${calendarBlock}`,
+          },
+        ],
+      },
+      dailyPlanValidator,
+    );
     setCached(cacheKey, data);
     res.json({ date, ...data });
   } catch (err) {
+    if (err instanceof StrictJsonError && err.kind === "refusal") {
+      req.log.warn({ details: err.details }, "daily-plan refusal from model");
+      res.status(400).json({ error: "Model refused to respond" });
+      return;
+    }
     req.log.error({ err }, "daily-plan generation failed");
     res.status(500).json({ error: "AI request failed" });
   }
@@ -822,6 +840,104 @@ const coachResponseValidator = z
         z.null(),
       ])
       .optional(),
+  })
+  .passthrough();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Zod validators for the remaining 9 structured AI calls. All are loose
+// passthrough mirrors of their corresponding hand-written JSON schemas above —
+// strict enough to catch refusal/empty/parse failures and gross shape
+// mismatches (e.g. Anthropic failover dropping a top-level field), but
+// generous enough to never false-reject a valid OpenAI strict-mode payload.
+// Phase 3 will collapse these into single zodToJsonSchema-derived shapes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const profileExtractorValidator = z
+  .object({
+    isComplete: z.boolean().optional(),
+    nextMessage: z.string().optional(),
+    profile: z
+      .union([
+        z
+          .object({
+            goalStatement: z.string().optional(),
+            currentLevel: z.string().optional(),
+            availableTimePerDayMinutes: z.number().optional(),
+            financialCondition: z.string().optional(),
+            productivityPattern: z.string().optional(),
+            consistencyLevel: z.string().optional(),
+            constraints: z.array(z.string()).optional(),
+            targetTimelineWeeks: z.number().optional(),
+            notes: z.string().optional(),
+          })
+          .passthrough(),
+        z.null(),
+      ])
+      .optional(),
+  })
+  .passthrough();
+
+const roadmapValidator = z
+  .object({
+    headline: z.string().optional(),
+    summary: z.string().optional(),
+    totalWeeks: z.number().optional(),
+    strategy: z.string().optional(),
+    riskAnalysis: z.array(z.string()).optional(),
+    phases: z.array(z.object({}).passthrough()).optional(),
+  })
+  .passthrough();
+
+const dailyPlanValidator = z
+  .object({
+    focusOfTheDay: z.string().optional(),
+    coachNote: z.string().optional(),
+    tasks: z.array(z.object({}).passthrough()).optional(),
+  })
+  .passthrough();
+
+const adaptValidator = z
+  .object({
+    difficultyAdjustment: z.string().optional(),
+    adjustments: z.array(z.string()).optional(),
+    encouragement: z.string().optional(),
+  })
+  .passthrough();
+
+const generateTitleValidator = z
+  .object({
+    title: z.string().optional(),
+  })
+  .passthrough();
+
+const intakeQuestionsValidator = z
+  .object({
+    introMessage: z.string().optional(),
+    questions: z.array(z.object({}).passthrough()).optional(),
+  })
+  .passthrough();
+
+const intakeProfileValidator = z
+  .object({
+    profile: z.object({}).passthrough().optional(),
+    followUp: z.string().optional(),
+  })
+  .passthrough();
+
+const behavioralProfileValidator = z
+  .object({
+    profile: z.object({}).passthrough().optional(),
+    aiInsight: z.string().optional(),
+  })
+  .passthrough();
+
+const roadmapEvolutionValidator = z
+  .object({
+    evolvedRoadmap: z.object({}).passthrough().optional(),
+    hasChanged: z.boolean().optional(),
+    changeSummary: z.string().optional(),
+    phaseChanges: z.array(z.object({}).passthrough()).optional(),
+    rationale: z.string().optional(),
   })
   .passthrough();
 
@@ -1532,33 +1648,39 @@ router.post("/adapt", async (req, res) => {
   const { profile, roadmap, behavioral } = parsed.data;
 
   try {
-    const completion = await trackedCreate(req, {
-      model: MODEL,
-      max_completion_tokens: 700,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "adaptation",
-          strict: true,
-          schema: adaptSchema,
+    const data = await strictJsonCompletion(
+      req,
+      {
+        model: MODEL,
+        max_completion_tokens: 700,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "adaptation",
+            strict: true,
+            schema: adaptSchema,
+          },
         },
+        messages: [
+          {
+            role: "system",
+            content: `You are rabai's adaptive planning engine. Based on behavioural data, decide whether to make the plan easier, keep it the same, or push harder. Provide 2-4 concrete adjustments (short imperative phrases, no markdown, no emojis) and a brief 1-sentence encouragement.`,
+          },
+          {
+            role: "user",
+            content: `Profile: ${JSON.stringify(profile)}\nRoadmap headline: ${roadmap.headline}\nBehavioural snapshot: ${JSON.stringify(behavioral)}`,
+          },
+        ],
       },
-      messages: [
-        {
-          role: "system",
-          content: `You are rabai's adaptive planning engine. Based on behavioural data, decide whether to make the plan easier, keep it the same, or push harder. Provide 2-4 concrete adjustments (short imperative phrases, no markdown, no emojis) and a brief 1-sentence encouragement.`,
-        },
-        {
-          role: "user",
-          content: `Profile: ${JSON.stringify(profile)}\nRoadmap headline: ${roadmap.headline}\nBehavioural snapshot: ${JSON.stringify(behavioral)}`,
-        },
-      ],
-    });
-
-    const raw = completion.choices[0]?.message?.content ?? "{}";
-    const data = JSON.parse(raw);
+      adaptValidator,
+    );
     res.json(data);
   } catch (err) {
+    if (err instanceof StrictJsonError && err.kind === "refusal") {
+      req.log.warn({ details: err.details }, "adapt refusal from model");
+      res.status(400).json({ error: "Model refused to respond" });
+      return;
+    }
     req.log.error({ err }, "adapt request failed");
     res.status(500).json({ error: "AI request failed" });
   }
@@ -1668,16 +1790,23 @@ router.post("/generate-title", async (req, res) => {
     return;
   }
   try {
-    const completion = await trackedCreate(req, {
-      model: MODEL_FAST,
-      response_format: {
-        type: "json_schema",
-        json_schema: { name: "generated_title", strict: true, schema: generateTitleSchema },
-      },
-      messages: [
-        {
-          role: "system",
-          content: `You convert a user's raw goal description into a SHORT, brand-neutral display title for their goal record.
+    // /generate-title intentionally soft-fails: any error (including refusal,
+    // parse, or validation failure) falls back to the trimmed user input so
+    // the create-goal flow never hard-blocks. We still go through
+    // strictJsonCompletion so we get the single retry on parse/validation
+    // failure for free, which improves the success rate before falling back.
+    const parsedJson = await strictJsonCompletion(
+      req,
+      {
+        model: MODEL_FAST,
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: "generated_title", strict: true, schema: generateTitleSchema },
+        },
+        messages: [
+          {
+            role: "system",
+            content: `You convert a user's raw goal description into a SHORT, brand-neutral display title for their goal record.
 
 Rules:
 - 2 to 5 words. Title Case.
@@ -1687,20 +1816,15 @@ Rules:
 - If the input is gibberish or ambiguous, fall back to a generic title like "New Personal Goal".
 - Goal category hint: ${goalType}. (Custom means the user wrote it themselves.)
 - Never refer to the assistant or the app. Just the goal.`,
-        },
-        {
-          role: "user",
-          content: `User input: "${trimmed}"${intent ? `\nExtra context: ${intent}` : ""}\n\nReturn the refined title.`,
-        },
-      ],
-    });
-    const raw = completion.choices[0]?.message?.content ?? "{}";
-    let parsedJson: { title?: unknown };
-    try {
-      parsedJson = JSON.parse(raw);
-    } catch {
-      parsedJson = {};
-    }
+          },
+          {
+            role: "user",
+            content: `User input: "${trimmed}"${intent ? `\nExtra context: ${intent}` : ""}\n\nReturn the refined title.`,
+          },
+        ],
+      },
+      generateTitleValidator,
+    );
     const title =
       typeof parsedJson.title === "string" && parsedJson.title.trim().length > 0
         ? parsedJson.title.trim().slice(0, 60)
@@ -1724,16 +1848,18 @@ router.post("/intake-questions", async (req, res) => {
   const label = resolveGoalLabel(goalType, goalType === "custom" ? goalTitle : undefined);
 
   try {
-    const completion = await trackedCreate(req, {
-      model: MODEL,
-      response_format: {
-        type: "json_schema",
-        json_schema: { name: "intake_questions", strict: true, schema: intakeQuestionsSchema },
-      },
-      messages: [
-        {
-          role: "system",
-          content: `You are rabai, a strategic AI execution coach. Generate a focused intake questionnaire so the system can build a real, personalized roadmap for the user's goal. The user described their goal as: "${goalTitle}" (category: ${label}).
+    const data = await strictJsonCompletion(
+      req,
+      {
+        model: MODEL,
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: "intake_questions", strict: true, schema: intakeQuestionsSchema },
+        },
+        messages: [
+          {
+            role: "system",
+            content: `You are rabai, a strategic AI execution coach. Generate a focused intake questionnaire so the system can build a real, personalized roadmap for the user's goal. The user described their goal as: "${goalTitle}" (category: ${label}).
 
 Rules:
 - 6 to 10 questions, no more.
@@ -1746,18 +1872,22 @@ Rules:
 - options must be a non-empty array for single_select / multi_select. Use an empty array for other types.
 - unit is required for "number" questions ("minutes", "weeks", "USD", etc). Use an empty string for other types.
 - introMessage is one warm sentence (under 25 words) introducing what comes next. No emojis, no markdown.`,
-        },
-        {
-          role: "user",
-          content: `Generate the intake questionnaire for the goal: ${goalTitle}.`,
-        },
-      ],
-    });
-
-    const raw = completion.choices[0]?.message?.content ?? "{}";
-    const data = JSON.parse(raw);
+          },
+          {
+            role: "user",
+            content: `Generate the intake questionnaire for the goal: ${goalTitle}.`,
+          },
+        ],
+      },
+      intakeQuestionsValidator,
+    );
     res.json(data);
   } catch (err) {
+    if (err instanceof StrictJsonError && err.kind === "refusal") {
+      req.log.warn({ details: err.details }, "intake-questions refusal from model");
+      res.status(400).json({ error: "Model refused to respond" });
+      return;
+    }
     req.log.error({ err }, "intake-questions request failed");
     res.status(500).json({ error: "AI request failed" });
   }
@@ -1795,16 +1925,18 @@ router.post("/intake-submit", async (req, res) => {
     .join("\n\n");
 
   try {
-    const completion = await trackedCreate(req, {
-      model: MODEL,
-      response_format: {
-        type: "json_schema",
-        json_schema: { name: "intake_profile", strict: true, schema: intakeProfileSchema },
-      },
-      messages: [
-        {
-          role: "system",
-          content: `You are rabai's intake processor. Convert the user's questionnaire answers into a complete UserProfile that the roadmap engine can use.
+    const data = await strictJsonCompletion(
+      req,
+      {
+        model: MODEL,
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: "intake_profile", strict: true, schema: intakeProfileSchema },
+        },
+        messages: [
+          {
+            role: "system",
+            content: `You are rabai's intake processor. Convert the user's questionnaire answers into a complete UserProfile that the roadmap engine can use.
 
 Rules:
 - Use the user's actual words where possible. Do not invent constraints they didn't mention.
@@ -1816,18 +1948,22 @@ Rules:
 - notes is a one-paragraph synthesis (max 60 words) summarising the user, capturing any unique custom details they provided via "Other:" entries.
 - followUp is one short, warm sentence rabai wants to say before generating the roadmap. No emojis, no markdown.
 - Goal category: ${label}.`,
-        },
-        {
-          role: "user",
-          content: `Goal: ${goalTitle}\n\nIntake answers:\n${transcript}`,
-        },
-      ],
-    });
-
-    const raw = completion.choices[0]?.message?.content ?? "{}";
-    const data = JSON.parse(raw);
+          },
+          {
+            role: "user",
+            content: `Goal: ${goalTitle}\n\nIntake answers:\n${transcript}`,
+          },
+        ],
+      },
+      intakeProfileValidator,
+    );
     res.json(data);
   } catch (err) {
+    if (err instanceof StrictJsonError && err.kind === "refusal") {
+      req.log.warn({ details: err.details }, "intake-submit refusal from model");
+      res.status(400).json({ error: "Model refused to respond" });
+      return;
+    }
     req.log.error({ err }, "intake-submit request failed");
     res.status(500).json({ error: "AI request failed" });
   }
@@ -1909,21 +2045,23 @@ router.post("/behavioral-profile", async (req, res) => {
     .join("\n");
 
   try {
-    const completion = await trackedCreate(req, {
-      model: MODEL,
-      max_completion_tokens: 1500,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "behavioral_profile",
-          strict: true,
-          schema: behavioralProfileSchema,
+    const data = (await strictJsonCompletion(
+      req,
+      {
+        model: MODEL,
+        max_completion_tokens: 1500,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "behavioral_profile",
+            strict: true,
+            schema: behavioralProfileSchema,
+          },
         },
-      },
-      messages: [
-        {
-          role: "system",
-          content: `You are rabai's behavioural analyst. Your job is to model how this specific human functions psychologically and operationally so the planner can adapt the roadmap, tasks, and coaching style to them.
+        messages: [
+          {
+            role: "system",
+            content: `You are rabai's behavioural analyst. Your job is to model how this specific human functions psychologically and operationally so the planner can adapt the roadmap, tasks, and coaching style to them.
 
 You will be given:
 - the user's stated UserProfile (their self-description),
@@ -1948,10 +2086,10 @@ Hard rules:
 - No emojis, no markdown anywhere.
 - Be evidence-based. Do not invent failure patterns or peak hours when there is no signal — return empty arrays instead.
 - Evolve the previous profile incrementally; preserve anything still true.`,
-        },
-        {
-          role: "user",
-          content: `STATED PROFILE: ${JSON.stringify(profile)}
+          },
+          {
+            role: "user",
+            content: `STATED PROFILE: ${JSON.stringify(profile)}
 
 PREVIOUS BEHAVIORAL PROFILE: ${previous ? JSON.stringify(previous) : "(none yet)"}
 
@@ -1965,12 +2103,11 @@ ${recentHistory
 
 RECENT REFLECTIONS:
 ${reflectionLines || "(none yet)"}`,
-        },
-      ],
-    });
-
-    const raw = completion.choices[0]?.message?.content ?? "{}";
-    const data = JSON.parse(raw) as {
+          },
+        ],
+      },
+      behavioralProfileValidator,
+    )) as {
       profile: Record<string, unknown>;
       aiInsight: string;
     };
@@ -1979,6 +2116,11 @@ ${reflectionLines || "(none yet)"}`,
       aiInsight: data.aiInsight,
     });
   } catch (err) {
+    if (err instanceof StrictJsonError && err.kind === "refusal") {
+      req.log.warn({ details: err.details }, "behavioral-profile refusal from model");
+      res.status(400).json({ error: "Model refused to respond" });
+      return;
+    }
     req.log.error({ err }, "behavioral-profile request failed");
     res.status(500).json({ error: "AI request failed" });
   }
@@ -2047,21 +2189,23 @@ router.post("/evolve-roadmap", async (req, res) => {
     .join("\n");
 
   try {
-    const completion = await trackedCreate(req, {
-      model: MODEL,
-      max_completion_tokens: 4500,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "roadmap_evolution",
-          strict: true,
-          schema: roadmapEvolutionSchema,
+    const data = (await strictJsonCompletion(
+      req,
+      {
+        model: MODEL,
+        max_completion_tokens: 4500,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "roadmap_evolution",
+            strict: true,
+            schema: roadmapEvolutionSchema,
+          },
         },
-      },
-      messages: [
-        {
-          role: "system",
-          content: `You are rabai's adaptive planner. Your job is to EVOLVE an existing roadmap so it stays accurate to how this user is actually executing — not to rewrite it from scratch.
+        messages: [
+          {
+            role: "system",
+            content: `You are rabai's adaptive planner. Your job is to EVOLVE an existing roadmap so it stays accurate to how this user is actually executing — not to rewrite it from scratch.
 
 Inputs you receive:
 - the user's stated UserProfile,
@@ -2092,10 +2236,10 @@ Output:
 - changeSummary: ONE short paragraph (under 60 words) in plain language explaining what you changed and why. Reference the actual signal (e.g. "your last 5 reflections marked tasks as 'tough'").
 - phaseChanges: ONE entry per phase in the evolved roadmap, in order. changeType is "added" | "removed" | "modified" | "unchanged". Removed phases also appear here (use the removed phase's old id and title). summary: one sentence per phase.
 - rationale: brief explanation (under 80 words) of the reasoning, for the user to read if they want depth.`,
-        },
-        {
-          role: "user",
-          content: `TRIGGER: ${trigger}
+          },
+          {
+            role: "user",
+            content: `TRIGGER: ${trigger}
 CURRENT WEEK: ${currentWeek}
 GOAL: ${resolveGoalLabel(profile.goalType, profile.customGoalTitle)}
 
@@ -2116,12 +2260,11 @@ ${learnedSummary || "(not yet available)"}
 
 RECENT REFLECTIONS (most recent last):
 ${reflectionLines || "(none yet)"}`,
-        },
-      ],
-    });
-
-    const raw = completion.choices[0]?.message?.content ?? "{}";
-    const data = JSON.parse(raw) as {
+          },
+        ],
+      },
+      roadmapEvolutionValidator,
+    )) as {
       evolvedRoadmap: Record<string, unknown>;
       hasChanged: boolean;
       changeSummary: string;
@@ -2143,6 +2286,11 @@ ${reflectionLines || "(none yet)"}`,
       evolvedAt: new Date().toISOString(),
     });
   } catch (err) {
+    if (err instanceof StrictJsonError && err.kind === "refusal") {
+      req.log.warn({ details: err.details }, "evolve-roadmap refusal from model");
+      res.status(400).json({ error: "Model refused to respond" });
+      return;
+    }
     req.log.error({ err }, "evolve-roadmap request failed");
     res.status(500).json({ error: "AI request failed" });
   }
