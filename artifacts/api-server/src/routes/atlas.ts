@@ -6,6 +6,19 @@ import { toFile } from "openai/uploads";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { db, usersTable } from "@workspace/db";
 import { trackedCreate } from "../lib/aiUsage";
+import {
+  MODEL_SMART,
+  MODEL_FAST,
+  MODEL_VISION,
+  ModerationError,
+  moderateOrThrow,
+  pickCoachModel,
+} from "../lib/aiConfig";
+import {
+  hashKey as cacheHashKey,
+  getCached,
+  setCached,
+} from "../lib/dailyPlanCache";
 import { sendPushTo } from "../lib/pushScheduler";
 import {
   AtlasOnboardingChatBody as atlasOnboardingChatBody,
@@ -57,15 +70,13 @@ function summarizeLearnedProfile(p: unknown): string {
 
 const router: IRouter = Router();
 
-const MODEL = "gpt-5.4";
-const MODEL_FAST = "gpt-5.4-mini";
-// Vision-capable model used only for coach turns that include an inline
-// image. The default models are text-only.
-const MODEL_VISION = "gpt-4o";
-
-function pickModel(choice: "smart" | "fast" | undefined): string {
-  return choice === "fast" ? MODEL_FAST : MODEL;
-}
+// Local alias kept so the existing `model: MODEL` call sites don't need
+// to change. Source of truth lives in `lib/aiConfig.ts` (env-driven).
+const MODEL = MODEL_SMART;
+// `MODEL_FAST` and `MODEL_VISION` are re-exported via the import above
+// so the rest of this file can use them unchanged.
+void MODEL_FAST;
+void MODEL_VISION;
 
 const audioUpload = multer({
   storage: multer.memoryStorage(),
@@ -419,6 +430,27 @@ router.post("/daily-plan", async (req, res) => {
       ? `\n\nTODAY'S CALENDAR (schedule around these existing commitments; suggest concrete time slots in coachNote when helpful):\n${calendarContext.trim()}`
       : "";
 
+  // Cache key encodes everything that can change the plan output. If the
+  // client re-asks for the same date with the same inputs we serve the
+  // previous plan instead of paying for a regeneration. Cache hits are
+  // intentionally NOT recorded in `ai_usage` — they aren't AI calls.
+  const cacheKey = cacheHashKey({
+    userId: req.userId ?? "anon",
+    date,
+    currentWeek,
+    profile,
+    roadmap,
+    behavioral,
+    learnedProfile,
+    calendarContext: calendarContext ?? "",
+  });
+  const cached = getCached<Record<string, unknown>>(cacheKey);
+  if (cached) {
+    req.log.info({ cacheKey }, "daily-plan cache hit");
+    res.json({ date, ...cached });
+    return;
+  }
+
   try {
     const completion = await trackedCreate(req, {
       model: MODEL,
@@ -456,6 +488,7 @@ Rules:
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
     const data = JSON.parse(raw);
+    setCached(cacheKey, data);
     res.json({ date, ...data });
   } catch (err) {
     req.log.error({ err }, "daily-plan generation failed");
@@ -753,6 +786,28 @@ router.post("/coach", async (req, res) => {
     calendarContext,
   } = parsed.data;
 
+  // Run the user's text through OpenAI moderation BEFORE we spend tokens
+  // on a smart-model coach turn or feed potentially abusive content into
+  // the system prompt. Moderation network failures fall through silently
+  // (logged inside the helper) so safety telemetry can never take the
+  // coach offline.
+  try {
+    await moderateOrThrow(message);
+  } catch (err) {
+    if (err instanceof ModerationError) {
+      req.log.warn(
+        { categories: err.categories },
+        "coach input blocked by moderation",
+      );
+      res.status(400).json({
+        error:
+          "I can't respond to that message. Try rephrasing it focused on your goal.",
+      });
+      return;
+    }
+    throw err;
+  }
+
   // Validate any attached image before we hand bytes to the vision model.
   // We only accept the formats gpt-4o reliably supports and cap the
   // decoded size to keep latency + spend bounded.
@@ -878,7 +933,12 @@ ${contextBlock}${
     const completion = await trackedCreate(req, {
       // Vision turns need a multimodal model; gpt-4o supports both
       // image_url content and json_schema response_format.
-      model: hasImage ? MODEL_VISION : pickModel(modelChoice),
+      model: pickCoachModel({
+        choice: modelChoice,
+        userMessageLength: message.length,
+        historyTurns: history.length,
+        hasImage,
+      }),
       max_completion_tokens: 1200,
       response_format: {
         type: "json_schema",

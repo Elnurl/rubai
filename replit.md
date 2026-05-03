@@ -23,11 +23,17 @@ Key API endpoints handle:
 
 The mobile app uses `expo-router` for navigation, state is managed by `AtlasProvider.tsx` with AsyncStorage for persistence, and features include task reflections, adaptive roadmaps, and a context-aware coach. UI/UX features a warm color palette (cream, emerald, amber) and Inter typography.
 
+### AI Infrastructure (api-server)
+
+- `lib/aiUsage.ts` — `trackedCreate` wraps every chat completion and records (model, tokens, latency, status) into `ai_usage` for cost monitoring; failures never block user-facing responses.
+- `lib/aiConfig.ts` — env-driven model selection (`MODEL_SMART`/`MODEL_FAST`/`MODEL_VISION`/`MODEL_MODERATION`), `pickCoachModel` (treats `undefined`/`"smart"` as smart per existing API contract; `"auto"` enables a length+turn heuristic; `"fast"` is honored), and `moderateOrThrow` which runs OpenAI moderation on coach input and returns 400 for flagged or oversized (>8000 char) text before any smart-model spend.
+- `lib/dailyPlanCache.ts` — in-process LRU (24h TTL, 2000 entries, JSON-serialised on set/get to prevent shared-reference mutation, `CACHE_VERSION` salt for prompt/schema bumps) used by `POST /atlas/daily-plan` to deduplicate identical regenerations.
+
 Cloud sync operates with the server as the source of truth, utilizing optimistic mutations, coalescing, and conflict resolution. Subscription gating is enforced both client and server-side. Authentication is managed by Clerk, with custom branded screens for various flows. `AuthGate` ensures proper routing for signed-out users, new users creating goals, and existing users with goals, also enforcing legal acceptance (GDPR) before product access, requiring users to accept Privacy Policy and Terms of Service. Push notifications are implemented via Expo Push, with server-side scheduling for morning nudges. Calendar synchronization allows users to connect native calendars for context and to write planned tasks to their calendars, governed by explicit, granular consent settings.
 
 ## External Dependencies
 
-- **OpenAI:** Used for AI model interactions (gpt-5.4, gpt-4o for vision, Whisper for transcription).
+- **OpenAI:** Used for AI model interactions (gpt-5.4, gpt-4o for vision, Whisper for transcription, omni-moderation for input safety). Model names and the moderation model are env-driven via `OPENAI_MODEL_SMART`, `OPENAI_MODEL_FAST`, `OPENAI_MODEL_VISION`, `OPENAI_MODEL_MODERATION` (see `artifacts/api-server/src/lib/aiConfig.ts`).
 - **Clerk:** Authentication and user management.
 - **PostgreSQL (via Drizzle ORM):** Database for `users` and `user_state`.
 - **Expo:** React Native framework, including `expo-router`, `expo-notifications`, `expo-device`, `expo-audio`, `expo-speech`, `expo-image-picker`, and `expo-calendar`.
