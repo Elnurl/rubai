@@ -446,7 +446,7 @@ export default function CoachScreen() {
       return (
         <View style={styles.typing}>
           <View style={styles.typingDotSlot}>
-            <BrandDot size="md" mode="thinking" />
+            <BrandDot size="sm" mode="thinking" />
           </View>
         </View>
       );
