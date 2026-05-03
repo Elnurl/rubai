@@ -1158,7 +1158,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 15,
-    paddingTop: 10,
+    paddingTop: 13,
     paddingBottom: 0,
     maxHeight: 120,
   },
