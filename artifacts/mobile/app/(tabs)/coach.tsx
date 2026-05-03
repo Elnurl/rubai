@@ -838,7 +838,7 @@ export default function CoachScreen() {
             <TextInput
               value={draft}
               onChangeText={setDraft}
-              placeholder="Talk to your coach"
+              placeholder="Talk to your coach..."
               placeholderTextColor={colors.mutedForeground}
               multiline
               style={[
@@ -1158,7 +1158,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 15,
-    paddingTop: 4,
+    paddingTop: 10,
     paddingBottom: 0,
     maxHeight: 120,
   },
