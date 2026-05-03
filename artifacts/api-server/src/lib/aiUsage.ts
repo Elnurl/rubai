@@ -1,8 +1,11 @@
 import type { Request } from "express";
 import type {
   ChatCompletion,
+  ChatCompletionChunk,
   ChatCompletionCreateParamsNonStreaming,
+  ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions";
+import type { Stream } from "openai/streaming";
 import { db, aiUsageTable } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
 
@@ -65,6 +68,74 @@ export async function trackedCreate(
         inputTokens: null,
         outputTokens: null,
         latencyMs,
+        status: "error",
+        errorMessage: message.slice(0, 500),
+      });
+    }
+    throw err;
+  }
+}
+
+/**
+ * Streaming sibling of `trackedCreate`. Yields each chunk to the caller
+ * and records a single `ai_usage` row when the stream ends (or errors).
+ *
+ * Token usage is reported by OpenAI on the *last* chunk when the
+ * `stream_options.include_usage` flag is set; we force it on so server
+ * code never has to remember. Latency is measured wall-clock from
+ * stream open to final chunk (not first byte) so dashboards stay
+ * comparable to the non-streaming call path.
+ *
+ * Errors mid-stream still produce an "error" usage row before the
+ * exception propagates, so partial-failure cost stays observable.
+ */
+export async function* trackedStream(
+  req: Request,
+  params: ChatCompletionCreateParamsStreaming,
+): AsyncGenerator<ChatCompletionChunk, void, void> {
+  const start = Date.now();
+  const userId = req.userId;
+  const route = `${req.baseUrl ?? ""}${req.path ?? ""}` || "unknown";
+  const model = typeof params.model === "string" ? params.model : "unknown";
+
+  let usage: ChatCompletionChunk["usage"] | null = null;
+  let stream: Stream<ChatCompletionChunk> | null = null;
+
+  try {
+    stream = await openai.chat.completions.create({
+      ...params,
+      stream: true,
+      stream_options: { include_usage: true, ...(params.stream_options ?? {}) },
+    });
+
+    for await (const chunk of stream) {
+      if (chunk.usage) usage = chunk.usage;
+      yield chunk;
+    }
+
+    if (userId) {
+      void recordUsage({
+        userId,
+        route,
+        model,
+        inputTokens: usage?.prompt_tokens ?? null,
+        outputTokens: usage?.completion_tokens ?? null,
+        latencyMs: Date.now() - start,
+        status: "ok",
+        errorMessage: null,
+      });
+    }
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Unknown OpenAI failure";
+    if (userId) {
+      void recordUsage({
+        userId,
+        route,
+        model,
+        inputTokens: usage?.prompt_tokens ?? null,
+        outputTokens: usage?.completion_tokens ?? null,
+        latencyMs: Date.now() - start,
         status: "error",
         errorMessage: message.slice(0, 500),
       });

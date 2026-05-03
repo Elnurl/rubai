@@ -41,6 +41,7 @@ import {
   type CoachActionSuggestion,
   type ProposedCoachAction,
 } from "@workspace/api-client-react";
+import { streamCoachReply } from "@/lib/coachStream";
 
 const COLD_START_SUGGESTIONS = [
   "I'm feeling stuck today",
@@ -109,8 +110,26 @@ export default function CoachScreen() {
   const [pendingAttachment, setPendingAttachment] =
     useState<PendingAttachment | null>(null);
   const [transcribing, setTranscribing] = useState(false);
+  // Streaming state: `streamingText` accumulates reply tokens as they
+  // arrive over SSE so the user sees the assistant typing in real time.
+  // `isStreaming` is true from request start until the `final` SSE
+  // event lands, even before the first delta — so the typing indicator
+  // shows immediately. Both reset to null/false once the message is
+  // committed to history.
+  const [streamingText, setStreamingText] = useState<string | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const lastSpokenIndexRef = useRef<number>(-1);
+  // Cancels any in-flight streaming request when the user starts a new
+  // turn or unmounts the screen, so server-side OpenAI tokens stop
+  // being charged and we don't write state to an unmounted component.
+  const streamAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => {
+      streamAbortRef.current?.abort();
+      streamAbortRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (activeCoachHistory.length === 0 && activeProfile && activeRoadmap) {
@@ -156,7 +175,14 @@ export default function CoachScreen() {
   const send = useCallback(
     async (text: string, opts?: { attachment?: PendingAttachment | null }) => {
       const message = text.trim();
-      if (!message || !activeProfile || !activeRoadmap || coach.isPending) return;
+      if (
+        !message ||
+        !activeProfile ||
+        !activeRoadmap ||
+        coach.isPending ||
+        isStreaming
+      )
+        return;
       const attachment = opts?.attachment ?? pendingAttachment;
       setDraft("");
       setPendingAttachment(null);
@@ -171,40 +197,49 @@ export default function CoachScreen() {
       const userMsg: ChatMessage = { role: "user", content: visibleContent };
       await appendActiveCoachMessage(userMsg);
 
-      try {
-        const calendarContext = await loadCalendarContextIfEnabled(
-          account.calendarSync,
-        );
-        const res = await coach.mutateAsync({
-          data: {
-            profile: activeProfile,
-            roadmap: activeRoadmap,
-            todayPlan: activeDailyPlan?.plan,
-            behavioral: activeBehavioral,
-            history: activeCoachHistory.slice(-10),
-            message,
-            modelChoice,
-            ...(calendarContext ? { calendarContext } : {}),
-            currentWeek: activeCurrentWeek,
-            recentReflections: activeReflections.slice(-5),
-            recentEvolutions: activeRoadmapEvolutions.slice(0, 2),
-            ...(activeBehavioralProfile
-              ? { learnedProfile: activeBehavioralProfile }
-              : {}),
-            ...(activeCurrentPhase ? { currentPhase: activeCurrentPhase } : {}),
-            ...(activeCoachMemory ? { coachMemory: activeCoachMemory } : {}),
-            ...(attachment ? { attachmentNote: attachment.filename } : {}),
-            ...(attachment?.base64 && attachment.mimeType
-              ? {
-                  attachmentImage: {
-                    base64Data: attachment.base64,
-                    mimeType: attachment.mimeType,
-                  },
-                }
-              : {}),
-          },
-        });
-        const assistantMsg: ChatMessage = { role: "assistant", content: res.reply };
+      const calendarContext = await loadCalendarContextIfEnabled(
+        account.calendarSync,
+      );
+      const requestData = {
+        profile: activeProfile,
+        roadmap: activeRoadmap,
+        todayPlan: activeDailyPlan?.plan,
+        behavioral: activeBehavioral,
+        history: activeCoachHistory.slice(-10),
+        message,
+        modelChoice,
+        ...(calendarContext ? { calendarContext } : {}),
+        currentWeek: activeCurrentWeek,
+        recentReflections: activeReflections.slice(-5),
+        recentEvolutions: activeRoadmapEvolutions.slice(0, 2),
+        ...(activeBehavioralProfile
+          ? { learnedProfile: activeBehavioralProfile }
+          : {}),
+        ...(activeCurrentPhase ? { currentPhase: activeCurrentPhase } : {}),
+        ...(activeCoachMemory ? { coachMemory: activeCoachMemory } : {}),
+        ...(attachment ? { attachmentNote: attachment.filename } : {}),
+        ...(attachment?.base64 && attachment.mimeType
+          ? {
+              attachmentImage: {
+                base64Data: attachment.base64,
+                mimeType: attachment.mimeType,
+              },
+            }
+          : {}),
+      };
+
+      // Shared post-processing for both streaming and fallback paths.
+      const commitFinal = async (res: {
+        reply: string;
+        suggestedReplies: string[];
+        actionSuggestion: CoachActionSuggestion | null;
+        memoryUpdate: { summary: string; newFacts: string[] } | null;
+        proposedAction: ProposedCoachAction | null;
+      }) => {
+        const assistantMsg: ChatMessage = {
+          role: "assistant",
+          content: res.reply,
+        };
         await appendActiveCoachMessage(assistantMsg);
         setLastSuggestedReplies(res.suggestedReplies ?? []);
         const action = res.actionSuggestion;
@@ -217,7 +252,6 @@ export default function CoachScreen() {
           });
         }
         if (autoSpeak) {
-          // The new assistant message will be at history.length (after append).
           const nextIndex = activeCoachHistory.length + 1;
           if (lastSpokenIndexRef.current !== nextIndex) {
             lastSpokenIndexRef.current = nextIndex;
@@ -227,7 +261,66 @@ export default function CoachScreen() {
             setSpeakingIndex(nextIndex);
           }
         }
+      };
+
+      // Vision turns keep the non-streaming endpoint: the legacy
+      // `/coach` route already handles image input and there's little
+      // streaming UX win for short image-grounded replies.
+      const useStreaming = !attachment?.base64;
+
+      try {
+        if (useStreaming) {
+          // Cancel any leftover in-flight stream from a prior turn
+          // (shouldn't happen because of the isStreaming guard above,
+          // but be defensive against double-tap races).
+          streamAbortRef.current?.abort();
+          const controller = new AbortController();
+          streamAbortRef.current = controller;
+          setIsStreaming(true);
+          setStreamingText("");
+          let finalSeen = false;
+          let pendingCommit: Promise<void> | null = null;
+          try {
+            await streamCoachReply(
+              { data: requestData },
+              {
+                onDelta: (chunk) => {
+                  setStreamingText((prev) => (prev ?? "") + chunk);
+                },
+                onFinal: (res) => {
+                  finalSeen = true;
+                  // Track the commit promise so the catch-clause sees
+                  // any history-write failure and we always end up
+                  // resetting the streaming UI in `finally`.
+                  pendingCommit = commitFinal(res);
+                },
+              },
+              controller.signal,
+            );
+            if (pendingCommit) await pendingCommit;
+            if (!finalSeen) {
+              throw new Error("Coach stream ended without a final reply.");
+            }
+          } finally {
+            setStreamingText(null);
+            setIsStreaming(false);
+            if (streamAbortRef.current === controller) {
+              streamAbortRef.current = null;
+            }
+          }
+        } else {
+          const res = await coach.mutateAsync({ data: requestData });
+          await commitFinal({
+            reply: res.reply,
+            suggestedReplies: res.suggestedReplies ?? [],
+            actionSuggestion: res.actionSuggestion ?? null,
+            memoryUpdate: res.memoryUpdate ?? null,
+            proposedAction: res.proposedAction ?? null,
+          });
+        }
       } catch {
+        setStreamingText(null);
+        setIsStreaming(false);
         const errMsg: ChatMessage = {
           role: "assistant",
           content:
@@ -255,6 +348,8 @@ export default function CoachScreen() {
       pendingAttachment,
       autoSpeak,
       tts,
+      isStreaming,
+      account.calendarSync,
     ],
   );
 
@@ -443,7 +538,16 @@ export default function CoachScreen() {
   // and action card so they always appear right under the latest assistant
   // message regardless of how the FlatList grows.
   const footer = useMemo(() => {
-    if (coach.isPending) {
+    // While a stream is open, show the in-progress assistant reply as
+    // a live ChatBubble that updates with each delta. If we haven't
+    // received the first delta yet (or this is a non-streaming vision
+    // turn via coach.isPending), fall back to the thinking indicator.
+    if (isStreaming && streamingText && streamingText.length > 0) {
+      return (
+        <ChatBubble role="assistant" content={streamingText} />
+      );
+    }
+    if (coach.isPending || isStreaming) {
       return (
         <View style={styles.typing}>
           <View style={styles.typingDotSlot}>
@@ -536,6 +640,8 @@ export default function CoachScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     coach.isPending,
+    isStreaming,
+    streamingText,
     lastAction,
     lastProposedAction,
     applyingAction,

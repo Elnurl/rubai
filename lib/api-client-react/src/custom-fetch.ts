@@ -30,6 +30,28 @@ export function setBaseUrl(url: string | null): void {
 }
 
 /**
+ * Read back the configured base URL so other client code (e.g. SSE
+ * streaming consumers that bypass `customFetch`) can build absolute
+ * URLs without re-importing the Expo env. Returns `null` when no base
+ * URL has been set, in which case relative paths should work directly.
+ */
+export function getBaseUrl(): string | null {
+  return _baseUrl;
+}
+
+/**
+ * Look up the currently-registered auth token. Mirrors the token
+ * attachment logic inside `customFetch`, intended for callers that
+ * issue raw fetches (e.g. `expo/fetch` for SSE) and need to add the
+ * `Authorization` header themselves.
+ */
+export async function getAuthToken(): Promise<string | null> {
+  if (!_authTokenGetter) return null;
+  const value = await _authTokenGetter();
+  return value ?? null;
+}
+
+/**
  * Register a getter that supplies a bearer auth token.  Before every fetch
  * the getter is invoked; when it returns a non-null string, an
  * `Authorization: Bearer <token>` header is attached to the request.

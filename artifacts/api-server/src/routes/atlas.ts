@@ -5,7 +5,7 @@ import multer from "multer";
 import { toFile } from "openai/uploads";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { db, usersTable } from "@workspace/db";
-import { trackedCreate } from "../lib/aiUsage";
+import { trackedCreate, trackedStream } from "../lib/aiUsage";
 import {
   MODEL_SMART,
   MODEL_FAST,
@@ -14,6 +14,7 @@ import {
   moderateOrThrow,
   pickCoachModel,
 } from "../lib/aiConfig";
+import { ReplyTextExtractor } from "../lib/replyTextExtractor";
 import {
   hashKey as cacheHashKey,
   getCached,
@@ -959,174 +960,442 @@ ${contextBlock}${
     });
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
-    const parsedJson = JSON.parse(raw) as {
-      reply: string;
-      suggestedReplies: string[];
-      actionSuggestion: { kind: string; label: string; rationale: string } | null;
-      memoryUpdate: { summary: string; newFacts: string[] } | null;
-      proposedAction: {
-        kind: string;
-        label: string;
-        rationale: string;
-        task: {
-          title: string;
-          description: string;
-          durationMinutes: number;
-          category: string;
-          priority: "critical" | "high" | "normal";
-        } | null;
-        taskId: string | null;
-        taskTitle: string | null;
-        newTitle: string | null;
-        removeTaskIds: string[];
-      } | null;
-    };
-
-    // Defensive clamps so the AI can't blow our UI budgets even if it tries.
-    // Length matches the prompt + OpenAPI description (<=50 chars per chip).
-    const suggestedReplies = (parsedJson.suggestedReplies ?? [])
-      .slice(0, 3)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0 && s.length <= 50);
-
-    // Whitelist actionable kinds; "none" is accepted from the model but
-    // normalized to null so the client UI has a single null-or-concrete check.
-    const actionSuggestion =
-      parsedJson.actionSuggestion &&
-      ["evolve_roadmap", "refresh_insights", "reflect_on_task"].includes(
-        parsedJson.actionSuggestion.kind,
-      )
-        ? parsedJson.actionSuggestion
-        : null;
-
-    const memoryUpdate = parsedJson.memoryUpdate
-      ? {
-          summary: (parsedJson.memoryUpdate.summary ?? "").slice(0, 600),
-          newFacts: (parsedJson.memoryUpdate.newFacts ?? [])
-            .slice(0, 5)
-            .map((f) => f.trim())
-            .filter((f) => f.length > 0 && f.length <= 140),
-        }
-      : null;
-
-    // Sanitize proposedAction. Validate each shape against the in-context
-    // todayPlan so we don't pass through phantom taskIds. Generate fresh
-    // server-side ids for added tasks (don't trust the model with ids).
-    const todayTaskIds = new Set(
-      (todayPlan?.tasks ?? []).map((t: { id: string }) => t.id),
-    );
-    const proposedAction = (() => {
-      const a = parsedJson.proposedAction;
-      if (!a || a.kind === "none") return null;
-      const label = (a.label ?? "").trim().slice(0, 80);
-      const rationale = (a.rationale ?? "").trim().slice(0, 240);
-      if (!label || !rationale) return null;
-      switch (a.kind) {
-        case "addTaskToday": {
-          const t = a.task;
-          if (!t || !t.title?.trim()) return null;
-          return {
-            kind: "addTaskToday" as const,
-            label,
-            rationale,
-            task: {
-              id: `task_${crypto.randomUUID()}`,
-              title: t.title.trim().slice(0, 120),
-              description: (t.description ?? "").trim().slice(0, 1000),
-              durationMinutes: Math.min(
-                240,
-                Math.max(5, Math.round(t.durationMinutes || 15)),
-              ),
-              category: (t.category ?? "general").trim().slice(0, 60),
-              priority: ["critical", "high", "normal"].includes(t.priority)
-                ? t.priority
-                : "normal",
-            },
-            taskId: null,
-            taskTitle: null,
-            newTitle: null,
-            removeTaskIds: [],
-          };
-        }
-        case "removeTaskToday": {
-          const id = (a.taskId ?? "").trim();
-          if (!id || !todayTaskIds.has(id)) return null;
-          return {
-            kind: "removeTaskToday" as const,
-            label,
-            rationale,
-            task: null,
-            taskId: id,
-            taskTitle: (a.taskTitle ?? "").trim().slice(0, 120) || null,
-            newTitle: null,
-            removeTaskIds: [],
-          };
-        }
-        case "renameGoal": {
-          const newTitle = (a.newTitle ?? "").trim().slice(0, 60);
-          if (newTitle.length < 2) return null;
-          return {
-            kind: "renameGoal" as const,
-            label,
-            rationale,
-            task: null,
-            taskId: null,
-            taskTitle: null,
-            newTitle,
-            removeTaskIds: [],
-          };
-        }
-        case "lightenToday": {
-          const ids = (a.removeTaskIds ?? [])
-            .map((s) => s.trim())
-            .filter((s) => s.length > 0 && todayTaskIds.has(s));
-          if (ids.length === 0) return null;
-          return {
-            kind: "lightenToday" as const,
-            label,
-            rationale,
-            task: null,
-            taskId: null,
-            taskTitle: null,
-            newTitle: null,
-            removeTaskIds: ids,
-          };
-        }
-        case "syncToCalendar": {
-          if (todayTaskIds.size === 0) return null;
-          return {
-            kind: "syncToCalendar" as const,
-            label,
-            rationale,
-            task: null,
-            taskId: null,
-            taskTitle: null,
-            newTitle: null,
-            removeTaskIds: [],
-          };
-        }
-        default:
-          return null;
-      }
-    })();
-
-    // Defensive fallback: a missing/empty reply from a malformed model output
-    // would otherwise crash on .trim() or render an empty bubble.
-    const reply =
-      typeof parsedJson.reply === "string" && parsedJson.reply.trim().length > 0
-        ? parsedJson.reply.trim()
-        : "I'm here. Tell me a bit more about what you want to tackle next.";
-
-    res.json({
-      reply,
-      suggestedReplies,
-      actionSuggestion,
-      memoryUpdate,
-      proposedAction,
-    });
+    const parsedJson = JSON.parse(raw) as CoachRawOutput;
+    const normalized = normalizeCoachOutput(parsedJson, todayPlan);
+    res.json(normalized);
   } catch (err) {
     req.log.error({ err }, "coach request failed");
     res.status(500).json({ error: "AI request failed" });
+  }
+});
+
+// Shared post-processing for both /coach and /coach/stream so the two
+// endpoints stay byte-identical in what they return. Centralizing the
+// clamps + sanitization here also means the trust boundary against
+// model output (no phantom taskIds, no oversized chips, no unknown
+// action kinds) is enforced in exactly one place.
+type CoachRawOutput = {
+  reply?: string;
+  suggestedReplies?: string[];
+  actionSuggestion?: { kind: string; label: string; rationale: string } | null;
+  memoryUpdate?: { summary?: string; newFacts?: string[] } | null;
+  proposedAction?: {
+    kind: string;
+    label?: string;
+    rationale?: string;
+    task?: {
+      title?: string;
+      description?: string;
+      durationMinutes?: number;
+      category?: string;
+      priority?: "critical" | "high" | "normal";
+    } | null;
+    taskId?: string | null;
+    taskTitle?: string | null;
+    newTitle?: string | null;
+    removeTaskIds?: string[];
+  } | null;
+};
+
+function normalizeCoachOutput(
+  parsedJson: CoachRawOutput,
+  todayPlan: { tasks?: Array<{ id: string }> } | undefined,
+) {
+  const suggestedReplies = (parsedJson.suggestedReplies ?? [])
+    .slice(0, 3)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && s.length <= 50);
+
+  const actionSuggestion =
+    parsedJson.actionSuggestion &&
+    ["evolve_roadmap", "refresh_insights", "reflect_on_task"].includes(
+      parsedJson.actionSuggestion.kind,
+    )
+      ? parsedJson.actionSuggestion
+      : null;
+
+  const memoryUpdate = parsedJson.memoryUpdate
+    ? {
+        summary: (parsedJson.memoryUpdate.summary ?? "").slice(0, 600),
+        newFacts: (parsedJson.memoryUpdate.newFacts ?? [])
+          .slice(0, 5)
+          .map((f) => f.trim())
+          .filter((f) => f.length > 0 && f.length <= 140),
+      }
+    : null;
+
+  const todayTaskIds = new Set(
+    (todayPlan?.tasks ?? []).map((t: { id: string }) => t.id),
+  );
+  const proposedAction = (() => {
+    const a = parsedJson.proposedAction;
+    if (!a || a.kind === "none") return null;
+    const label = (a.label ?? "").trim().slice(0, 80);
+    const rationale = (a.rationale ?? "").trim().slice(0, 240);
+    if (!label || !rationale) return null;
+    switch (a.kind) {
+      case "addTaskToday": {
+        const t = a.task;
+        if (!t || !t.title?.trim()) return null;
+        return {
+          kind: "addTaskToday" as const,
+          label,
+          rationale,
+          task: {
+            id: `task_${crypto.randomUUID()}`,
+            title: t.title.trim().slice(0, 120),
+            description: (t.description ?? "").trim().slice(0, 1000),
+            durationMinutes: Math.min(
+              240,
+              Math.max(5, Math.round(t.durationMinutes || 15)),
+            ),
+            category: (t.category ?? "general").trim().slice(0, 60),
+            priority:
+              t.priority && ["critical", "high", "normal"].includes(t.priority)
+                ? t.priority
+                : ("normal" as const),
+          },
+          taskId: null,
+          taskTitle: null,
+          newTitle: null,
+          removeTaskIds: [],
+        };
+      }
+      case "removeTaskToday": {
+        const id = (a.taskId ?? "").trim();
+        if (!id || !todayTaskIds.has(id)) return null;
+        return {
+          kind: "removeTaskToday" as const,
+          label,
+          rationale,
+          task: null,
+          taskId: id,
+          taskTitle: (a.taskTitle ?? "").trim().slice(0, 120) || null,
+          newTitle: null,
+          removeTaskIds: [],
+        };
+      }
+      case "renameGoal": {
+        const newTitle = (a.newTitle ?? "").trim().slice(0, 60);
+        if (newTitle.length < 2) return null;
+        return {
+          kind: "renameGoal" as const,
+          label,
+          rationale,
+          task: null,
+          taskId: null,
+          taskTitle: null,
+          newTitle,
+          removeTaskIds: [],
+        };
+      }
+      case "lightenToday": {
+        const ids = (a.removeTaskIds ?? [])
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0 && todayTaskIds.has(s));
+        if (ids.length === 0) return null;
+        return {
+          kind: "lightenToday" as const,
+          label,
+          rationale,
+          task: null,
+          taskId: null,
+          taskTitle: null,
+          newTitle: null,
+          removeTaskIds: ids,
+        };
+      }
+      case "syncToCalendar": {
+        if (todayTaskIds.size === 0) return null;
+        return {
+          kind: "syncToCalendar" as const,
+          label,
+          rationale,
+          task: null,
+          taskId: null,
+          taskTitle: null,
+          newTitle: null,
+          removeTaskIds: [],
+        };
+      }
+      default:
+        return null;
+    }
+  })();
+
+  const reply =
+    typeof parsedJson.reply === "string" && parsedJson.reply.trim().length > 0
+      ? parsedJson.reply.trim()
+      : "I'm here. Tell me a bit more about what you want to tackle next.";
+
+  return { reply, suggestedReplies, actionSuggestion, memoryUpdate, proposedAction };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Streaming coach endpoint.
+//
+// Same inputs, same response schema, same moderation + model selection
+// as POST /coach — but emits the assistant `reply` text as it arrives
+// over Server-Sent Events so the mobile UI can render token-by-token.
+// Structured fields (suggestedReplies, proposedAction, memoryUpdate,
+// actionSuggestion) arrive in a single `final` event after the JSON
+// object closes, then a `done` event terminates the stream.
+//
+// Event shapes (one JSON object per `data:` line):
+//   { type: "delta", text: string }    // new reply text
+//   { type: "final", reply, suggestedReplies, actionSuggestion,
+//                    memoryUpdate, proposedAction }
+//   { type: "error", error: string }   // recoverable failure mid-stream
+//   { type: "done" }                    // terminator (no more events)
+//
+// The non-streaming /coach endpoint is preserved for backward
+// compatibility and as a fallback when the client cannot consume SSE
+// (e.g. older RN runtimes without fetch streaming).
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/coach/stream", async (req, res) => {
+  const parsed = atlasCoachBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const {
+    profile,
+    roadmap,
+    todayPlan,
+    behavioral,
+    learnedProfile,
+    currentWeek,
+    currentPhase,
+    recentReflections,
+    recentEvolutions,
+    coachMemory,
+    history,
+    message,
+    modelChoice,
+    attachmentNote,
+    attachmentImage,
+    calendarContext,
+  } = parsed.data;
+
+  // Pre-flight moderation BEFORE we open the SSE stream so a flagged
+  // input can still be returned as a clean 400 JSON error (the client
+  // hasn't started consuming text/event-stream yet).
+  try {
+    await moderateOrThrow(message);
+  } catch (err) {
+    if (err instanceof ModerationError) {
+      req.log.warn(
+        { categories: err.categories },
+        "coach (stream) input blocked by moderation",
+      );
+      res.status(400).json({
+        error:
+          "I can't respond to that message. Try rephrasing it focused on your goal.",
+      });
+      return;
+    }
+    throw err;
+  }
+
+  // Image validation — same guards as /coach.
+  const ALLOWED_IMAGE_MIMES = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+  ]);
+  const MAX_DECODED_IMAGE_BYTES = 5 * 1024 * 1024;
+  if (attachmentImage?.base64Data || attachmentImage?.mimeType) {
+    if (
+      !attachmentImage.mimeType ||
+      !ALLOWED_IMAGE_MIMES.has(attachmentImage.mimeType)
+    ) {
+      res.status(415).json({
+        error: "Unsupported image type. Use JPEG, PNG, WebP, or GIF.",
+      });
+      return;
+    }
+    if (!attachmentImage.base64Data) {
+      res.status(400).json({ error: "Image attachment is missing data." });
+      return;
+    }
+    const decodedBytes = Math.floor((attachmentImage.base64Data.length * 3) / 4);
+    if (decodedBytes > MAX_DECODED_IMAGE_BYTES) {
+      res.status(413).json({
+        error: "Image is too large. Please attach an image under 5 MB.",
+      });
+      return;
+    }
+  }
+
+  const hasImage = !!attachmentImage?.base64Data && !!attachmentImage?.mimeType;
+  const userMessageText = hasImage
+    ? `${message}\n\n[The user attached an image. Describe what you see briefly in your reply, then connect it to their goal.]`
+    : attachmentNote
+    ? `${message}\n\n[The user also attached: ${attachmentNote}. Acknowledge it in one short sentence — you can't see its contents.]`
+    : message;
+  const userMessageContent: string | Array<
+    | { type: "text"; text: string }
+    | {
+        type: "image_url";
+        image_url: { url: string; detail?: "low" | "high" | "auto" };
+      }
+  > = hasImage
+    ? [
+        { type: "text", text: userMessageText },
+        {
+          type: "image_url",
+          image_url: {
+            url: `data:${attachmentImage!.mimeType};base64,${attachmentImage!.base64Data}`,
+            detail: "low",
+          },
+        },
+      ]
+    : userMessageText;
+
+  const contextBlock = buildCoachContext({
+    profile: {
+      goalType: profile.goalType,
+      goalStatement: profile.goalStatement,
+      availableTimePerDayMinutes: profile.availableTimePerDayMinutes,
+    },
+    roadmap: {
+      headline: roadmap.headline,
+      strategy: roadmap.strategy,
+      totalWeeks: roadmap.totalWeeks,
+    },
+    todayPlan: todayPlan
+      ? {
+          date: todayPlan.date,
+          focusOfTheDay: todayPlan.focusOfTheDay,
+          tasks: todayPlan.tasks.map((t) => ({ title: t.title })),
+        }
+      : undefined,
+    behavioral,
+    learnedProfile,
+    currentWeek,
+    currentPhase,
+    recentReflections,
+    recentEvolutions,
+    coachMemory,
+  });
+
+  const systemContext = `You are rabai — a strategic AI execution coach inside a mobile app. The user has come to you for guidance.
+
+Speak conversationally, with warmth and precision. EVERY reply must ground itself in the real context below — reference the current phase, today's tasks, a recent reflection, a learned trait, or a known fact, not generic advice. Push back gently when they make excuses, celebrate small wins, name the pattern you see.
+
+Hard rules:
+- "reply" is plain prose. No markdown, headings, bullets, or emojis. Under 110 words unless they explicitly ask for detail.
+- "suggestedReplies": 0-3 short follow-ups (<= 50 chars each).
+- "actionSuggestion" / "proposedAction" / "memoryUpdate": same rules as the non-streaming /coach endpoint.
+
+CONTEXT:
+${contextBlock}${
+    calendarContext && calendarContext.trim().length > 0
+      ? `\n\nTODAY'S CALENDAR:\n${calendarContext.trim()}`
+      : ""
+  }`;
+
+  // SSE headers. `X-Accel-Buffering: no` disables nginx-style proxy
+  // buffering so chunks reach the client in real time even behind a
+  // reverse proxy. flushHeaders() so the client knows the stream is
+  // open before we wait on the first OpenAI chunk.
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+
+  const writeEvent = (payload: unknown): void => {
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  };
+
+  // If the client disconnects mid-stream, we want to bail out of the
+  // for-await loop so OpenAI tokens stop being charged. The flag is
+  // checked between chunks; the in-flight chunk just completes.
+  let aborted = false;
+  req.on("close", () => {
+    if (!res.writableEnded) aborted = true;
+  });
+
+  const extractor = new ReplyTextExtractor();
+  let accumulated = "";
+
+  try {
+    const stream = trackedStream(req, {
+      stream: true,
+      model: pickCoachModel({
+        choice: modelChoice,
+        userMessageLength: message.length,
+        historyTurns: history.length,
+        hasImage,
+      }),
+      max_completion_tokens: 1200,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "coach_reply",
+          strict: true,
+          schema: coachResponseSchema,
+        },
+      },
+      messages: [
+        { role: "system", content: systemContext },
+        ...history.map((m: { role: string; content: string }) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })),
+        { role: "user", content: userMessageContent },
+      ],
+    });
+
+    for await (const chunk of stream) {
+      if (aborted) break;
+      const delta = chunk.choices[0]?.delta?.content;
+      if (typeof delta === "string" && delta.length > 0) {
+        accumulated += delta;
+        const replyDelta = extractor.feed(delta);
+        if (replyDelta.length > 0) writeEvent({ type: "delta", text: replyDelta });
+      }
+    }
+
+    if (aborted) {
+      // Client gave up — best-effort end the response and stop.
+      res.end();
+      return;
+    }
+
+    // End of stream. Parse the full JSON object we accumulated and run
+    // the SAME normalization as the non-streaming /coach handler so the
+    // mobile UI sees identical semantics (clamps, whitelisted action
+    // kinds, fresh server-issued task IDs, taskId membership checks
+    // against todayPlan, etc.).
+    let parsedJson: CoachRawOutput = {};
+    try {
+      parsedJson = JSON.parse(accumulated || "{}") as CoachRawOutput;
+    } catch (parseErr) {
+      req.log.warn({ parseErr }, "coach stream produced invalid JSON");
+    }
+    const normalized = normalizeCoachOutput(parsedJson, todayPlan);
+
+    writeEvent({
+      type: "final",
+      ...normalized,
+    });
+    writeEvent({ type: "done" });
+    res.end();
+  } catch (err) {
+    req.log.error({ err }, "coach stream failed");
+    // Best-effort: emit an error event the client can render, then end.
+    if (!res.writableEnded) {
+      try {
+        writeEvent({ type: "error", error: "AI request failed" });
+        writeEvent({ type: "done" });
+      } catch {
+        // ignore — client likely already disconnected
+      }
+      res.end();
+    }
   }
 });
 
