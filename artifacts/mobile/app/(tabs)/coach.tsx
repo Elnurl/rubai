@@ -1117,13 +1117,13 @@ const styles = StyleSheet.create({
   },
   inputWrap: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     borderWidth: 1,
     paddingLeft: 6,
     paddingRight: 6,
-    paddingVertical: 6,
+    paddingVertical: 4,
     gap: 6,
-    minHeight: 48,
+    minHeight: 44,
   },
   iconButton: {
     width: 36,
@@ -1158,9 +1158,8 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 15,
-    paddingTop: 14,
-    paddingBottom: 8,
-    maxHeight: 140,
+    paddingVertical: 0,
+    maxHeight: 120,
   },
   micButton: {
     width: 36,
