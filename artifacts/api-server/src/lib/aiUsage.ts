@@ -7,25 +7,34 @@ import type {
 } from "openai/resources/chat/completions";
 import type { Stream } from "openai/streaming";
 import { db, aiUsageTable } from "@workspace/db";
+import {
+  getAnthropic,
+  isAnthropicConfigured,
+} from "@workspace/integrations-anthropic-ai";
 import { openai } from "@workspace/integrations-openai-ai-server";
 
+import {
+  fromAnthropicMessage,
+  isRetryableProviderError,
+  toAnthropicParams,
+} from "./aiFailover";
 import { logger } from "./logger";
 
 /**
  * Wraps `openai.chat.completions.create` so every AI call is recorded in
  * the `ai_usage` table for cost monitoring and abuse detection.
  *
+ * On a *retryable* OpenAI failure (429, 5xx, connection/timeout) the
+ * request is automatically replayed against Anthropic Claude via the
+ * `aiFailover` translator. The original OpenAI error is still recorded
+ * with status="error" before the failover attempt so we can monitor
+ * provider health independently of end-user success rate.
+ *
  * The DB write is best-effort — a failure to record usage must NEVER
  * block the user-facing AI response. We log internally and move on.
  *
  * Route is derived from the Express request (e.g. "/atlas/coach"),
  * which is sufficient to slice usage by endpoint.
- *
- * NOTE: this wrapper is non-streaming only. The OpenAI SDK's
- * `create(...)` overloads return `Stream<...>` when `stream: true`, and
- * token usage is not available on the same `usage` shape. If/when a
- * route needs streaming, add a sibling `trackedCreateStream` helper
- * that aggregates tokens from chunk metadata before recording.
  */
 export async function trackedCreate(
   req: Request,
@@ -72,6 +81,15 @@ export async function trackedCreate(
         errorMessage: message.slice(0, 500),
       });
     }
+
+    if (isRetryableProviderError(err) && isAnthropicConfigured()) {
+      req.log.warn(
+        { err, route, model },
+        "OpenAI call failed with retryable error; failing over to Anthropic",
+      );
+      return callAnthropicWithUsage(req, params);
+    }
+
     throw err;
   }
 }
@@ -85,6 +103,13 @@ export async function trackedCreate(
  * code never has to remember. Latency is measured wall-clock from
  * stream open to final chunk (not first byte) so dashboards stay
  * comparable to the non-streaming call path.
+ *
+ * Failover policy: if the *open* of the OpenAI stream fails with a
+ * retryable error, we fall back to a non-streaming Anthropic call and
+ * synthesise a single delta + final chunk so the SSE client keeps
+ * working. We deliberately do NOT fall back once chunks have started
+ * arriving — the consumer would receive a corrupted concatenation of
+ * two different model outputs.
  *
  * Errors mid-stream still produce an "error" usage row before the
  * exception propagates, so partial-failure cost stays observable.
@@ -101,13 +126,41 @@ export async function* trackedStream(
   let usage: ChatCompletionChunk["usage"] | null = null;
   let stream: Stream<ChatCompletionChunk> | null = null;
 
+  // ---- Phase 1: open the OpenAI stream. Failover is only safe here.
   try {
     stream = await openai.chat.completions.create({
       ...params,
       stream: true,
       stream_options: { include_usage: true, ...(params.stream_options ?? {}) },
     });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Unknown OpenAI failure";
+    if (userId) {
+      void recordUsage({
+        userId,
+        route,
+        model,
+        inputTokens: null,
+        outputTokens: null,
+        latencyMs: Date.now() - start,
+        status: "error",
+        errorMessage: message.slice(0, 500),
+      });
+    }
+    if (isRetryableProviderError(err) && isAnthropicConfigured()) {
+      req.log.warn(
+        { err, route, model },
+        "OpenAI stream open failed; failing over to Anthropic non-streaming",
+      );
+      yield* fallbackStreamFromAnthropic(req, params);
+      return;
+    }
+    throw err;
+  }
 
+  // ---- Phase 2: drain. Once we've yielded a chunk we cannot fail over.
+  try {
     for await (const chunk of stream) {
       if (chunk.usage) usage = chunk.usage;
       yield chunk;
@@ -142,6 +195,120 @@ export async function* trackedStream(
     }
     throw err;
   }
+}
+
+/**
+ * Replay an OpenAI ChatCompletion request against Anthropic. Records
+ * its own `ai_usage` row tagged with the Anthropic model name and a
+ * "(failover)" suffix so dashboards can split provider mix from
+ * counter-party totals. Errors here propagate — failover does not
+ * cascade further.
+ */
+async function callAnthropicWithUsage(
+  req: Request,
+  openaiParams: ChatCompletionCreateParamsNonStreaming,
+): Promise<ChatCompletion> {
+  const start = Date.now();
+  const userId = req.userId;
+  const route = `${req.baseUrl ?? ""}${req.path ?? ""}` || "unknown";
+  const aParams = toAnthropicParams(openaiParams);
+  const failoverModel = `${aParams.model} (failover)`;
+  try {
+    const msg = await getAnthropic().messages.create(aParams);
+    const completion = fromAnthropicMessage(
+      msg,
+      typeof openaiParams.model === "string" ? openaiParams.model : "unknown",
+    );
+    if (userId) {
+      void recordUsage({
+        userId,
+        route,
+        model: failoverModel,
+        inputTokens: completion.usage?.prompt_tokens ?? null,
+        outputTokens: completion.usage?.completion_tokens ?? null,
+        latencyMs: Date.now() - start,
+        status: "ok",
+        errorMessage: null,
+      });
+    }
+    return completion;
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Unknown Anthropic failure";
+    if (userId) {
+      void recordUsage({
+        userId,
+        route,
+        model: failoverModel,
+        inputTokens: null,
+        outputTokens: null,
+        latencyMs: Date.now() - start,
+        status: "error",
+        errorMessage: message.slice(0, 500),
+      });
+    }
+    throw err;
+  }
+}
+
+/**
+ * Streaming-mode fallback: call Anthropic non-streaming, then emit the
+ * full content as a single delta chunk plus a terminating chunk. This
+ * lets SSE consumers (the coach client) keep their existing chunk
+ * parsing logic. The user sees the response appear all-at-once instead
+ * of token-by-token during a failover, which is acceptable degradation.
+ */
+async function* fallbackStreamFromAnthropic(
+  req: Request,
+  params: ChatCompletionCreateParamsStreaming,
+): AsyncGenerator<ChatCompletionChunk, void, void> {
+  const nonStreamingParams: ChatCompletionCreateParamsNonStreaming = {
+    ...params,
+    stream: false,
+  };
+  // stream_options is invalid on non-streaming requests; strip if present.
+  delete (nonStreamingParams as { stream_options?: unknown }).stream_options;
+
+  const completion = await callAnthropicWithUsage(req, nonStreamingParams);
+  const content = completion.choices[0]?.message?.content ?? "";
+  const baseId = completion.id;
+  const created = completion.created;
+  const usedModel = completion.model;
+
+  yield {
+    id: baseId,
+    object: "chat.completion.chunk",
+    created,
+    model: usedModel,
+    choices: [
+      {
+        index: 0,
+        delta: { role: "assistant", content },
+        finish_reason: null,
+        logprobs: null,
+      },
+    ],
+  } as ChatCompletionChunk;
+
+  yield {
+    id: baseId,
+    object: "chat.completion.chunk",
+    created,
+    model: usedModel,
+    choices: [
+      {
+        index: 0,
+        delta: {},
+        finish_reason: "stop",
+        logprobs: null,
+      },
+    ],
+    usage: {
+      prompt_tokens: completion.usage?.prompt_tokens ?? 0,
+      completion_tokens: completion.usage?.completion_tokens ?? 0,
+      total_tokens: completion.usage?.total_tokens ?? 0,
+    },
+  } as ChatCompletionChunk;
 }
 
 type RecordInput = {

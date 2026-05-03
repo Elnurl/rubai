@@ -20,6 +20,22 @@ export const MODEL_VISION = process.env.OPENAI_MODEL_VISION ?? "gpt-4o";
 export const MODEL_MODERATION =
   process.env.OPENAI_MODEL_MODERATION ?? "omni-moderation-latest";
 
+/**
+ * Anthropic equivalents used by the failover wrapper in `aiUsage.ts`.
+ * When OpenAI returns a retryable error (429, 5xx, connection/timeout)
+ * the request is replayed against Claude. Models are chosen to match
+ * the latency / cost tier of the OpenAI counterpart so behaviour stays
+ * comparable. Vision uses sonnet because haiku lacks rich image
+ * reasoning and opus has parameter restrictions that complicate
+ * pass-through.
+ */
+export const ANTHROPIC_MODEL_SMART =
+  process.env.ANTHROPIC_MODEL_SMART ?? "claude-sonnet-4-6";
+export const ANTHROPIC_MODEL_FAST =
+  process.env.ANTHROPIC_MODEL_FAST ?? "claude-haiku-4-5";
+export const ANTHROPIC_MODEL_VISION =
+  process.env.ANTHROPIC_MODEL_VISION ?? "claude-sonnet-4-6";
+
 export type ModelChoice = "smart" | "fast" | "auto" | undefined;
 
 /**
