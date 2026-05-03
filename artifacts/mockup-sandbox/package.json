@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "lsof -ti:$PORT 2>/dev/null | xargs -r kill -9; sleep 1; vite dev",
+    "dev": "fuser -k -n tcp $PORT 2>/dev/null; sleep 1; vite dev",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit"

@@ -36,6 +36,10 @@ The mobile app uses `expo-router` for navigation, state is managed by `AtlasProv
 
 Cloud sync operates with the server as the source of truth, utilizing optimistic mutations, coalescing, and conflict resolution. Subscription gating is enforced both client and server-side. Authentication is managed by Clerk, with custom branded screens for various flows. `AuthGate` ensures proper routing for signed-out users, new users creating goals, and existing users with goals, also enforcing legal acceptance (GDPR) before product access, requiring users to accept Privacy Policy and Terms of Service. Push notifications are implemented via Expo Push, with server-side scheduling for morning nudges. Calendar synchronization allows users to connect native calendars for context and to write planned tasks to their calendars, governed by explicit, granular consent settings.
 
+### Workflow port-cleanup preamble
+
+All three workspace `dev` scripts (`artifacts/mobile`, `artifacts/api-server`, `artifacts/mockup-sandbox`) prefix their command with `fuser -k -n tcp $PORT 2>/dev/null; sleep 1;` so that orphan processes from a previous run do not hold the port and force Expo's Metro bundler to prompt `Use port N+1 instead? (Y/n)` (which then blocks the workflow indefinitely on stdin). `lsof` is intentionally NOT used — it is not present in the Replit Nix environment and silently no-ops, which was the original cause of the Expo "preview Failed to fetch" bug.
+
 ## External Dependencies
 
 - **OpenAI:** Used for AI model interactions (gpt-5.4, gpt-4o for vision, Whisper for transcription, omni-moderation for input safety). Model names and the moderation model are env-driven via `OPENAI_MODEL_SMART`, `OPENAI_MODEL_FAST`, `OPENAI_MODEL_VISION`, `OPENAI_MODEL_MODERATION` (see `artifacts/api-server/src/lib/aiConfig.ts`).
