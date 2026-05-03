@@ -11,3 +11,9 @@ id = "1OZJ-pAK6cNEuLkOeGyNm"
 uri = "file://exports/rubai-system-specification.pdf"
 type = "pdf"
 title = "rubai — Full System Specification (PDF)"
+
+[[outputs]]
+id = "48A1QaxSs3YrjQuwlb7oR"
+uri = "file://attached_assets/rubai_full_system_specification.pdf"
+type = "pdf"
+title = "rubai — Full System Specification"
