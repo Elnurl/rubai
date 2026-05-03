@@ -1,5 +1,10 @@
 import * as Calendar from "expo-calendar";
 import { Platform } from "react-native";
+import {
+  getGoogleTodayEvents,
+  summarizeGoogleEventsForPrompt,
+  syncTasksToGoogleCalendar,
+} from "./googleCalendar";
 
 export type LightCalendar = {
   id: string;
@@ -117,6 +122,7 @@ export async function deleteEventSafe(eventId: string): Promise<void> {
 
 type CalendarSyncLike = {
   enabled: boolean;
+  provider?: "native" | "google";
   calendarId: string | null;
   contextRead: boolean;
   autoWrite: boolean;
@@ -140,13 +146,18 @@ export async function loadCalendarContextIfEnabled(
   prefs: CalendarSyncLike | undefined,
 ): Promise<string | undefined> {
   if (!prefs || !prefs.enabled || !prefs.contextRead) return undefined;
-  if (Platform.OS === "web") return undefined;
   try {
+    if (prefs.provider === "google") {
+      if (!prefs.calendarId) return undefined;
+      const events = await getGoogleTodayEvents(prefs.calendarId);
+      return summarizeGoogleEventsForPrompt(events);
+    }
+    // Native (expo-calendar) path — mobile only.
+    if (Platform.OS === "web") return undefined;
     const status = await getCalendarPermissionStatus();
     if (status !== "granted") return undefined;
     const events = await getTodayEvents();
-    const summary = summarizeEventsForPrompt(events);
-    return summary;
+    return summarizeEventsForPrompt(events);
   } catch {
     return undefined;
   }
@@ -202,6 +213,35 @@ async function writeTasksToCalendar(
   return written;
 }
 
+async function writeViaGoogle(
+  calendarId: string,
+  plan: DailyPlanLike,
+): Promise<number> {
+  // Scope dedupe per calendar so switching calendars re-writes the day.
+  const dedupeKey = writtenPlanKey(`google:${calendarId}:${plan.date}`);
+  let already = writtenPlanIds.get(dedupeKey);
+  if (!already) {
+    already = new Set<string>();
+    writtenPlanIds.set(dedupeKey, already);
+  }
+  const todo = plan.tasks.filter((t) => !already!.has(t.id));
+  if (todo.length === 0) return 0;
+  const res = await syncTasksToGoogleCalendar(
+    calendarId,
+    todo.map((t) => ({
+      title: t.title,
+      description: t.description,
+      durationMinutes: t.durationMinutes,
+    })),
+  );
+  // Only mark tasks the server confirmed it wrote so failures can be retried.
+  for (const idx of res.successIndices) {
+    const t = todo[idx];
+    if (t) already.add(t.id);
+  }
+  return res.written;
+}
+
 export async function writePlanToCalendarIfEnabled(
   prefs: CalendarSyncLike | undefined,
   plan: DailyPlanLike | null | undefined,
@@ -209,8 +249,12 @@ export async function writePlanToCalendarIfEnabled(
 ): Promise<void> {
   if (!prefs || !prefs.enabled || !prefs.autoWrite || !prefs.calendarId) return;
   if (!plan || !plan.tasks || plan.tasks.length === 0) return;
-  if (Platform.OS === "web") return;
   try {
+    if (prefs.provider === "google") {
+      await writeViaGoogle(prefs.calendarId, plan);
+      return;
+    }
+    if (Platform.OS === "web") return;
     const status = await getCalendarPermissionStatus();
     if (status !== "granted") return;
     await writeTasksToCalendar(prefs.calendarId, plan);
@@ -229,13 +273,21 @@ export async function writePlanToCalendarOnDemand(
   prefs: CalendarSyncLike | undefined,
   plan: DailyPlanLike | null | undefined,
 ): Promise<WriteOutcome> {
-  if (Platform.OS === "web") return { ok: false, reason: "web" };
   if (!plan || !plan.tasks || plan.tasks.length === 0) {
     return { ok: false, reason: "no-plan" };
   }
+  if (!prefs || !prefs.calendarId) return { ok: false, reason: "no-calendar" };
+  if (prefs.provider === "google") {
+    try {
+      const written = await writeViaGoogle(prefs.calendarId, plan);
+      return { ok: true, written };
+    } catch {
+      return { ok: false, reason: "no-calendar" };
+    }
+  }
+  if (Platform.OS === "web") return { ok: false, reason: "web" };
   const status = await getCalendarPermissionStatus();
   if (status !== "granted") return { ok: false, reason: "no-permission" };
-  if (!prefs || !prefs.calendarId) return { ok: false, reason: "no-calendar" };
   const written = await writeTasksToCalendar(prefs.calendarId, plan);
   return { ok: true, written };
 }

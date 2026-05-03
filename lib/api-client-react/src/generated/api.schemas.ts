@@ -13,6 +13,56 @@ export interface ErrorResponse {
   error: string;
 }
 
+export interface GCalStatus {
+  available: boolean;
+}
+
+export interface GoogleCalendarLite {
+  id: string;
+  title: string;
+  source: string;
+  color: string;
+  allowsModifications: boolean;
+  primary: boolean;
+}
+
+export interface GCalListResult {
+  calendars: GoogleCalendarLite[];
+}
+
+export interface GoogleCalendarEventLite {
+  id: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  allDay: boolean;
+  location?: string | null;
+  notes?: string | null;
+}
+
+export interface GCalEventsResult {
+  events: GoogleCalendarEventLite[];
+}
+
+export type GCalSyncPlanInputTasksItem = {
+  title: string;
+  description?: string;
+  durationMinutes?: number;
+};
+
+export interface GCalSyncPlanInput {
+  calendarId: string;
+  timeZone?: string;
+  tasks: GCalSyncPlanInputTasksItem[];
+}
+
+export interface GCalSyncPlanResult {
+  written: number;
+  eventIds: string[];
+  /** Input task indices (0-based) that were successfully written. */
+  successIndices: number[];
+}
+
 /**
  * Public-safe identity and tier for the signed-in user.
  */
@@ -643,3 +693,8 @@ export interface RoadmapEvolutionResponse {
   rationale: string;
   evolvedAt: string;
 }
+
+export type GoogleCalendarTodayEventsParams = {
+  calendarId: string;
+  timeZone?: string;
+};

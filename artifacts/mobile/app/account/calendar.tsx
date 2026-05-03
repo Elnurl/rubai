@@ -23,6 +23,19 @@ import {
   requestCalendarAccess,
   type LightCalendar,
 } from "@/lib/calendar";
+import {
+  isGoogleCalendarAvailable,
+  listGoogleWritableCalendars,
+  type GoogleLightCalendar,
+} from "@/lib/googleCalendar";
+import type { CalendarProvider } from "@/types/atlas";
+
+type AnyCalendar = {
+  id: string;
+  title: string;
+  source: string;
+  color: string;
+};
 
 export default function CalendarSyncScreen() {
   const colors = useColors();
@@ -31,20 +44,30 @@ export default function CalendarSyncScreen() {
   const { account, updateAccount } = useAtlas();
 
   const sync = account.calendarSync;
+  const provider: CalendarProvider = sync.provider ?? "native";
+
+  // Native (expo-calendar) state
   const [permission, setPermission] = useState<
     "granted" | "denied" | "undetermined" | "loading"
   >("loading");
-  const [calendars, setCalendars] = useState<LightCalendar[]>([]);
+  const [nativeCals, setNativeCals] = useState<LightCalendar[]>([]);
+
+  // Google state
+  const [googleAvailable, setGoogleAvailable] = useState<boolean | null>(null);
+  const [googleCals, setGoogleCals] = useState<GoogleLightCalendar[]>([]);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+
   const [busy, setBusy] = useState(false);
 
-  const refreshCalendars = useCallback(async () => {
+  const refreshNative = useCallback(async () => {
     try {
       const cals = await listWritableCalendars();
-      setCalendars(cals);
-      if (sync.calendarId && !cals.some((c) => c.id === sync.calendarId)) {
-        // Saved calendar no longer exists (deleted, account removed, or list
-        // empty) — clear it and disable auto-write so we can't write to a
-        // ghost id.
+      setNativeCals(cals);
+      if (
+        provider === "native" &&
+        sync.calendarId &&
+        !cals.some((c) => c.id === sync.calendarId)
+      ) {
         void updateAccount({
           calendarSync: {
             ...sync,
@@ -57,37 +80,78 @@ export default function CalendarSyncScreen() {
     } catch (e) {
       console.warn("listWritableCalendars failed", e);
     }
-  }, [sync, updateAccount]);
+  }, [sync, provider, updateAccount]);
+
+  const refreshGoogle = useCallback(async () => {
+    setGoogleError(null);
+    try {
+      const cals = await listGoogleWritableCalendars();
+      setGoogleCals(cals);
+      if (
+        provider === "google" &&
+        sync.calendarId &&
+        !cals.some((c) => c.id === sync.calendarId)
+      ) {
+        void updateAccount({
+          calendarSync: {
+            ...sync,
+            calendarId: null,
+            calendarTitle: null,
+            autoWrite: false,
+          },
+        });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Couldn't reach Google.";
+      setGoogleError(msg);
+    }
+  }, [sync, provider, updateAccount]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       if (Platform.OS === "web") {
         setPermission("denied");
-        return;
+      } else {
+        const status = await getCalendarPermissionStatus();
+        if (cancelled) return;
+        setPermission(status);
+        if (status === "granted") await refreshNative();
       }
-      const status = await getCalendarPermissionStatus();
+      const ok = await isGoogleCalendarAvailable();
       if (cancelled) return;
-      setPermission(status);
-      if (status === "granted") await refreshCalendars();
+      setGoogleAvailable(ok);
+      if (ok) await refreshGoogle();
     })();
     return () => {
       cancelled = true;
     };
-  }, [refreshCalendars]);
+  }, [refreshNative, refreshGoogle]);
 
-  const onConnect = async () => {
+  const setProvider = (next: CalendarProvider) => {
+    if (next === provider) return;
+    void updateAccount({
+      calendarSync: {
+        ...sync,
+        provider: next,
+        // Picking a new source invalidates the previous selection.
+        calendarId: null,
+        calendarTitle: null,
+        autoWrite: false,
+      },
+    });
+  };
+
+  const onConnectNative = async () => {
     if (Platform.OS === "web") {
       Alert.alert(
         "Mobile only",
-        "Native calendar sync is available on iOS and Android.",
+        "Native calendar sync is available on iOS and Android. Switch to Google Calendar for web.",
       );
       return;
     }
     setBusy(true);
     try {
-      // If permission is already granted (e.g. user just paused it) skip the
-      // OS prompt and simply re-enable the integration.
       const status =
         permission === "granted"
           ? "granted"
@@ -96,9 +160,9 @@ export default function CalendarSyncScreen() {
             : "denied";
       setPermission(status);
       if (status === "granted") {
-        await refreshCalendars();
+        await refreshNative();
         await updateAccount({
-          calendarSync: { ...sync, enabled: true },
+          calendarSync: { ...sync, provider: "native", enabled: true },
         });
       } else {
         Alert.alert(
@@ -115,21 +179,40 @@ export default function CalendarSyncScreen() {
     }
   };
 
-  const onPickCalendar = (cal: LightCalendar) => {
-    void updateAccount({
-      calendarSync: {
-        ...sync,
-        enabled: true,
-        calendarId: cal.id,
-        calendarTitle: cal.title,
-      },
-    });
+  const onConnectGoogle = async () => {
+    setBusy(true);
+    try {
+      if (googleAvailable === null) {
+        const ok = await isGoogleCalendarAvailable();
+        setGoogleAvailable(ok);
+        if (!ok) {
+          Alert.alert(
+            "Google Calendar unavailable",
+            "The workspace owner needs to connect Google Calendar in Replit first.",
+          );
+          return;
+        }
+      } else if (!googleAvailable) {
+        Alert.alert(
+          "Google Calendar unavailable",
+          "The workspace owner needs to connect Google Calendar in Replit first.",
+        );
+        return;
+      }
+      await refreshGoogle();
+      await updateAccount({
+        calendarSync: { ...sync, provider: "google", enabled: true },
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const onDisconnect = () => {
     void updateAccount({
       calendarSync: {
         enabled: false,
+        provider: sync.provider,
         calendarId: null,
         calendarTitle: null,
         contextRead: sync.contextRead,
@@ -138,12 +221,26 @@ export default function CalendarSyncScreen() {
     });
   };
 
+  const onPickCalendar = (cal: AnyCalendar) => {
+    void updateAccount({
+      calendarSync: {
+        ...sync,
+        provider,
+        enabled: true,
+        calendarId: cal.id,
+        calendarTitle: cal.title,
+      },
+    });
+  };
+
   const granted = permission === "granted";
-  // The "connected" state is the user-facing toggle: OS permission must be
-  // granted AND the user hasn't disabled the integration. Driving the UI from
-  // both prevents the confusing case where the user taps Disconnect and the
-  // row still shows "Connected" because OS permission lingers.
-  const connected = granted && sync.enabled;
+  const nativeConnected = granted && sync.enabled && provider === "native";
+  const googleConnected =
+    googleAvailable === true && sync.enabled && provider === "google";
+  const connected = nativeConnected || googleConnected;
+
+  const calendars: AnyCalendar[] =
+    provider === "google" ? googleCals : nativeCals;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -192,6 +289,68 @@ export default function CalendarSyncScreen() {
           daily task into your calendar so you never forget.
         </Text>
 
+        {/* Provider toggle */}
+        <View
+          style={{
+            flexDirection: "row",
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            borderRadius: 999,
+            borderWidth: 1,
+            padding: 4,
+            gap: 4,
+          }}
+        >
+          {(["native", "google"] as CalendarProvider[]).map((p) => {
+            const active = provider === p;
+            const label = p === "google" ? "Google Calendar" : "Device";
+            return (
+              <Pressable
+                key={p}
+                onPress={() => setProvider(p)}
+                style={({ pressed }) => [
+                  {
+                    flex: 1,
+                    paddingVertical: 8,
+                    borderRadius: 999,
+                    alignItems: "center",
+                    backgroundColor: active ? colors.primary : "transparent",
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: active
+                      ? colors.primaryForeground
+                      : colors.mutedForeground,
+                    fontFamily: "Inter_600SemiBold",
+                    fontSize: 12.5,
+                  }}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {provider === "google" && (
+          <Text
+            style={{
+              color: colors.mutedForeground,
+              fontFamily: "Inter_400Regular",
+              fontSize: 11.5,
+              lineHeight: 16,
+              paddingHorizontal: 4,
+            }}
+          >
+            Google Calendar runs through your workspace's Replit connector and
+            works on web too. Heads up: it's currently shared at the workspace
+            level — fine for personal use, not for multi-user accounts.
+          </Text>
+        )}
+
         {/* Status / connect */}
         <View
           style={{
@@ -216,7 +375,7 @@ export default function CalendarSyncScreen() {
                   fontSize: 14.5,
                 }}
               >
-                Device calendar
+                {provider === "google" ? "Google Calendar" : "Device calendar"}
               </Text>
               <Text
                 style={{
@@ -225,13 +384,25 @@ export default function CalendarSyncScreen() {
                   fontSize: 12,
                 }}
               >
-                {permission === "loading"
-                  ? "Checking…"
-                  : connected
-                    ? "Connected"
-                    : granted
-                      ? "Paused"
-                      : "Not connected"}
+                {provider === "google"
+                  ? googleAvailable === null
+                    ? "Checking…"
+                    : googleConnected
+                      ? "Connected"
+                      : googleAvailable
+                        ? sync.enabled && sync.provider === "google"
+                          ? "Paused"
+                          : "Not connected"
+                        : "Workspace not linked"
+                  : permission === "loading"
+                    ? "Checking…"
+                    : nativeConnected
+                      ? "Connected"
+                      : granted
+                        ? sync.enabled && sync.provider === "native"
+                          ? "Paused"
+                          : "Not connected"
+                        : "Not connected"}
               </Text>
             </View>
             {connected ? (
@@ -261,7 +432,9 @@ export default function CalendarSyncScreen() {
               </Pressable>
             ) : (
               <Pressable
-                onPress={onConnect}
+                onPress={
+                  provider === "google" ? onConnectGoogle : onConnectNative
+                }
                 disabled={busy}
                 style={({ pressed }) => [
                   {
@@ -286,12 +459,36 @@ export default function CalendarSyncScreen() {
                       fontSize: 12,
                     }}
                   >
-                    {granted ? "Resume" : "Connect"}
+                    {provider === "google"
+                      ? googleAvailable && sync.enabled
+                        ? "Resume"
+                        : "Connect"
+                      : granted
+                        ? "Resume"
+                        : "Connect"}
                   </Text>
                 )}
               </Pressable>
             )}
           </View>
+          {provider === "google" && googleError && (
+            <View
+              style={{
+                paddingHorizontal: 14,
+                paddingBottom: 12,
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.destructive ?? "#DC2626",
+                  fontFamily: "Inter_400Regular",
+                  fontSize: 11.5,
+                }}
+              >
+                {googleError}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Toggles */}
@@ -401,6 +598,66 @@ export default function CalendarSyncScreen() {
                 thumbColor={colors.primaryForeground}
               />
             </View>
+          </View>
+        )}
+
+        {/* Empty state for Google when no writable calendars are visible */}
+        {connected && provider === "google" && calendars.length === 0 && (
+          <View
+            style={{
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderRadius: colors.radius,
+              borderWidth: 1,
+              padding: 14,
+            }}
+          >
+            <Text
+              style={{
+                color: colors.foreground,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 13.5,
+                marginBottom: 4,
+              }}
+            >
+              No writable Google calendars found
+            </Text>
+            <Text
+              style={{
+                color: colors.mutedForeground,
+                fontFamily: "Inter_400Regular",
+                fontSize: 12,
+                lineHeight: 17,
+              }}
+            >
+              The connector is reachable but no calendars allow writes. Check
+              the workspace's Google account permissions, then retry.
+            </Text>
+            <Pressable
+              onPress={() => void refreshGoogle()}
+              style={({ pressed }) => [
+                {
+                  alignSelf: "flex-start",
+                  marginTop: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 7,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <Text
+                style={{
+                  color: colors.foreground,
+                  fontFamily: "Inter_600SemiBold",
+                  fontSize: 12,
+                }}
+              >
+                Retry
+              </Text>
+            </Pressable>
           </View>
         )}
 

@@ -26,8 +26,14 @@ import type {
   DailyPlan,
   DailyPlanRequest,
   ErrorResponse,
+  GCalEventsResult,
+  GCalListResult,
+  GCalStatus,
+  GCalSyncPlanInput,
+  GCalSyncPlanResult,
   GenerateTitleRequest,
   GenerateTitleResponse,
+  GoogleCalendarTodayEventsParams,
   HealthStatus,
   IntakeQuestionsRequest,
   IntakeQuestionsResponse,
@@ -1485,4 +1491,349 @@ export const useAtlasSendTestPush = <
   TContext
 > => {
   return useMutation(getAtlasSendTestPushMutationOptions(options));
+};
+
+/**
+ * @summary Whether the Google Calendar connector is currently reachable
+ */
+export const getGoogleCalendarStatusUrl = () => {
+  return `/api/google-calendar/status`;
+};
+
+export const googleCalendarStatus = async (
+  options?: RequestInit,
+): Promise<GCalStatus> => {
+  return customFetch<GCalStatus>(getGoogleCalendarStatusUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGoogleCalendarStatusQueryKey = () => {
+  return [`/api/google-calendar/status`] as const;
+};
+
+export const getGoogleCalendarStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof googleCalendarStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof googleCalendarStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGoogleCalendarStatusQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof googleCalendarStatus>>
+  > = ({ signal }) => googleCalendarStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof googleCalendarStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GoogleCalendarStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof googleCalendarStatus>>
+>;
+export type GoogleCalendarStatusQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Whether the Google Calendar connector is currently reachable
+ */
+
+export function useGoogleCalendarStatus<
+  TData = Awaited<ReturnType<typeof googleCalendarStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof googleCalendarStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGoogleCalendarStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List writable Google calendars
+ */
+export const getGoogleCalendarListUrl = () => {
+  return `/api/google-calendar/calendars`;
+};
+
+export const googleCalendarList = async (
+  options?: RequestInit,
+): Promise<GCalListResult> => {
+  return customFetch<GCalListResult>(getGoogleCalendarListUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGoogleCalendarListQueryKey = () => {
+  return [`/api/google-calendar/calendars`] as const;
+};
+
+export const getGoogleCalendarListQueryOptions = <
+  TData = Awaited<ReturnType<typeof googleCalendarList>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof googleCalendarList>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGoogleCalendarListQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof googleCalendarList>>
+  > = ({ signal }) => googleCalendarList({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof googleCalendarList>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GoogleCalendarListQueryResult = NonNullable<
+  Awaited<ReturnType<typeof googleCalendarList>>
+>;
+export type GoogleCalendarListQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary List writable Google calendars
+ */
+
+export function useGoogleCalendarList<
+  TData = Awaited<ReturnType<typeof googleCalendarList>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof googleCalendarList>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGoogleCalendarListQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Today's events on a Google calendar
+ */
+export const getGoogleCalendarTodayEventsUrl = (
+  params: GoogleCalendarTodayEventsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/google-calendar/today-events?${stringifiedParams}`
+    : `/api/google-calendar/today-events`;
+};
+
+export const googleCalendarTodayEvents = async (
+  params: GoogleCalendarTodayEventsParams,
+  options?: RequestInit,
+): Promise<GCalEventsResult> => {
+  return customFetch<GCalEventsResult>(
+    getGoogleCalendarTodayEventsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGoogleCalendarTodayEventsQueryKey = (
+  params?: GoogleCalendarTodayEventsParams,
+) => {
+  return [
+    `/api/google-calendar/today-events`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGoogleCalendarTodayEventsQueryOptions = <
+  TData = Awaited<ReturnType<typeof googleCalendarTodayEvents>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: GoogleCalendarTodayEventsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof googleCalendarTodayEvents>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGoogleCalendarTodayEventsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof googleCalendarTodayEvents>>
+  > = ({ signal }) =>
+    googleCalendarTodayEvents(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof googleCalendarTodayEvents>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GoogleCalendarTodayEventsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof googleCalendarTodayEvents>>
+>;
+export type GoogleCalendarTodayEventsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Today's events on a Google calendar
+ */
+
+export function useGoogleCalendarTodayEvents<
+  TData = Awaited<ReturnType<typeof googleCalendarTodayEvents>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: GoogleCalendarTodayEventsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof googleCalendarTodayEvents>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGoogleCalendarTodayEventsQueryOptions(
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Write daily plan tasks to a Google calendar back-to-back from now
+ */
+export const getGoogleCalendarSyncPlanUrl = () => {
+  return `/api/google-calendar/sync-plan`;
+};
+
+export const googleCalendarSyncPlan = async (
+  gCalSyncPlanInput: GCalSyncPlanInput,
+  options?: RequestInit,
+): Promise<GCalSyncPlanResult> => {
+  return customFetch<GCalSyncPlanResult>(getGoogleCalendarSyncPlanUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(gCalSyncPlanInput),
+  });
+};
+
+export const getGoogleCalendarSyncPlanMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof googleCalendarSyncPlan>>,
+    TError,
+    { data: BodyType<GCalSyncPlanInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof googleCalendarSyncPlan>>,
+  TError,
+  { data: BodyType<GCalSyncPlanInput> },
+  TContext
+> => {
+  const mutationKey = ["googleCalendarSyncPlan"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof googleCalendarSyncPlan>>,
+    { data: BodyType<GCalSyncPlanInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return googleCalendarSyncPlan(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GoogleCalendarSyncPlanMutationResult = NonNullable<
+  Awaited<ReturnType<typeof googleCalendarSyncPlan>>
+>;
+export type GoogleCalendarSyncPlanMutationBody = BodyType<GCalSyncPlanInput>;
+export type GoogleCalendarSyncPlanMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Write daily plan tasks to a Google calendar back-to-back from now
+ */
+export const useGoogleCalendarSyncPlan = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof googleCalendarSyncPlan>>,
+    TError,
+    { data: BodyType<GCalSyncPlanInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof googleCalendarSyncPlan>>,
+  TError,
+  { data: BodyType<GCalSyncPlanInput> },
+  TContext
+> => {
+  return useMutation(getGoogleCalendarSyncPlanMutationOptions(options));
 };

@@ -14,6 +14,8 @@ tags:
     description: Atlas AI goal coaching endpoints
   - name: me
     description: Authenticated user state and profile
+  - name: google-calendar
+    description: Google Calendar integration via Replit connector
 paths:
   /healthz:
     get:
@@ -337,6 +339,87 @@ paths:
               schema:
                 $ref: "#/components/schemas/SendTestPushResponse"
 
+  /google-calendar/status:
+    get:
+      operationId: googleCalendarStatus
+      tags: [google-calendar]
+      summary: Whether the Google Calendar connector is currently reachable
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GCalStatus"
+
+  /google-calendar/calendars:
+    get:
+      operationId: googleCalendarList
+      tags: [google-calendar]
+      summary: List writable Google calendars
+      responses:
+        "200":
+          description: Writable calendars
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GCalListResult"
+        "503":
+          description: Connector unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /google-calendar/today-events:
+    get:
+      operationId: googleCalendarTodayEvents
+      tags: [google-calendar]
+      summary: Today's events on a Google calendar
+      parameters:
+        - in: query
+          name: calendarId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: timeZone
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Today's events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GCalEventsResult"
+        "503":
+          description: Connector unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /google-calendar/sync-plan:
+    post:
+      operationId: googleCalendarSyncPlan
+      tags: [google-calendar]
+      summary: Write daily plan tasks to a Google calendar back-to-back from now
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GCalSyncPlanInput"
+      responses:
+        "200":
+          description: Write summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GCalSyncPlanResult"
+
 components:
   schemas:
     HealthStatus:
@@ -353,6 +436,108 @@ components:
         error:
           type: string
       required: [error]
+
+    GCalStatus:
+      type: object
+      properties:
+        available:
+          type: boolean
+      required: [available]
+
+    GoogleCalendarLite:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        source:
+          type: string
+        color:
+          type: string
+        allowsModifications:
+          type: boolean
+        primary:
+          type: boolean
+      required: [id, title, source, color, allowsModifications, primary]
+
+    GCalListResult:
+      type: object
+      properties:
+        calendars:
+          type: array
+          items:
+            $ref: "#/components/schemas/GoogleCalendarLite"
+      required: [calendars]
+
+    GoogleCalendarEventLite:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        startDate:
+          type: string
+        endDate:
+          type: string
+        allDay:
+          type: boolean
+        location:
+          oneOf:
+            - type: string
+            - type: "null"
+        notes:
+          oneOf:
+            - type: string
+            - type: "null"
+      required: [id, title, startDate, endDate, allDay]
+
+    GCalEventsResult:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/GoogleCalendarEventLite"
+      required: [events]
+
+    GCalSyncPlanInput:
+      type: object
+      properties:
+        calendarId:
+          type: string
+        timeZone:
+          type: string
+        tasks:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              description:
+                type: string
+              durationMinutes:
+                type: integer
+            required: [title]
+      required: [calendarId, tasks]
+
+    GCalSyncPlanResult:
+      type: object
+      properties:
+        written:
+          type: integer
+        eventIds:
+          type: array
+          items:
+            type: string
+        successIndices:
+          description: Input task indices (0-based) that were successfully written.
+          type: array
+          items:
+            type: integer
+      required: [written, eventIds, successIndices]
 
     MeResponse:
       type: object

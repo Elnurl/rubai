@@ -1503,3 +1503,71 @@ export const AtlasSendTestPushResponse = zod.object({
     .boolean()
     .describe("True when the Expo push service accepted the message."),
 });
+
+/**
+ * @summary Whether the Google Calendar connector is currently reachable
+ */
+export const GoogleCalendarStatusResponse = zod.object({
+  available: zod.boolean(),
+});
+
+/**
+ * @summary List writable Google calendars
+ */
+export const GoogleCalendarListResponse = zod.object({
+  calendars: zod.array(
+    zod.object({
+      id: zod.string(),
+      title: zod.string(),
+      source: zod.string(),
+      color: zod.string(),
+      allowsModifications: zod.boolean(),
+      primary: zod.boolean(),
+    }),
+  ),
+});
+
+/**
+ * @summary Today's events on a Google calendar
+ */
+export const GoogleCalendarTodayEventsQueryParams = zod.object({
+  calendarId: zod.coerce.string(),
+  timeZone: zod.coerce.string().optional(),
+});
+
+export const GoogleCalendarTodayEventsResponse = zod.object({
+  events: zod.array(
+    zod.object({
+      id: zod.string(),
+      title: zod.string(),
+      startDate: zod.string(),
+      endDate: zod.string(),
+      allDay: zod.boolean(),
+      location: zod.union([zod.string(), zod.null()]).optional(),
+      notes: zod.union([zod.string(), zod.null()]).optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Write daily plan tasks to a Google calendar back-to-back from now
+ */
+export const GoogleCalendarSyncPlanBody = zod.object({
+  calendarId: zod.string(),
+  timeZone: zod.string().optional(),
+  tasks: zod.array(
+    zod.object({
+      title: zod.string(),
+      description: zod.string().optional(),
+      durationMinutes: zod.number().optional(),
+    }),
+  ),
+});
+
+export const GoogleCalendarSyncPlanResponse = zod.object({
+  written: zod.number(),
+  eventIds: zod.array(zod.string()),
+  successIndices: zod
+    .array(zod.number())
+    .describe("Input task indices (0-based) that were successfully written."),
+});

@@ -66,8 +66,11 @@ export type Subscription = {
 
 export type ThemeOverride = "system" | "light" | "dark";
 
+export type CalendarProvider = "native" | "google";
+
 export type CalendarSyncPrefs = {
   enabled: boolean;
+  provider: CalendarProvider;
   calendarId: string | null;
   calendarTitle: string | null;
   contextRead: boolean;
@@ -140,6 +143,7 @@ export const DEFAULT_SUBSCRIPTION: Subscription = {
 
 export const DEFAULT_CALENDAR_SYNC: CalendarSyncPrefs = {
   enabled: false,
+  provider: "native",
   calendarId: null,
   calendarTitle: null,
   contextRead: true,

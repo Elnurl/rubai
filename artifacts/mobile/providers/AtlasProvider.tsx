@@ -290,6 +290,7 @@ function pickCalendarSync(blob: unknown): AccountPrefs["calendarSync"] {
   const b = blob as Partial<AccountPrefs["calendarSync"]>;
   return {
     enabled: typeof b.enabled === "boolean" ? b.enabled : def.enabled,
+    provider: b.provider === "google" ? "google" : "native",
     calendarId:
       typeof b.calendarId === "string" ? b.calendarId : def.calendarId,
     calendarTitle:
