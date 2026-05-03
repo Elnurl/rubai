@@ -16,7 +16,6 @@ import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { AtlasButton } from "@/components/AtlasButton";
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { EmptyState } from "@/components/EmptyState";
-import { MomentumCard } from "@/components/MomentumCard";
 import { ReflectionSheet } from "@/components/ReflectionSheet";
 import { SectionHeader } from "@/components/SectionHeader";
 import { TaskCard } from "@/components/TaskCard";
@@ -24,7 +23,6 @@ import { TaskDetailSheet } from "@/components/TaskDetailSheet";
 import { profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { useEvolveRoadmap } from "@/hooks/useEvolveRoadmap";
-import { computeMomentum } from "@/lib/momentum";
 import { todayISO } from "@/lib/storage";
 import { useAtlas } from "@/providers/AtlasProvider";
 import {
@@ -144,7 +142,6 @@ export default function TodayScreen() {
   const totalCount = activeDailyPlan?.plan.tasks.length ?? 0;
   const progressPct = totalCount > 0 ? completedCount / totalCount : 0;
   const goalLabel = activeProfile ? profileGoalLabel(activeProfile) : "";
-  const momentum = useMemo(() => computeMomentum(activeBehavioral), [activeBehavioral]);
 
   const todaysReflectionMap = useMemo(() => {
     const map = new Map<string, ReflectionEntry>();
@@ -302,8 +299,6 @@ export default function TodayScreen() {
             </Text>
           </Animated.View>
         )}
-
-        <MomentumCard state={momentum} />
 
         {totalCount > 0 && (
           <View style={styles.progress}>
