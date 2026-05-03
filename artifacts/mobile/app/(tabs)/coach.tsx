@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -561,29 +562,13 @@ export default function CoachScreen() {
     >
       <View style={[styles.header, { paddingTop: topPad }]}>
         <View style={styles.headerInner}>
-          <View style={{ flex: 1, gap: 6 }}>
-            <Text
-              style={[
-                styles.headerEyebrow,
-                { color: colors.primary, fontFamily: "Inter_600SemiBold" },
-              ]}
-            >
-              COACH
-            </Text>
+          <View style={{ flex: 1 }}>
             <AtlasLogo size="lg" />
-            <Text
-              style={[
-                styles.headerSubtitle,
-                { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-              ]}
-            >
-              Working on:{" "}
-              <Text style={{ color: colors.foreground, fontFamily: "Inter_500Medium" }}>
-                {activeRoadmap.headline}
-              </Text>
-            </Text>
           </View>
-          <ActiveGoalChip />
+          <View style={styles.headerChipRow}>
+            <ActiveGoalChip />
+            <WorkingOnInfoButton headline={activeRoadmap.headline} />
+          </View>
         </View>
 
         {activeCoachMemory ? (
@@ -969,6 +954,112 @@ async function transcribeClip(clip: RecordedClip): Promise<string> {
   return (data.text ?? "").trim();
 }
 
+// Small "i" affordance that sits next to the active goal chip and reveals
+// the current roadmap headline on tap. Replaces the previous always-visible
+// "Working on: …" subtitle so the header reads cleaner while keeping the
+// information one tap away.
+function WorkingOnInfoButton({ headline }: { headline: string }) {
+  const colors = useColors();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Pressable
+        onPress={() => setOpen(true)}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel="Working on"
+        style={({ pressed }) => [
+          infoStyles.btn,
+          {
+            borderColor: colors.border,
+            backgroundColor: colors.muted,
+            opacity: pressed ? 0.7 : 1,
+          },
+        ]}
+      >
+        <Feather name="info" size={13} color={colors.mutedForeground} />
+      </Pressable>
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+      >
+        <Pressable
+          style={infoStyles.backdrop}
+          onPress={() => setOpen(false)}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={[
+              infoStyles.sheet,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderRadius: colors.radius,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                infoStyles.eyebrow,
+                {
+                  color: colors.mutedForeground,
+                  fontFamily: "Inter_600SemiBold",
+                },
+              ]}
+            >
+              WORKING ON
+            </Text>
+            <Text
+              style={[
+                infoStyles.body,
+                {
+                  color: colors.foreground,
+                  fontFamily: "Inter_500Medium",
+                },
+              ]}
+            >
+              {headline}
+            </Text>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
+const infoStyles = StyleSheet.create({
+  btn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  sheet: {
+    borderWidth: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    gap: 6,
+  },
+  eyebrow: {
+    fontSize: 11,
+    letterSpacing: 1.4,
+  },
+  body: {
+    fontSize: 15,
+    lineHeight: 21,
+  },
+});
+
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
@@ -1051,15 +1142,10 @@ const styles = StyleSheet.create({
   typingDotSlot: {
     paddingLeft: 4,
   },
-  headerEyebrow: {
-    fontSize: 11,
-    letterSpacing: 1.6,
-    textTransform: "uppercase",
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 2,
+  headerChipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   statusCaption: {
     flexDirection: "row",
