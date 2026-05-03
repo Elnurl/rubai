@@ -48,5 +48,5 @@ Cloud sync operates with the server as the source of truth, utilizing optimistic
 - **Express:** API server framework.
 - **React Native:** Mobile application development.
 - **React Query:** Data fetching, caching, and synchronization.
-- **`@expo/vector-icons` & SF Symbols:** Iconography.
+- **`@expo/vector-icons` & SF Symbols:** Iconography. Local TTF copies (`assets/fonts/{Feather,Ionicons,MaterialIcons}.ttf`) are loaded explicitly in `app/_layout.tsx` via `useFonts` to bypass an Expo Go bundling quirk that otherwise produces tofu boxes. The custom Expo Go static deploy script (`artifacts/mobile/scripts/build.js`) writes every bundled asset to disk under its **hashed** filename `<name>.<hash>.<type>` (matching what Expo's runtime `AssetSourceResolver` requests) — writing the bare `<name>.<type>` made every icon font 404 in the deployed bundle and broke all icons app-wide.
 - **Replit Secrets:** Environment variable management (`DATABASE_URL`, `CLERK_SECRET_KEY`, `AI_INTEGRATIONS_OPENAI_API_KEY`, `SESSION_SECRET`).

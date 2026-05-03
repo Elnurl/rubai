@@ -341,12 +341,22 @@ function extractAssets(timestamp) {
       const key = path.posix.join(decodedPath, filename);
 
       if (!assetsMap.has(key)) {
+        const hash = match[2];
+        const name = match[3];
+        const type = match[4];
+        // Expo's runtime AssetSourceResolver requests assets at
+        // `<httpServerLocation>/<name>.<hash>.<type>` (cache-busting). We must
+        // write the file to disk under that exact hashed filename, not the
+        // bare `<name>.<type>`, otherwise every icon font / image 404s and
+        // the app shows tofu boxes everywhere.
+        const hashedFilename = `${name}.${hash}.${type}`;
         const asset = {
-          url: path.posix.join("/", decodedPath, filename),
+          url: path.posix.join("/", decodedPath, hashedFilename),
           originalPath: originalPath,
           filename: filename,
+          hashedFilename: hashedFilename,
           relativePath: decodedPath,
-          hash: match[2],
+          hash: hash,
           platforms: new Set(),
         };
 
@@ -391,7 +401,10 @@ async function downloadAssets(assets, timestamp) {
       asset.relativePath,
     );
     fs.mkdirSync(outputDir, { recursive: true });
-    const output = path.join(outputDir, asset.filename);
+    // Output uses the hashed filename Expo's runtime AssetSourceResolver
+    // requests (`<name>.<hash>.<type>`); the on-disk source still lives at
+    // the bare `<name>.<type>` inside node_modules / assets/.
+    const output = path.join(outputDir, asset.hashedFilename);
 
     try {
       const candidates = [
@@ -547,7 +560,7 @@ async function main() {
   for (const asset of assets) {
     assetsByHash.set(asset.hash, {
       relativePath: asset.relativePath,
-      filename: asset.filename,
+      filename: asset.hashedFilename,
     });
   }
 
