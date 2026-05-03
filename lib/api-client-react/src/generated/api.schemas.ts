@@ -531,6 +531,7 @@ export const ProposedCoachActionKind = {
   removeTaskToday: "removeTaskToday",
   renameGoal: "renameGoal",
   lightenToday: "lightenToday",
+  syncToCalendar: "syncToCalendar",
 } as const;
 
 /**

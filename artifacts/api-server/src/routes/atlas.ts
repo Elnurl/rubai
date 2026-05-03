@@ -662,6 +662,7 @@ const coachResponseSchema = {
                 "removeTaskToday",
                 "renameGoal",
                 "lightenToday",
+                "syncToCalendar",
                 "none",
               ],
             },
@@ -862,6 +863,7 @@ Hard rules:
     • removeTaskToday — user asked to drop a SPECIFIC task from today. Fill taskId AND taskTitle with the matching task from the TODAY's tasks list in CONTEXT. Other fields null/[].
     • renameGoal — user asked to rename their current goal. Fill newTitle (2-5 words, Title Case). Other fields null/[].
     • lightenToday — user said today feels too heavy / "make today easier" / "I only have 30 minutes today". Fill removeTaskIds with the lowest-priority task ids that should be cut. Other fields null/[].
+    • syncToCalendar — user asked you to send / add / put today's tasks on their calendar (e.g. "send today's tasks to my calendar", "add them as events", "mail them to me as invites", "put my plan on the calendar"). All payload fields null/[]. The mobile app will write each task in TODAY's plan as a calendar event when the user confirms — do NOT do it without proposing this action first.
   Otherwise return null. Reply text and proposedAction must agree — if you propose an addTask, your reply should preview the task. If the user already said "yes, do it" twice, don't keep proposing the same thing — assume the previous turn was confirmed.
 - "memoryUpdate": include ONLY when the user revealed something durable in THIS message (a constraint, preference, life event, identity statement). Otherwise null. The summary you write replaces the prior summary; keep it ≤ 3 sentences. newFacts must not duplicate existing facts.
 - If the user goes off-topic, steer back to their goal in one sentence.
@@ -1028,6 +1030,19 @@ ${contextBlock}${
             taskTitle: null,
             newTitle: null,
             removeTaskIds: ids,
+          };
+        }
+        case "syncToCalendar": {
+          if (todayTaskIds.size === 0) return null;
+          return {
+            kind: "syncToCalendar" as const,
+            label,
+            rationale,
+            task: null,
+            taskId: null,
+            taskTitle: null,
+            newTitle: null,
+            removeTaskIds: [],
           };
         }
         default:

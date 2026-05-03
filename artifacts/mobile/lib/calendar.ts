@@ -152,10 +152,60 @@ export async function loadCalendarContextIfEnabled(
   }
 }
 
+export type WriteOutcome =
+  | { ok: true; written: number }
+  | {
+      ok: false;
+      reason:
+        | "web"
+        | "no-permission"
+        | "no-calendar"
+        | "no-plan"
+        | "disabled";
+    };
+
+async function writeTasksToCalendar(
+  calendarId: string,
+  plan: DailyPlanLike,
+): Promise<number> {
+  const dedupeKey = writtenPlanKey(plan.date);
+  let already = writtenPlanIds.get(dedupeKey);
+  if (!already) {
+    already = new Set<string>();
+    writtenPlanIds.set(dedupeKey, already);
+  }
+  let written = 0;
+  // Schedule sequentially from now (rounded up to next quarter hour),
+  // stacking back-to-back so events never collide. We don't try to dodge
+  // existing events here — the AI prompt already plans around them.
+  const cursor = new Date();
+  const m = cursor.getMinutes();
+  const roundUp = (15 - (m % 15)) % 15;
+  cursor.setMinutes(m + roundUp, 0, 0);
+  for (const task of plan.tasks) {
+    if (already.has(task.id)) continue;
+    const dur = Math.max(15, Math.min(task.durationMinutes || 30, 240));
+    try {
+      await createTaskEvent(calendarId, {
+        title: `rubai · ${task.title}`,
+        notes: task.description,
+        startISO: cursor.toISOString(),
+        durationMinutes: dur,
+      });
+      already.add(task.id);
+      written += 1;
+    } catch {
+      // Skip individual failures; keep going.
+    }
+    cursor.setTime(cursor.getTime() + dur * 60 * 1000);
+  }
+  return written;
+}
+
 export async function writePlanToCalendarIfEnabled(
   prefs: CalendarSyncLike | undefined,
   plan: DailyPlanLike | null | undefined,
-  reminderTime: string,
+  _reminderTime: string,
 ): Promise<void> {
   if (!prefs || !prefs.enabled || !prefs.autoWrite || !prefs.calendarId) return;
   if (!plan || !plan.tasks || plan.tasks.length === 0) return;
@@ -163,44 +213,31 @@ export async function writePlanToCalendarIfEnabled(
   try {
     const status = await getCalendarPermissionStatus();
     if (status !== "granted") return;
-
-    const dedupeKey = writtenPlanKey(plan.date);
-    let already = writtenPlanIds.get(dedupeKey);
-    if (!already) {
-      already = new Set<string>();
-      writtenPlanIds.set(dedupeKey, already);
-    }
-
-    // Schedule sequentially starting from reminderTime (or 09:00),
-    // stacking tasks back-to-back using each task's durationMinutes.
-    const [hh, mm] = (reminderTime || "09:00").split(":").map(Number);
-    const cursor = new Date();
-    cursor.setHours(
-      Number.isFinite(hh) ? hh : 9,
-      Number.isFinite(mm) ? mm : 0,
-      0,
-      0,
-    );
-
-    for (const task of plan.tasks) {
-      if (already.has(task.id)) continue;
-      const dur = Math.max(15, Math.min(task.durationMinutes || 30, 240));
-      try {
-        await createTaskEvent(prefs.calendarId, {
-          title: `rubai · ${task.title}`,
-          notes: task.description,
-          startISO: cursor.toISOString(),
-          durationMinutes: dur,
-        });
-        already.add(task.id);
-      } catch {
-        // Skip individual failures; keep going.
-      }
-      cursor.setTime(cursor.getTime() + dur * 60 * 1000);
-    }
+    await writeTasksToCalendar(prefs.calendarId, plan);
   } catch {
     // best-effort; do not block plan generation
   }
+}
+
+/**
+ * On-demand calendar write triggered by an AI proposed action the user
+ * confirmed. Unlike the auto-write path this ignores `autoWrite` and surfaces
+ * a structured outcome so the UI can prompt the user when permission /
+ * calendar selection is missing.
+ */
+export async function writePlanToCalendarOnDemand(
+  prefs: CalendarSyncLike | undefined,
+  plan: DailyPlanLike | null | undefined,
+): Promise<WriteOutcome> {
+  if (Platform.OS === "web") return { ok: false, reason: "web" };
+  if (!plan || !plan.tasks || plan.tasks.length === 0) {
+    return { ok: false, reason: "no-plan" };
+  }
+  const status = await getCalendarPermissionStatus();
+  if (status !== "granted") return { ok: false, reason: "no-permission" };
+  if (!prefs || !prefs.calendarId) return { ok: false, reason: "no-calendar" };
+  const written = await writeTasksToCalendar(prefs.calendarId, plan);
+  return { ok: true, written };
 }
 
 export function summarizeEventsForPrompt(events: LightEvent[]): string {

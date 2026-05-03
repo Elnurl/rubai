@@ -912,6 +912,7 @@ export const AtlasCoachResponse = zod.object({
             "removeTaskToday",
             "renameGoal",
             "lightenToday",
+            "syncToCalendar",
           ]),
           label: zod.string(),
           rationale: zod.string(),

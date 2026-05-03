@@ -1019,7 +1019,7 @@ components:
       properties:
         kind:
           type: string
-          enum: [addTaskToday, removeTaskToday, renameGoal, lightenToday]
+          enum: [addTaskToday, removeTaskToday, renameGoal, lightenToday, syncToCalendar]
         label:
           type: string
         rationale:

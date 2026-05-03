@@ -28,7 +28,10 @@ import { useEvolveRoadmap } from "@/hooks/useEvolveRoadmap";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 import { useVoiceRecorder, type RecordedClip } from "@/hooks/useVoiceRecorder";
 import { useAtlas } from "@/providers/AtlasProvider";
-import { loadCalendarContextIfEnabled } from "@/lib/calendar";
+import {
+  loadCalendarContextIfEnabled,
+  writePlanToCalendarOnDemand,
+} from "@/lib/calendar";
 import {
   customFetch,
   useAtlasCoach,
@@ -316,6 +319,28 @@ export default function CoachScreen() {
             ids.length === 1 ? "" : "s"
           }.`;
         }
+      } else if (action.kind === "syncToCalendar") {
+        const currentPlan = activeDailyPlan?.plan;
+        const outcome = await writePlanToCalendarOnDemand(
+          account.calendarSync,
+          currentPlan,
+        );
+        if (outcome.ok) {
+          confirmation = `Added ${outcome.written} task${
+            outcome.written === 1 ? "" : "s"
+          } to ${account.calendarSync.calendarTitle ?? "your calendar"}.`;
+        } else if (outcome.reason === "no-permission") {
+          confirmation =
+            "I need calendar permission first. Open Account → Calendar sync to grant access.";
+        } else if (outcome.reason === "no-calendar") {
+          confirmation =
+            "Pick a calendar in Account → Calendar sync, then ask me again.";
+        } else if (outcome.reason === "web") {
+          confirmation =
+            "Calendar sync is mobile-only — try this from the iOS or Android app.";
+        } else {
+          confirmation = "No tasks to sync yet.";
+        }
       }
       setLastProposedAction(null);
       await appendActiveCoachMessage({ role: "assistant", content: confirmation });
@@ -331,6 +356,7 @@ export default function CoachScreen() {
     setActiveDailyPlan,
     updateActiveGoal,
     appendActiveCoachMessage,
+    account.calendarSync,
   ]);
 
   const onCancelProposed = useCallback(() => {
