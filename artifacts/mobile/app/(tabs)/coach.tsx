@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -805,7 +805,7 @@ export default function CoachScreen() {
             {
               backgroundColor: colors.card,
               borderColor: isRecording ? colors.primary : colors.border,
-              borderRadius: 22,
+              borderRadius: 28,
             },
           ]}
         >
@@ -813,10 +813,13 @@ export default function CoachScreen() {
             onPress={onAttachmentPress}
             hitSlop={6}
             disabled={coach.isPending || isRecording}
-            style={styles.iconButton}
+            style={[
+              styles.sparkBadge,
+              { backgroundColor: colors.primary + "22" },
+            ]}
             testID="attach-button"
           >
-            <Feather name="paperclip" size={18} color={colors.mutedForeground} />
+            <Ionicons name="sparkles" size={16} color={colors.primary} />
           </Pressable>
 
           {isRecording ? (
@@ -852,7 +855,7 @@ export default function CoachScreen() {
             style={[
               styles.micButton,
               {
-                backgroundColor: isRecording ? colors.primary : colors.muted,
+                backgroundColor: isRecording ? colors.primary : "transparent",
               },
             ]}
             hitSlop={6}
@@ -860,7 +863,7 @@ export default function CoachScreen() {
           >
             <Feather
               name={isRecording ? "square" : "mic"}
-              size={16}
+              size={18}
               color={
                 isRecording ? colors.primaryForeground : colors.mutedForeground
               }
@@ -1127,6 +1130,14 @@ const styles = StyleSheet.create({
     height: 36,
     alignItems: "center",
     justifyContent: "center",
+  },
+  sparkBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 4,
   },
   recordingIndicator: {
     flex: 1,
