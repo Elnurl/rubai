@@ -64,10 +64,17 @@ export type Subscription = {
   startedAt: string;
 };
 
+export type ThemeOverride = "system" | "light" | "dark";
+
 export type AccountPrefs = {
   notificationsEnabled: boolean;
   reminderTime: string;
   performanceUpdates: boolean;
+  themeOverride: ThemeOverride;
+  realtimeSync: boolean;
+  privacyShield: boolean;
+  coachPersona: string;
+  preferredLanguage: string;
 };
 
 export type IntakeDraftStage =
@@ -126,4 +133,9 @@ export const DEFAULT_ACCOUNT: AccountPrefs = {
   notificationsEnabled: true,
   reminderTime: "08:00",
   performanceUpdates: true,
+  themeOverride: "system",
+  realtimeSync: true,
+  privacyShield: false,
+  coachPersona: "Empathetic & Direct",
+  preferredLanguage: "English",
 };

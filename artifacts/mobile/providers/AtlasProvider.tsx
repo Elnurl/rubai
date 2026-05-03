@@ -59,6 +59,7 @@ import {
 } from "@/types/atlas";
 import { evaluateNewAwards } from "@/lib/awards";
 import { AwardToast } from "@/components/AwardToast";
+import { AtlasThemeContext } from "@/providers/AtlasContext";
 
 const EMPTY_BEHAVIORAL: BehavioralSnapshot = {
   completedTaskTitles: [],
@@ -257,6 +258,28 @@ function pickAccountPrefs(blob: unknown): AccountPrefs {
       typeof b.reminderTime === "string"
         ? b.reminderTime
         : DEFAULT_ACCOUNT.reminderTime,
+    themeOverride:
+      b.themeOverride === "light" ||
+      b.themeOverride === "dark" ||
+      b.themeOverride === "system"
+        ? b.themeOverride
+        : DEFAULT_ACCOUNT.themeOverride,
+    realtimeSync:
+      typeof b.realtimeSync === "boolean"
+        ? b.realtimeSync
+        : DEFAULT_ACCOUNT.realtimeSync,
+    privacyShield:
+      typeof b.privacyShield === "boolean"
+        ? b.privacyShield
+        : DEFAULT_ACCOUNT.privacyShield,
+    coachPersona:
+      typeof b.coachPersona === "string" && b.coachPersona.length > 0
+        ? b.coachPersona
+        : DEFAULT_ACCOUNT.coachPersona,
+    preferredLanguage:
+      typeof b.preferredLanguage === "string" && b.preferredLanguage.length > 0
+        ? b.preferredLanguage
+        : DEFAULT_ACCOUNT.preferredLanguage,
   };
 }
 
@@ -1293,10 +1316,14 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AtlasContext.Provider value={value}>
-      {children}
-      <AwardToast />
-    </AtlasContext.Provider>
+    <AtlasThemeContext.Provider
+      value={{ account: { themeOverride: account.themeOverride } }}
+    >
+      <AtlasContext.Provider value={value}>
+        {children}
+        <AwardToast />
+      </AtlasContext.Provider>
+    </AtlasThemeContext.Provider>
   );
 }
 

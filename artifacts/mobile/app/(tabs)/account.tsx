@@ -1,17 +1,17 @@
 import { Feather } from "@expo/vector-icons";
 import { useUser } from "@clerk/expo";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React from "react";
 import {
   Alert,
   Image,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
+  useColorScheme,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -21,17 +21,7 @@ import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { TIER_INFO, type SubscriptionTier } from "@/types/atlas";
 
-// Local-only visual toggles for sync/privacy features that don't have a
-// backend yet. They persist in component state for this session — when the
-// real services land, swap them onto `account` fields the same way Smart
-// Nudges already wires to `account.notificationsEnabled`.
-type LocalPrefs = {
-  realtimeSync: boolean;
-  privacyShield: boolean;
-};
-
-const APP_VERSION = "rubai v2.4.0-stable";
-const APP_TAGLINE = "Evolving with you since 2023";
+const APP_VERSION = "rubai · v1.0 · designed for execution";
 
 export default function AccountScreen() {
   const colors = useColors();
@@ -40,29 +30,23 @@ export default function AccountScreen() {
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 8;
   const bottomTab = isWeb ? 100 : 110;
+  const systemScheme = useColorScheme();
 
   const {
     tier,
-    goals,
-    goalLimit,
     account,
     activeBehavioral,
     syncStatus,
     syncMessage,
     updateAccount,
-    resetAll,
     signOut,
     dismissSyncMessage,
   } = useAtlas();
   const { user } = useUser();
 
-  const [localPrefs, setLocalPrefs] = useState<LocalPrefs>({
-    realtimeSync: true,
-    privacyShield: false,
-  });
+  const tierKey = (tier as SubscriptionTier) in TIER_INFO ? (tier as SubscriptionTier) : "free";
+  const tierInfo = TIER_INFO[tierKey];
 
-  const tierInfo =
-    TIER_INFO[(tier as SubscriptionTier) in TIER_INFO ? (tier as SubscriptionTier) : "free"];
   const accountEmail = user?.primaryEmailAddress?.emailAddress ?? "Signed in";
   const fullName =
     [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() ||
@@ -75,45 +59,24 @@ export default function AccountScreen() {
   const avatarUrl = user?.imageUrl ?? null;
   const streakDays = activeBehavioral.currentStreakDays;
 
-  const syncSubtitle =
-    syncStatus === "error"
-      ? "Sync error — tap to retry"
-      : syncStatus === "syncing"
-        ? "Syncing now…"
-        : syncMessage
-          ? syncMessage
-          : "Last synced just now";
+  // Effective scheme for the appearance toggle subtitle
+  const effectiveScheme =
+    account.themeOverride === "system"
+      ? systemScheme ?? "light"
+      : account.themeOverride;
+  const isDark = effectiveScheme === "dark";
 
-  const comingSoon = (label: string) => {
-    if (Platform.OS === "web") {
-      if (typeof window !== "undefined") {
-        window.alert(`${label} is on the way. We're building it for the next release.`);
-      }
-      return;
-    }
-    Alert.alert(`${label} — coming soon`, "We're building this for the next release.", [
-      { text: "OK" },
-    ]);
+  const onAppearanceToggle = (nextDark: boolean) => {
+    // Tapping the toggle always sets a manual override (light/dark). Long
+    // press / tap-and-hold path is a stretch goal; users can return to system
+    // by tapping the row label below.
+    void updateAccount({ themeOverride: nextDark ? "dark" : "light" });
   };
 
-  const onReset = () => {
-    const doReset = async () => {
-      await resetAll();
-      router.replace("/welcome");
-    };
-    if (Platform.OS === "web") {
-      if (typeof window !== "undefined" && window.confirm("Erase ALL goals, history and progress?")) {
-        void doReset();
-      }
-    } else {
-      Alert.alert(
-        "Reset everything?",
-        "This permanently deletes every goal, roadmap, history entry and preference.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Reset", style: "destructive", onPress: doReset },
-        ],
-      );
+  const onAppearanceLongPress = () => {
+    void updateAccount({ themeOverride: "system" });
+    if (Platform.OS !== "web") {
+      Alert.alert("Appearance", "Following system setting.");
     }
   };
 
@@ -133,11 +96,6 @@ export default function AccountScreen() {
     }
   };
 
-  const onKnowledgeBase = () => {
-    const url = "https://rubai.app/help";
-    Linking.openURL(url).catch(() => comingSoon("Knowledge Base & Support"));
-  };
-
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <ScrollView
@@ -147,17 +105,9 @@ export default function AccountScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header — matches Today/Coach: AtlasLogo on left, centered title */}
+        {/* Header — same pattern as Today/Coach */}
         <View style={styles.headerRow}>
           <AtlasLogo size="sm" />
-          <Text
-            style={[
-              styles.headerTitle,
-              { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
-            ]}
-          >
-            System & Sync
-          </Text>
           <View style={styles.headerSpacer} />
         </View>
 
@@ -197,10 +147,10 @@ export default function AccountScreen() {
           </Pressable>
         ) : null}
 
-        {/* Profile card */}
+        {/* Compact identity strip (avatar + name + streak chip) */}
         <View
           style={[
-            styles.profileCard,
+            styles.identityStrip,
             {
               backgroundColor: colors.card,
               borderColor: colors.border,
@@ -209,11 +159,11 @@ export default function AccountScreen() {
           ]}
         >
           {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+            <Image source={{ uri: avatarUrl }} style={styles.identityAvatar} />
           ) : (
             <View
               style={[
-                styles.avatar,
+                styles.identityAvatar,
                 {
                   backgroundColor: colors.primary,
                   alignItems: "center",
@@ -225,7 +175,7 @@ export default function AccountScreen() {
                 style={{
                   color: colors.primaryForeground,
                   fontFamily: "Inter_700Bold",
-                  fontSize: 18,
+                  fontSize: 14,
                   textTransform: "uppercase",
                 }}
               >
@@ -233,282 +183,216 @@ export default function AccountScreen() {
               </Text>
             </View>
           )}
-          <View style={styles.profileBody}>
+          <View style={{ flex: 1 }}>
             <Text
               numberOfLines={1}
-              style={[
-                styles.profileName,
-                { color: colors.foreground, fontFamily: "Inter_700Bold" },
-              ]}
+              style={{
+                color: colors.foreground,
+                fontFamily: "Inter_700Bold",
+                fontSize: 15,
+                letterSpacing: -0.2,
+              }}
             >
               {fullName}
             </Text>
             <Text
               numberOfLines={1}
-              style={[
-                styles.profileEmail,
-                {
-                  color: colors.mutedForeground,
-                  fontFamily: "Inter_400Regular",
-                },
-              ]}
+              style={{
+                color: colors.mutedForeground,
+                fontFamily: "Inter_400Regular",
+                fontSize: 11.5,
+                marginTop: 2,
+              }}
             >
               {accountEmail}
             </Text>
-            <View
-              style={[
-                styles.streakChip,
-                {
-                  backgroundColor: colors.primary + "1A",
-                  borderColor: colors.primary + "40",
-                },
-              ]}
+          </View>
+          <View
+            style={[
+              styles.streakChip,
+              {
+                backgroundColor: colors.primary + "1A",
+                borderColor: colors.primary + "40",
+              },
+            ]}
+          >
+            <Feather name="zap" size={10} color={colors.primary} />
+            <Text
+              style={{
+                color: colors.primary,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 10.5,
+                letterSpacing: 0.2,
+              }}
             >
-              <Feather name="zap" size={11} color={colors.primary} />
-              <Text
-                style={{
-                  color: colors.primary,
-                  fontFamily: "Inter_600SemiBold",
-                  fontSize: 11.5,
-                  letterSpacing: 0.2,
-                }}
-              >
-                {streakDays} Day Growth Streak
-              </Text>
-            </View>
+              {streakDays}d streak
+            </Text>
           </View>
         </View>
 
-        {/* CLOUD & DEVICES */}
-        <SettingsGroup label="CLOUD & DEVICES">
-          <SettingsRow
-            icon="refresh-cw"
-            title="Real-time Sync"
-            subtitle={syncSubtitle}
-            trailing={
-              <Switch
-                value={localPrefs.realtimeSync}
-                onValueChange={(v) =>
-                  setLocalPrefs((p) => ({ ...p, realtimeSync: v }))
-                }
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={colors.primaryForeground}
-              />
-            }
+        {/* Top navigation card — Profile / Behavioral memory / Settings / Privacy */}
+        <Group>
+          <NavRow
+            icon="user"
+            title="Profile"
+            subtitle="Name, avatar, language"
+            onPress={() => router.push("/account/profile")}
           />
           <Divider />
-          <SettingsRow
-            icon="smartphone"
-            title="Connected Devices"
-            subtitle="iPhone, Web"
-            chevron
-            onPress={() => comingSoon("Connected Devices")}
-          />
-          <Divider />
-          <SettingsRow
-            icon="cloud"
-            title="Coach Memory Backup"
-            subtitle="Securely encrypted in rubai Cloud"
-            chevron
-            onPress={() => comingSoon("Coach Memory Backup")}
-          />
-        </SettingsGroup>
-
-        {/* ADAPTIVE PREFERENCES */}
-        <SettingsGroup label="ADAPTIVE PREFERENCES">
-          <SettingsRow
-            icon="bell"
-            title="Smart Nudges"
-            subtitle={`AI-timed behavioral reminders at ${account.reminderTime}`}
-            trailing={
-              <Switch
-                value={account.notificationsEnabled}
-                onValueChange={(v) => void updateAccount({ notificationsEnabled: v })}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={colors.primaryForeground}
-              />
-            }
-          />
-          <Divider />
-          <SettingsRow
-            icon="activity"
-            title="Behavioral Insights"
-            subtitle="Focus intensity, peak hours, and rhythm trends"
-            chevron
+          <NavRow
+            icon="zap"
+            title="Behavioral memory"
+            subtitle="What rubai remembers about you"
             onPress={() => router.push("/behavioral-insights")}
           />
           <Divider />
-          <SettingsRow
-            icon="message-circle"
-            title="Coach Persona"
-            subtitle="Empathetic & Direct"
-            chevron
-            onPress={() => comingSoon("Coach Persona")}
+          <NavRow
+            icon="settings"
+            title="Settings"
+            subtitle="Sync, devices, persona, nudges"
+            onPress={() => router.push("/account/settings")}
           />
           <Divider />
-          <SettingsRow
-            icon="moon"
-            title="Appearance"
-            subtitle="Soft Organic (System)"
-            chevron
-            onPress={() => comingSoon("Appearance")}
-          />
-        </SettingsGroup>
-
-        {/* DATA SOVEREIGNTY */}
-        <SettingsGroup label="DATA SOVEREIGNTY">
-          <SettingsRow
+          <NavRow
             icon="shield"
-            title="Privacy Shield"
-            subtitle={localPrefs.privacyShield ? "Biometric lock enabled" : "Biometric lock off"}
-            trailing={
+            title="Privacy & data"
+            subtitle="Control what's stored"
+            onPress={() => router.push("/account/privacy")}
+          />
+        </Group>
+
+        {/* EXPERIENCE */}
+        <SectionLabel>EXPERIENCE</SectionLabel>
+        <Group>
+          <Pressable
+            onLongPress={onAppearanceLongPress}
+            android_ripple={{ color: colors.muted }}
+            style={({ pressed }) => [{ opacity: pressed ? 0.92 : 1 }]}
+          >
+            <View style={styles.row}>
+              <View
+                style={[styles.rowIcon, { backgroundColor: colors.primary + "14" }]}
+              >
+                <Feather
+                  name={isDark ? "moon" : "sun"}
+                  size={15}
+                  color={colors.primary}
+                />
+              </View>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: colors.foreground,
+                    fontFamily: "Inter_600SemiBold",
+                    fontSize: 14.5,
+                  }}
+                >
+                  Appearance
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: colors.mutedForeground,
+                    fontFamily: "Inter_400Regular",
+                    fontSize: 12,
+                  }}
+                >
+                  {account.themeOverride === "system"
+                    ? `System (${isDark ? "Dark" : "Light"})`
+                    : isDark
+                      ? "Dark"
+                      : "Light"}
+                </Text>
+              </View>
               <Switch
-                value={localPrefs.privacyShield}
-                onValueChange={(v) => {
-                  setLocalPrefs((p) => ({ ...p, privacyShield: v }));
-                  if (v) comingSoon("Privacy Shield");
-                }}
+                value={isDark}
+                onValueChange={onAppearanceToggle}
                 trackColor={{ false: colors.border, true: colors.primary }}
                 thumbColor={colors.primaryForeground}
               />
-            }
+            </View>
+          </Pressable>
+          <Divider />
+          <NavRow
+            icon="bell"
+            title="Notifications"
+            subtitle="Smart timing for nudges"
+            onPress={() => router.push("/account/notifications")}
           />
           <Divider />
-          <SettingsRow
-            icon="download"
-            title="Export My Patterns"
-            subtitle="Download CSV/JSON data"
-            chevron
-            onPress={() => comingSoon("Export My Patterns")}
-          />
-          <Divider />
-          <SettingsRow
-            icon="award"
-            title="Manage Plan"
-            subtitle={`${tierInfo.label} • ${goals.length}/${goalLimit} goals`}
-            chevron
+          <NavRow
+            icon="credit-card"
+            title="Subscription"
+            subtitle={`${tierInfo.label} · ${tierInfo.price}`}
             onPress={() => router.push("/plans")}
           />
-          <Divider />
-          <SettingsRow
-            icon="trash-2"
-            title="Reset All Data"
-            subtitle="Erase every goal, roadmap, and reflection"
-            chevron
-            destructive
-            onPress={onReset}
+        </Group>
+
+        {/* SESSION */}
+        <SectionLabel>SESSION</SectionLabel>
+        <Group>
+          <NavRow
+            icon="log-out"
+            title="Sign out"
+            onPress={onSignOut}
           />
-        </SettingsGroup>
+        </Group>
 
-        {/* Knowledge Base button */}
-        <Pressable
-          onPress={onKnowledgeBase}
-          style={({ pressed }) => [
-            styles.kbButton,
-            {
-              borderColor: colors.border,
-              borderRadius: colors.radius,
-              backgroundColor: colors.card,
-              opacity: pressed ? 0.85 : 1,
-            },
-          ]}
+        {/* Footer */}
+        <Text
+          style={{
+            color: colors.mutedForeground,
+            fontFamily: "Inter_400Regular",
+            fontSize: 11.5,
+            textAlign: "center",
+            paddingTop: 14,
+            paddingBottom: 4,
+            letterSpacing: 0.2,
+          }}
         >
-          <Feather name="book-open" size={15} color={colors.foreground} />
-          <Text
-            style={[
-              styles.kbText,
-              { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
-            ]}
-          >
-            Knowledge Base & Support
-          </Text>
-        </Pressable>
-
-        {/* Sign Out link */}
-        <Pressable
-          onPress={onSignOut}
-          style={({ pressed }) => [
-            styles.signOutLink,
-            { opacity: pressed ? 0.6 : 1 },
-          ]}
-        >
-          <Text
-            style={[
-              styles.signOutText,
-              {
-                color: colors.mutedForeground,
-                fontFamily: "Inter_500Medium",
-              },
-            ]}
-          >
-            Sign Out of rubai
-          </Text>
-        </Pressable>
-
-        {/* Version footer */}
-        <View style={styles.footer}>
-          <Text
-            style={[
-              styles.footerVersion,
-              {
-                color: colors.mutedForeground,
-                fontFamily: "Inter_600SemiBold",
-              },
-            ]}
-          >
-            {APP_VERSION}
-          </Text>
-          <Text
-            style={[
-              styles.footerTagline,
-              {
-                color: colors.mutedForeground,
-                fontFamily: "Inter_400Regular",
-              },
-            ]}
-          >
-            {APP_TAGLINE}
-          </Text>
-        </View>
+          {APP_VERSION}
+        </Text>
       </ScrollView>
     </View>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Settings building blocks                                                  */
+/*  Building blocks                                                            */
 /* -------------------------------------------------------------------------- */
 
-function SettingsGroup({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function SectionLabel({ children }: { children: React.ReactNode }) {
   const colors = useColors();
   return (
-    <View style={styles.group}>
-      <Text
-        style={[
-          styles.groupLabel,
-          { color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
-        ]}
-      >
-        {label}
-      </Text>
-      <View
-        style={[
-          styles.groupCard,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-            borderRadius: colors.radius,
-          },
-        ]}
-      >
-        {children}
-      </View>
+    <Text
+      style={{
+        color: colors.primary,
+        fontFamily: "Inter_600SemiBold",
+        fontSize: 11,
+        letterSpacing: 1.8,
+        paddingHorizontal: 4,
+        marginTop: 4,
+      }}
+    >
+      {children}
+    </Text>
+  );
+}
+
+function Group({ children }: { children: React.ReactNode }) {
+  const colors = useColors();
+  return (
+    <View
+      style={{
+        backgroundColor: colors.card,
+        borderColor: colors.border,
+        borderRadius: colors.radius,
+        borderWidth: 1,
+        overflow: "hidden",
+      }}
+    >
+      {children}
     </View>
   );
 }
@@ -517,120 +401,87 @@ function Divider() {
   const colors = useColors();
   return (
     <View
-      style={[
-        styles.divider,
-        { backgroundColor: colors.border },
-      ]}
+      style={{
+        height: StyleSheet.hairlineWidth,
+        backgroundColor: colors.border,
+        marginLeft: 62,
+      }}
     />
   );
 }
 
-type SettingsRowProps = {
-  icon: React.ComponentProps<typeof Feather>["name"];
-  title: string;
-  subtitle?: string;
-  trailing?: React.ReactNode;
-  chevron?: boolean;
-  onPress?: () => void;
-  destructive?: boolean;
-};
-
-function SettingsRow({
+function NavRow({
   icon,
   title,
   subtitle,
-  trailing,
-  chevron,
   onPress,
-  destructive,
-}: SettingsRowProps) {
+}: {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  title: string;
+  subtitle?: string;
+  onPress: () => void;
+}) {
   const colors = useColors();
-  const titleColor = destructive ? colors.destructive : colors.foreground;
-  const iconBg = destructive
-    ? colors.destructive + "1A"
-    : colors.primary + "14";
-  const iconColor = destructive ? colors.destructive : colors.primary;
-
-  const Inner = (
-    <View style={styles.row}>
-      <View style={[styles.rowIcon, { backgroundColor: iconBg }]}>
-        <Feather name={icon} size={15} color={iconColor} />
-      </View>
-      <View style={styles.rowBody}>
-        <Text
-          numberOfLines={1}
-          style={[
-            styles.rowTitle,
-            { color: titleColor, fontFamily: "Inter_600SemiBold" },
-          ]}
+  return (
+    <Pressable
+      onPress={onPress}
+      android_ripple={{ color: colors.muted }}
+      style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+    >
+      <View style={styles.row}>
+        <View
+          style={[styles.rowIcon, { backgroundColor: colors.primary + "14" }]}
         >
-          {title}
-        </Text>
-        {subtitle && (
+          <Feather name={icon} size={15} color={colors.primary} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
           <Text
             numberOfLines={1}
-            style={[
-              styles.rowSubtitle,
-              {
+            style={{
+              color: colors.foreground,
+              fontFamily: "Inter_600SemiBold",
+              fontSize: 14.5,
+              letterSpacing: -0.1,
+            }}
+          >
+            {title}
+          </Text>
+          {subtitle && (
+            <Text
+              numberOfLines={1}
+              style={{
                 color: colors.mutedForeground,
                 fontFamily: "Inter_400Regular",
-              },
-            ]}
-          >
-            {subtitle}
-          </Text>
-        )}
-      </View>
-      {trailing
-        ? trailing
-        : chevron && (
-            <Feather
-              name="chevron-right"
-              size={18}
-              color={colors.mutedForeground}
-            />
+                fontSize: 12,
+                lineHeight: 16,
+              }}
+            >
+              {subtitle}
+            </Text>
           )}
-    </View>
+        </View>
+        <Feather
+          name="chevron-right"
+          size={18}
+          color={colors.mutedForeground}
+        />
+      </View>
+    </Pressable>
   );
-
-  if (onPress) {
-    return (
-      <Pressable
-        onPress={onPress}
-        android_ripple={{ color: colors.muted }}
-        style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
-      >
-        {Inner}
-      </Pressable>
-    );
-  }
-  return Inner;
 }
-
-/* -------------------------------------------------------------------------- */
-/*  Styles                                                                    */
-/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: {
     paddingHorizontal: 22,
-    gap: 18,
+    gap: 14,
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingTop: 4,
   },
-  headerTitle: {
-    flex: 1,
-    fontSize: 16,
-    textAlign: "center",
-    letterSpacing: -0.2,
-  },
-  headerSpacer: {
-    width: 48,
-  },
+  headerSpacer: { flex: 1 },
   syncBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -644,55 +495,26 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     lineHeight: 17,
   },
-  profileCard: {
+  identityStrip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
-    padding: 16,
+    gap: 12,
+    padding: 12,
     borderWidth: 1,
   },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-  },
-  profileBody: {
-    flex: 1,
-    gap: 4,
-  },
-  profileName: {
-    fontSize: 17,
-    letterSpacing: -0.3,
-  },
-  profileEmail: {
-    fontSize: 12.5,
+  identityAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
   },
   streakChip: {
-    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 9,
+    gap: 4,
+    paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
     borderWidth: 1,
-    marginTop: 4,
-  },
-  group: {
-    gap: 10,
-  },
-  groupLabel: {
-    fontSize: 10.5,
-    letterSpacing: 1.6,
-    paddingHorizontal: 4,
-  },
-  groupCard: {
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: 62,
   },
   row: {
     flexDirection: "row",
@@ -708,51 +530,5 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
-  },
-  rowBody: {
-    flex: 1,
-    gap: 2,
-  },
-  rowTitle: {
-    fontSize: 14.5,
-    letterSpacing: -0.1,
-  },
-  rowSubtitle: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  kbButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    padding: 14,
-    borderWidth: 1,
-  },
-  kbText: {
-    fontSize: 13.5,
-    letterSpacing: 0.2,
-  },
-  signOutLink: {
-    alignItems: "center",
-    paddingVertical: 6,
-  },
-  signOutText: {
-    fontSize: 13,
-    letterSpacing: 0.3,
-  },
-  footer: {
-    alignItems: "center",
-    gap: 4,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  footerVersion: {
-    fontSize: 11.5,
-    letterSpacing: 0.4,
-  },
-  footerTagline: {
-    fontSize: 11,
-    letterSpacing: 0.3,
   },
 });

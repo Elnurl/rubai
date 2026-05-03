@@ -195,6 +195,10 @@ function RootLayoutNav() {
       <Stack.Screen name="generating" />
       <Stack.Screen name="replace-goal" />
       <Stack.Screen name="plans" />
+      <Stack.Screen name="account/profile" />
+      <Stack.Screen name="account/settings" />
+      <Stack.Screen name="account/privacy" />
+      <Stack.Screen name="account/notifications" />
       <Stack.Screen name="(tabs)" />
     </Stack>
   );
