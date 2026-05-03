@@ -170,7 +170,7 @@ const tabStyles = StyleSheet.create({
   centerSlot: {
     flex: 1,
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
   },
   centerButton: {
     width: 44,
@@ -178,7 +178,7 @@ const tabStyles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 0,
+    marginTop: 2,
     borderWidth: 0,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
