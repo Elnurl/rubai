@@ -4,7 +4,6 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-nativ
 
 import { Feather } from "@expo/vector-icons";
 
-import { AtlasLogo } from "@/components/AtlasLogo";
 import { GOAL_META, profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { GoalLimitError, useAtlas } from "@/providers/AtlasProvider";
@@ -205,17 +204,6 @@ export default function GeneratingScreen() {
         </View>
 
         <View style={{ height: 40 }} />
-        <AtlasLogo size="md" />
-        {meta && (
-          <Text
-            style={[
-              styles.label,
-              { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
-            ]}
-          >
-            {displayLabel.toUpperCase()}
-          </Text>
-        )}
         <Text
           style={[
             styles.title,
