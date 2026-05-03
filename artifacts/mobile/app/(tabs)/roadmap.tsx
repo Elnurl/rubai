@@ -4,8 +4,8 @@ import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeIn } from "react-native-reanimated";
 
-import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { AdaptiveEngineCard } from "@/components/AdaptiveEngineCard";
+import { AskCoachPill } from "@/components/AskCoachPill";
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { EmptyState } from "@/components/EmptyState";
 import { PhaseCard } from "@/components/PhaseCard";
@@ -88,7 +88,7 @@ export default function RoadmapScreen() {
       >
         <View style={styles.headerRow}>
           <AtlasLogo size="sm" />
-          <ActiveGoalChip />
+          <AskCoachPill />
         </View>
 
         <Text

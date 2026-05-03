@@ -17,6 +17,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeIn } from "react-native-reanimated";
 
+import { AskCoachPill } from "@/components/AskCoachPill";
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
@@ -110,6 +111,7 @@ export default function AccountScreen() {
         <View style={styles.headerRow}>
           <AtlasLogo size="sm" />
           <View style={styles.headerSpacer} />
+          <AskCoachPill />
         </View>
 
         {syncMessage ? (

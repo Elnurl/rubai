@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeIn } from "react-native-reanimated";
 
 import { AtlasButton } from "@/components/AtlasButton";
+import { AskCoachPill } from "@/components/AskCoachPill";
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { EmptyState } from "@/components/EmptyState";
 import { GoalListItem } from "@/components/GoalListItem";
@@ -72,6 +73,7 @@ export default function GoalsScreen() {
       >
         <View style={styles.headerRow}>
           <AtlasLogo size="sm" />
+          <AskCoachPill />
         </View>
 
         <SectionHeader
@@ -192,6 +194,7 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     paddingTop: 4,
     paddingBottom: 4,
   },

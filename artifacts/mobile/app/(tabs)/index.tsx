@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { AtlasButton } from "@/components/AtlasButton";
+import { AskCoachPill } from "@/components/AskCoachPill";
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { EmptyState } from "@/components/EmptyState";
 import { ReflectionSheet } from "@/components/ReflectionSheet";
@@ -235,6 +236,7 @@ export default function TodayScreen() {
         <View style={styles.headerRow}>
           <AtlasLogo size="sm" />
           <View style={styles.headerRight}>
+            <AskCoachPill />
             <ActiveGoalChip />
             <View style={[styles.streakChip, { backgroundColor: colors.muted }]}>
               <Feather name="zap" size={12} color={colors.accent} />
