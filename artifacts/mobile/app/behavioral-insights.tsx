@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AreaChart } from "@/components/charts/AreaChart";
 import { BarChart } from "@/components/charts/BarChart";
+import { FocusPulseCard } from "@/components/FocusPulseCard";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 
@@ -278,6 +279,9 @@ export default function BehavioralInsightsScreen() {
             <Feather name="x" size={18} color={colors.foreground} />
           </Pressable>
         </View>
+
+        {/* Focus Pulse */}
+        <FocusPulseCard />
 
         {/* Stat cards */}
         <View style={styles.statRow}>

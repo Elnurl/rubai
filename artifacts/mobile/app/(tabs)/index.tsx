@@ -16,7 +16,6 @@ import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { AtlasButton } from "@/components/AtlasButton";
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { EmptyState } from "@/components/EmptyState";
-import { FocusPulseCard } from "@/components/FocusPulseCard";
 import { MomentumCard } from "@/components/MomentumCard";
 import { ReflectionSheet } from "@/components/ReflectionSheet";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -300,8 +299,6 @@ export default function TodayScreen() {
             </Text>
           </Animated.View>
         )}
-
-        <FocusPulseCard />
 
         <MomentumCard state={momentum} />
 
