@@ -307,6 +307,29 @@ export default function TodayScreen() {
 
         {totalCount > 0 && (
           <View style={styles.progress}>
+            <View style={styles.progressHeader}>
+              <Text
+                style={[
+                  styles.progressText,
+                  { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
+                ]}
+              >
+                {completedCount} of {totalCount} done
+              </Text>
+              <View style={styles.streakRow}>
+                <Feather name="zap" size={13} color={colors.primary} />
+                <Text
+                  style={[
+                    styles.progressText,
+                    { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
+                  ]}
+                >
+                  {activeBehavioral.currentStreakDays > 0
+                    ? `Day ${activeBehavioral.currentStreakDays} · streak`
+                    : "Day 1 · streak rebuilding"}
+                </Text>
+              </View>
+            </View>
             <View
               style={[styles.progressTrack, { backgroundColor: colors.muted }]}
             >
@@ -320,14 +343,6 @@ export default function TodayScreen() {
                 ]}
               />
             </View>
-            <Text
-              style={[
-                styles.progressText,
-                { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
-              ]}
-            >
-              {completedCount} of {totalCount} done
-            </Text>
           </View>
         )}
 
@@ -503,21 +518,31 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   progress: {
-    gap: 6,
+    gap: 8,
+  },
+  progressHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  streakRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
   },
   progressTrack: {
     width: "100%",
-    height: 6,
-    borderRadius: 3,
+    height: 8,
+    borderRadius: 4,
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    borderRadius: 3,
+    borderRadius: 4,
   },
   progressText: {
-    fontSize: 12,
-    letterSpacing: 0.3,
+    fontSize: 13,
+    letterSpacing: 0.2,
   },
   taskList: {
     gap: 12,
