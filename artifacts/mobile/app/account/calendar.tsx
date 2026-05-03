@@ -285,8 +285,10 @@ export default function CalendarSyncScreen() {
             paddingHorizontal: 4,
           }}
         >
-          Let rubai read your day to plan around real meetings, and write each
-          daily task into your calendar so you never forget.
+          rubai uses your calendar only as raw signal — to understand your day,
+          find ideal time slots, and plan tasks around real meetings.
+          Connecting only grants access. Reading events and writing tasks are
+          two separate switches below, both off by default.
         </Text>
 
         {/* Provider toggle */}
@@ -493,15 +495,27 @@ export default function CalendarSyncScreen() {
 
         {/* Toggles */}
         {connected && (
-          <View
-            style={{
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-              borderRadius: colors.radius,
-              borderWidth: 1,
-              overflow: "hidden",
-            }}
-          >
+          <View style={{ gap: 8 }}>
+            <Text
+              style={{
+                color: colors.primary,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 11,
+                letterSpacing: 1.8,
+                paddingHorizontal: 4,
+              }}
+            >
+              WHAT TO SHARE
+            </Text>
+            <View
+              style={{
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderRadius: colors.radius,
+                borderWidth: 1,
+                overflow: "hidden",
+              }}
+            >
             <View style={styles.row}>
               <View
                 style={[
@@ -519,7 +533,7 @@ export default function CalendarSyncScreen() {
                     fontSize: 14.5,
                   }}
                 >
-                  Use today's events as context
+                  Let AI read today's events
                 </Text>
                 <Text
                   style={{
@@ -528,7 +542,7 @@ export default function CalendarSyncScreen() {
                     fontSize: 12,
                   }}
                 >
-                  rubai plans around your meetings
+                  Used as context to find free time and plan around meetings
                 </Text>
               </View>
               <Switch
@@ -568,7 +582,7 @@ export default function CalendarSyncScreen() {
                     fontSize: 14.5,
                   }}
                 >
-                  Write tasks to calendar
+                  Auto-write daily tasks
                 </Text>
                 <Text
                   style={{
@@ -577,7 +591,7 @@ export default function CalendarSyncScreen() {
                     fontSize: 12,
                   }}
                 >
-                  Each daily task gets a reminder
+                  Each generated task becomes a reminder in your calendar
                 </Text>
               </View>
               <Switch
@@ -598,6 +612,19 @@ export default function CalendarSyncScreen() {
                 thumbColor={colors.primaryForeground}
               />
             </View>
+            </View>
+            <Text
+              style={{
+                color: colors.mutedForeground,
+                fontFamily: "Inter_400Regular",
+                fontSize: 11.5,
+                lineHeight: 16,
+                paddingHorizontal: 4,
+              }}
+            >
+              Both off by default. Turn on only what you're comfortable
+              sharing — you can disconnect anytime to stop everything.
+            </Text>
           </View>
         )}
 

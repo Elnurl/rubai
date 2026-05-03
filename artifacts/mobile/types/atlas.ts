@@ -141,12 +141,16 @@ export const DEFAULT_SUBSCRIPTION: Subscription = {
   startedAt: new Date().toISOString(),
 };
 
+// Privacy default: NO data flows until the user explicitly opts in. Connecting
+// a calendar only grants the app access — it does not start reading events
+// into AI prompts or writing tasks. Both `contextRead` and `autoWrite` start
+// off and must be turned on by the user from the Calendar Sync screen.
 export const DEFAULT_CALENDAR_SYNC: CalendarSyncPrefs = {
   enabled: false,
   provider: "native",
   calendarId: null,
   calendarTitle: null,
-  contextRead: true,
+  contextRead: false,
   autoWrite: false,
 };
 

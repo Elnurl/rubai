@@ -276,7 +276,10 @@ export async function writePlanToCalendarOnDemand(
   if (!plan || !plan.tasks || plan.tasks.length === 0) {
     return { ok: false, reason: "no-plan" };
   }
-  if (!prefs || !prefs.calendarId) return { ok: false, reason: "no-calendar" };
+  // Explicit-consent gate: even on-demand writes require the user to have
+  // an active calendar connection. Disconnect must shut every path off.
+  if (!prefs || !prefs.enabled) return { ok: false, reason: "disabled" };
+  if (!prefs.calendarId) return { ok: false, reason: "no-calendar" };
   if (prefs.provider === "google") {
     try {
       const written = await writeViaGoogle(prefs.calendarId, plan);
