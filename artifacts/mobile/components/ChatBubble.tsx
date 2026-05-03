@@ -28,7 +28,7 @@ export function ChatBubble({ role, content, onSpeak, isSpeaking }: Props) {
     >
       {!isUser && (
         <View style={styles.avatarSlot}>
-          <BrandDot size="md" mode="static" />
+          <BrandDot size="sm" mode="static" />
         </View>
       )}
       <View
