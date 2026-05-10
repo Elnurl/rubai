@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo } from "react";
 import {
   Platform,
@@ -44,6 +44,12 @@ export default function BehavioralInsightsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
+  // When the coach navigates here via "refresh_insights" action, it appends
+  // `?autoRefresh=1` so we kick off the analyzer immediately instead of
+  // requiring the user to find and tap the refresh button. We use a ref to
+  // guard against React strict-mode double-effects.
+  const params = useLocalSearchParams<{ autoRefresh?: string }>();
+  const autoRefreshTriggeredRef = React.useRef(false);
 
   const {
     activeBehavioral,
@@ -337,6 +343,17 @@ export default function BehavioralInsightsScreen() {
 
   const adopted =
     adoptedAt !== null && Date.now() - adoptedAt < 30_000;
+
+  // Auto-refresh on entry when navigated from the coach with ?autoRefresh=1.
+  // Wait until we have an active profile before firing — handleRefresh is a
+  // no-op without it.
+  React.useEffect(() => {
+    if (autoRefreshTriggeredRef.current) return;
+    if (params.autoRefresh !== "1") return;
+    if (!activeProfile) return;
+    autoRefreshTriggeredRef.current = true;
+    void handleRefresh();
+  }, [params.autoRefresh, activeProfile, handleRefresh]);
 
   const subtitleCopy =
     activeBehavioral.currentStreakDays >= 7

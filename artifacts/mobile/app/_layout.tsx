@@ -86,6 +86,38 @@ if (!CLERK_PUBLISHABLE_KEY) {
 
 SplashScreen.preventAutoHideAsync();
 
+// Web-only: the `fontfaceobserver` package (transitive dep used by Expo's web
+// font loader) raises an "Nms timeout exceeded" Error when a custom font
+// hasn't reported as loaded within its 3s window. The font itself loads fine
+// — the observer is just impatient — but the throw bubbles up to Expo's web
+// LogBox as a full-screen "Uncaught Error" modal that blocks the entire UI
+// on slower connections. We swallow only this specific error so it can't hide
+// the app behind a modal; everything else still surfaces normally.
+if (Platform.OS === "web" && typeof window !== "undefined") {
+  const isFontObserverTimeout = (msg: unknown): boolean => {
+    if (typeof msg !== "string") return false;
+    return /\d+ms timeout exceeded/i.test(msg);
+  };
+  window.addEventListener("error", (event) => {
+    if (isFontObserverTimeout(event.message)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason = event.reason;
+    const msg =
+      typeof reason === "string"
+        ? reason
+        : reason instanceof Error
+          ? reason.message
+          : "";
+    if (isFontObserverTimeout(msg)) {
+      event.preventDefault();
+    }
+  });
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { retry: 1, refetchOnWindowFocus: false },

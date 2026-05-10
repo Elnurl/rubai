@@ -324,7 +324,7 @@ export default function CoachScreen() {
         const errMsg: ChatMessage = {
           role: "assistant",
           content:
-            "Lost the line for a moment. Send that again and we'll pick it back up.",
+            "Bağlantı bir anlığa kəsildi. Mesajını yenidən göndər — davam edək.",
         };
         await appendActiveCoachMessage(errMsg);
       }
@@ -360,7 +360,10 @@ export default function CoachScreen() {
     if (kind === "evolve_roadmap") {
       await evolve("manual");
     } else if (kind === "refresh_insights") {
-      router.push("/account");
+      // Route to the actual Behavioral Insights screen and ask it to
+      // immediately recompute the profile so the user sees a real result
+      // instead of landing on Account with nothing happening.
+      router.push("/behavioral-insights?autoRefresh=1");
     } else if (kind === "reflect_on_task") {
       router.push("/");
     }
