@@ -1,7 +1,13 @@
 import { Feather } from "@expo/vector-icons";
-import React from "react";
-import { StyleSheet, Text, View } from "react-native";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import React, { useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import { useColors } from "@/hooks/useColors";
 import type { RoadmapPhase } from "@workspace/api-client-react";
@@ -16,6 +22,22 @@ type Props = {
 
 export function PhaseCard({ phase, index, isActive, updated = false }: Props) {
   const colors = useColors();
+  // Active phase is open by default — that's the one the user actually
+  // needs to read right now. Everything else is collapsed to keep the
+  // roadmap scannable instead of an overwhelming wall of text.
+  const [expanded, setExpanded] = useState(isActive);
+  const milestoneCount = phase.milestones.length;
+
+  const chevronRotation = useSharedValue(isActive ? 180 : 0);
+  const chevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${chevronRotation.value}deg` }],
+  }));
+
+  const toggle = () => {
+    const next = !expanded;
+    setExpanded(next);
+    chevronRotation.value = withTiming(next ? 180 : 0, { duration: 180 });
+  };
 
   return (
     <Animated.View
@@ -30,7 +52,17 @@ export function PhaseCard({ phase, index, isActive, updated = false }: Props) {
         },
       ]}
     >
-      <View style={styles.header}>
+      <Pressable
+        onPress={toggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        accessibilityLabel={`${phase.title}, ${expanded ? "collapse" : "expand"}`}
+        android_ripple={{ color: colors.muted }}
+        style={({ pressed }) => [
+          styles.header,
+          pressed && { opacity: 0.7 },
+        ]}
+      >
         <View
           style={[
             styles.indexBadge,
@@ -57,6 +89,7 @@ export function PhaseCard({ phase, index, isActive, updated = false }: Props) {
               styles.title,
               { color: colors.foreground, fontFamily: "Inter_700Bold" },
             ]}
+            numberOfLines={2}
           >
             {phase.title}
           </Text>
@@ -67,6 +100,7 @@ export function PhaseCard({ phase, index, isActive, updated = false }: Props) {
             ]}
           >
             Week {phase.startWeek} – Week {phase.endWeek}
+            {milestoneCount > 0 ? ` • ${milestoneCount} milestone${milestoneCount === 1 ? "" : "s"}` : ""}
           </Text>
         </View>
         <View style={styles.headerChips}>
@@ -100,67 +134,76 @@ export function PhaseCard({ phase, index, isActive, updated = false }: Props) {
               </Text>
             </View>
           )}
+          <Animated.View style={chevronStyle}>
+            <Feather name="chevron-down" size={20} color={colors.mutedForeground} />
+          </Animated.View>
         </View>
-      </View>
+      </Pressable>
 
-      <Text
-        style={[
-          styles.focus,
-          { color: colors.foreground, fontFamily: "Inter_400Regular" },
-        ]}
-      >
-        {phase.focus}
-      </Text>
+      {expanded && (
+        <Animated.View entering={FadeIn.duration(180)} style={styles.body}>
+          <Text
+            style={[
+              styles.focus,
+              { color: colors.foreground, fontFamily: "Inter_400Regular" },
+            ]}
+          >
+            {phase.focus}
+          </Text>
 
-      <View style={styles.milestones}>
-        {phase.milestones.map((m) => (
-          <View key={m.id} style={styles.milestoneRow}>
-            <View
-              style={[
-                styles.dot,
-                { backgroundColor: isActive ? colors.primary : colors.mutedForeground + "55" },
-              ]}
-            />
-            <View style={styles.milestoneText}>
-              <Text
-                style={[
-                  styles.milestoneTitle,
-                  { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
-                ]}
-              >
-                {m.title}
-              </Text>
-              <Text
-                style={[
-                  styles.milestoneDescription,
-                  { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-                ]}
-              >
-                {m.description}
-              </Text>
-              <View style={styles.weekTag}>
-                <Feather name="calendar" size={11} color={colors.mutedForeground} />
-                <Text
-                  style={[
-                    styles.weekTagText,
-                    { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
-                  ]}
-                >
-                  Week {m.weekNumber}
-                </Text>
-              </View>
+          {milestoneCount > 0 && (
+            <View style={styles.milestones}>
+              {phase.milestones.map((m) => (
+                <View key={m.id} style={styles.milestoneRow}>
+                  <View
+                    style={[
+                      styles.dot,
+                      { backgroundColor: isActive ? colors.primary : colors.mutedForeground + "55" },
+                    ]}
+                  />
+                  <View style={styles.milestoneText}>
+                    <Text
+                      style={[
+                        styles.milestoneTitle,
+                        { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
+                      ]}
+                    >
+                      {m.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.milestoneDescription,
+                        { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
+                      ]}
+                    >
+                      {m.description}
+                    </Text>
+                    <View style={styles.weekTag}>
+                      <Feather name="calendar" size={11} color={colors.mutedForeground} />
+                      <Text
+                        style={[
+                          styles.weekTagText,
+                          { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
+                        ]}
+                      >
+                        Week {m.weekNumber}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
             </View>
-          </View>
-        ))}
-      </View>
+          )}
+        </Animated.View>
+      )}
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    padding: 18,
-    gap: 14,
+    padding: 16,
+    gap: 12,
   },
   header: {
     flexDirection: "row",
@@ -168,8 +211,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   indexBadge: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
@@ -183,11 +226,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   title: {
-    fontSize: 17,
+    fontSize: 16,
+    lineHeight: 21,
   },
   weeks: {
-    fontSize: 12.5,
-    letterSpacing: 0.4,
+    fontSize: 12,
+    letterSpacing: 0.3,
   },
   headerChips: {
     flexDirection: "row",
@@ -212,13 +256,16 @@ const styles = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 1.4,
   },
+  body: {
+    gap: 14,
+    paddingTop: 4,
+  },
   focus: {
     fontSize: 14.5,
     lineHeight: 21,
   },
   milestones: {
     gap: 12,
-    marginTop: 4,
   },
   milestoneRow: {
     flexDirection: "row",
