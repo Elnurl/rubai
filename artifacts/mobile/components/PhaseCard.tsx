@@ -138,7 +138,7 @@ export function PhaseCard({
             pressed && { opacity: 0.7 },
           ]}
         >
-          <View style={styles.headerText}>
+          <View style={styles.titleRow}>
             <Text
               style={[
                 styles.title,
@@ -149,80 +149,6 @@ export function PhaseCard({
             >
               {phase.title}
             </Text>
-            <Text
-              style={[
-                styles.weeks,
-                { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
-              ]}
-            >
-              Week {phase.startWeek} – Week {phase.endWeek}
-              {milestoneCount > 0
-                ? ` • ${milestoneCount} milestone${milestoneCount === 1 ? "" : "s"}`
-                : ""}
-            </Text>
-          </View>
-          <View style={styles.headerChips}>
-            {updated && (
-              <View
-                style={[
-                  styles.updatedChip,
-                  {
-                    borderColor: colors.accent,
-                    backgroundColor: colors.accent + "15",
-                  },
-                ]}
-              >
-                <Feather name="zap" size={10} color={colors.accent} />
-                <Text
-                  style={[
-                    styles.chipText,
-                    { color: colors.accent, fontFamily: "Inter_600SemiBold" },
-                  ]}
-                >
-                  UPDATED
-                </Text>
-              </View>
-            )}
-            {isActive && (
-              <View
-                style={[styles.activeChip, { backgroundColor: colors.primary }]}
-              >
-                <Text
-                  style={[
-                    styles.chipText,
-                    {
-                      color: colors.primaryForeground,
-                      fontFamily: "Inter_600SemiBold",
-                    },
-                  ]}
-                >
-                  NOW
-                </Text>
-              </View>
-            )}
-            {isCompleted && (
-              <View
-                style={[
-                  styles.doneChip,
-                  {
-                    borderColor: colors.primary,
-                    backgroundColor: colors.primary + "15",
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.chipText,
-                    {
-                      color: colors.primary,
-                      fontFamily: "Inter_600SemiBold",
-                    },
-                  ]}
-                >
-                  DONE
-                </Text>
-              </View>
-            )}
             <Animated.View style={chevronStyle}>
               <Feather
                 name="chevron-down"
@@ -230,6 +156,85 @@ export function PhaseCard({
                 color={colors.mutedForeground}
               />
             </Animated.View>
+          </View>
+          <View style={styles.metaRow}>
+            <Text
+              style={[
+                styles.weeks,
+                { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
+              ]}
+              numberOfLines={1}
+            >
+              Week {phase.startWeek} – Week {phase.endWeek}
+              {milestoneCount > 0
+                ? ` • ${milestoneCount} milestone${milestoneCount === 1 ? "" : "s"}`
+                : ""}
+            </Text>
+            {(updated || isActive || isCompleted) && (
+              <View style={styles.headerChips}>
+                {updated && (
+                  <View
+                    style={[
+                      styles.updatedChip,
+                      {
+                        borderColor: colors.accent,
+                        backgroundColor: colors.accent + "15",
+                      },
+                    ]}
+                  >
+                    <Feather name="zap" size={10} color={colors.accent} />
+                    <Text
+                      style={[
+                        styles.chipText,
+                        { color: colors.accent, fontFamily: "Inter_600SemiBold" },
+                      ]}
+                    >
+                      UPDATED
+                    </Text>
+                  </View>
+                )}
+                {isActive && (
+                  <View
+                    style={[styles.activeChip, { backgroundColor: colors.primary }]}
+                  >
+                    <Text
+                      style={[
+                        styles.chipText,
+                        {
+                          color: colors.primaryForeground,
+                          fontFamily: "Inter_600SemiBold",
+                        },
+                      ]}
+                    >
+                      NOW
+                    </Text>
+                  </View>
+                )}
+                {isCompleted && (
+                  <View
+                    style={[
+                      styles.doneChip,
+                      {
+                        borderColor: colors.primary,
+                        backgroundColor: colors.primary + "15",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.chipText,
+                        {
+                          color: colors.primary,
+                          fontFamily: "Inter_600SemiBold",
+                        },
+                      ]}
+                    >
+                      DONE
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         </Pressable>
 
@@ -350,26 +355,34 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   header: {
+    gap: 6,
+  },
+  titleRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 10,
   },
-  headerText: {
-    flex: 1,
-    gap: 2,
-  },
   title: {
+    flex: 1,
     fontSize: 16,
     lineHeight: 21,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
   },
   weeks: {
     fontSize: 12,
     letterSpacing: 0.3,
+    flexShrink: 1,
   },
   headerChips: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    marginLeft: "auto",
   },
   activeChip: {
     paddingHorizontal: 10,
