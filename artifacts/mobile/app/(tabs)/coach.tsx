@@ -1,4 +1,4 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -43,6 +43,7 @@ import {
   type ProposedCoachAction,
 } from "@workspace/api-client-react";
 import { streamCoachReply } from "@/lib/coachStream";
+import type { CoachMemory } from "@workspace/api-client-react";
 import type { ChatSession } from "@/types/atlas";
 
 const COLD_START_SUGGESTIONS = [
@@ -114,7 +115,6 @@ export default function CoachScreen() {
   const [lastProposedAction, setLastProposedAction] =
     useState<ProposedCoachAction | null>(null);
   const [applyingAction, setApplyingAction] = useState(false);
-  const [memoryOpen, setMemoryOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modelChoice, setModelChoice] = useState<ModelChoice>("smart");
   const [autoSpeak, setAutoSpeak] = useState(false);
@@ -583,7 +583,6 @@ export default function CoachScreen() {
 
   const onForgetMemory = async () => {
     await setActiveCoachMemory(null);
-    setMemoryOpen(false);
   };
 
   // ---- Voice input flow ----
@@ -843,7 +842,6 @@ export default function CoachScreen() {
     );
   }
 
-  const memoryFacts = activeCoachMemory?.facts ?? [];
   const isRecording = recorder.state === "recording";
   const recordingSeconds = Math.floor(recorder.durationMs / 1000);
 
@@ -878,97 +876,13 @@ export default function CoachScreen() {
           </View>
           <View style={styles.headerChipRow}>
             <ActiveGoalChip />
-            <WorkingOnInfoButton headline={activeRoadmap.headline} />
+            <WorkingOnInfoButton
+              headline={activeRoadmap.headline}
+              memory={activeCoachMemory}
+              onForgetMemory={onForgetMemory}
+            />
           </View>
         </View>
-
-        {activeCoachMemory ? (
-          <Pressable
-            onPress={() => setMemoryOpen((v) => !v)}
-            style={[
-              styles.memoryBanner,
-              { backgroundColor: colors.card, borderColor: colors.border },
-            ]}
-            testID="memory-banner"
-          >
-            <View style={styles.memoryBannerHeader}>
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={[
-                    styles.memoryEyebrow,
-                    { color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
-                  ]}
-                >
-                  WHAT RUBAI REMEMBERS
-                </Text>
-                <Text
-                  numberOfLines={memoryOpen ? undefined : 2}
-                  style={[
-                    styles.memorySummary,
-                    { color: colors.foreground, fontFamily: "Inter_500Medium" },
-                  ]}
-                >
-                  {activeCoachMemory.summary}
-                </Text>
-              </View>
-              <Feather
-                name={memoryOpen ? "chevron-up" : "chevron-down"}
-                size={18}
-                color={colors.mutedForeground}
-              />
-            </View>
-            {memoryOpen ? (
-              <View style={styles.memoryExpanded}>
-                {memoryFacts.length > 0 ? (
-                  <View style={styles.factsRow}>
-                    {memoryFacts.map((f) => (
-                      <View
-                        key={f}
-                        style={[
-                          styles.factPill,
-                          { backgroundColor: colors.background, borderColor: colors.border },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.factText,
-                            { color: colors.foreground, fontFamily: "Inter_500Medium" },
-                          ]}
-                        >
-                          {f}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : (
-                  <Text
-                    style={[
-                      styles.factText,
-                      { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-                    ]}
-                  >
-                    No specific facts saved yet.
-                  </Text>
-                )}
-                <Pressable
-                  onPress={onForgetMemory}
-                  style={styles.forgetButton}
-                  testID="forget-memory"
-                >
-                  <Feather name="trash-2" size={14} color={colors.destructive} />
-                  <Text
-                    style={[
-                      styles.forgetText,
-                      { color: colors.destructive, fontFamily: "Inter_600SemiBold" },
-                    ]}
-                  >
-                    Forget everything
-                  </Text>
-                </Pressable>
-              </View>
-            ) : null}
-          </Pressable>
-        ) : null}
       </View>
 
       <FlatList
@@ -1560,16 +1474,25 @@ async function transcribeClip(clip: RecordedClip): Promise<string> {
 // the current roadmap headline on tap. Replaces the previous always-visible
 // "Working on: …" subtitle so the header reads cleaner while keeping the
 // information one tap away.
-function WorkingOnInfoButton({ headline }: { headline: string }) {
+function WorkingOnInfoButton({
+  headline,
+  memory,
+  onForgetMemory,
+}: {
+  headline: string;
+  memory: CoachMemory | null;
+  onForgetMemory: () => void | Promise<void>;
+}) {
   const colors = useColors();
   const [open, setOpen] = useState(false);
+  const facts = memory?.facts ?? [];
   return (
     <>
       <Pressable
         onPress={() => setOpen(true)}
         hitSlop={10}
         accessibilityRole="button"
-        accessibilityLabel="Working on"
+        accessibilityLabel="Working on and remembered context"
         style={({ pressed }) => [
           infoStyles.btn,
           {
@@ -1578,6 +1501,7 @@ function WorkingOnInfoButton({ headline }: { headline: string }) {
             opacity: pressed ? 0.7 : 1,
           },
         ]}
+        testID="info-button"
       >
         <Feather name="info" size={13} color={colors.mutedForeground} />
       </Pressable>
@@ -1624,6 +1548,96 @@ function WorkingOnInfoButton({ headline }: { headline: string }) {
             >
               {headline}
             </Text>
+
+            {memory ? (
+              <>
+                <View
+                  style={[
+                    infoStyles.divider,
+                    { backgroundColor: colors.border },
+                  ]}
+                />
+                <Text
+                  style={[
+                    infoStyles.eyebrow,
+                    {
+                      color: colors.mutedForeground,
+                      fontFamily: "Inter_600SemiBold",
+                    },
+                  ]}
+                >
+                  WHAT RUBAI REMEMBERS
+                </Text>
+                <Text
+                  style={[
+                    infoStyles.body,
+                    {
+                      color: colors.foreground,
+                      fontFamily: "Inter_500Medium",
+                    },
+                  ]}
+                >
+                  {memory.summary}
+                </Text>
+                {facts.length > 0 ? (
+                  <ScrollView
+                    style={infoStyles.factsScroll}
+                    contentContainerStyle={infoStyles.factsList}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    {facts.map((f: string) => (
+                      <View
+                        key={f}
+                        style={[
+                          infoStyles.factPill,
+                          {
+                            backgroundColor: colors.background,
+                            borderColor: colors.border,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            infoStyles.factText,
+                            {
+                              color: colors.foreground,
+                              fontFamily: "Inter_500Medium",
+                            },
+                          ]}
+                        >
+                          {f}
+                        </Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                ) : null}
+                <Pressable
+                  onPress={async () => {
+                    await onForgetMemory();
+                    setOpen(false);
+                  }}
+                  style={infoStyles.forgetBtn}
+                  testID="forget-memory"
+                >
+                  <Feather
+                    name="trash-2"
+                    size={14}
+                    color={colors.destructive}
+                  />
+                  <Text
+                    style={[
+                      infoStyles.forgetText,
+                      {
+                        color: colors.destructive,
+                        fontFamily: "Inter_600SemiBold",
+                      },
+                    ]}
+                  >
+                    Forget everything
+                  </Text>
+                </Pressable>
+              </>
+            ) : null}
           </Pressable>
         </Pressable>
       </Modal>
@@ -1660,6 +1674,44 @@ const infoStyles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
   },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: 12,
+    marginHorizontal: -18,
+  },
+  factsScroll: {
+    marginTop: 8,
+    maxHeight: 240,
+  },
+  factsList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  factPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    maxWidth: "100%",
+    flexShrink: 1,
+  },
+  factText: {
+    fontSize: 12,
+    flexShrink: 1,
+    flexWrap: "wrap",
+  },
+  forgetBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    paddingVertical: 6,
+    marginTop: 8,
+  },
+  forgetText: {
+    fontSize: 12.5,
+  },
 });
 
 function formatTime(seconds: number): string {
@@ -1692,59 +1744,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
     justifyContent: "center",
-  },
-  memoryBanner: {
-    marginTop: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderRadius: 14,
-  },
-  memoryBannerHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  memoryEyebrow: {
-    fontSize: 10.5,
-    letterSpacing: 0.8,
-    marginBottom: 4,
-  },
-  memorySummary: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  memoryExpanded: {
-    marginTop: 10,
-    gap: 10,
-  },
-  factsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  factPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-    maxWidth: "100%",
-    flexShrink: 1,
-  },
-  factText: {
-    fontSize: 12,
-    flexShrink: 1,
-    flexWrap: "wrap",
-  },
-  forgetButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    gap: 6,
-    paddingVertical: 4,
-  },
-  forgetText: {
-    fontSize: 12.5,
   },
   typing: {
     flexDirection: "row",
@@ -1862,12 +1861,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     gap: 6,
     minHeight: 44,
-  },
-  iconButton: {
-    width: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
   },
   sparkBadge: {
     width: 32,

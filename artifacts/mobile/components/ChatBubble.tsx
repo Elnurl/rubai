@@ -33,11 +33,13 @@ export function ChatBubble({ role, content, onSpeak, isSpeaking }: Props) {
       )}
       <View
         style={[
-          styles.bubble,
-          {
-            backgroundColor: isUser ? colors.primary : colors.card,
-            borderColor: isUser ? colors.primary : colors.border,
-          },
+          isUser ? styles.userBubble : styles.assistantBubble,
+          isUser
+            ? {
+                backgroundColor: colors.primary,
+                borderColor: colors.primary,
+              }
+            : null,
         ]}
       >
         <Text
@@ -85,12 +87,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 8,
   },
-  bubble: {
+  userBubble: {
     maxWidth: "78%",
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 18,
+  },
+  // ChatGPT-style: assistant replies render as plain text — no border, no
+  // background fill, no rounded card. Only the BrandDot avatar on the left
+  // identifies the speaker. Padding is minimal so the text aligns flush.
+  assistantBubble: {
+    flex: 1,
+    paddingVertical: 4,
+    paddingRight: 8,
   },
   text: {
     fontSize: 15,
