@@ -198,10 +198,10 @@ export function ReflectionSheet({
       return;
     }
     Alert.alert(
-      "Attach a photo",
-      "Snap a photo or pick one from your library.",
+      "Add media",
+      "Snap a photo with the camera or pick one from your library.",
       [
-        { text: "Camera", onPress: () => void pickFromCamera() },
+        { text: "Take photo", onPress: () => void pickFromCamera() },
         { text: "Photo Library", onPress: () => void pickFromLibrary() },
         { text: "Cancel", style: "cancel" },
       ],
@@ -482,7 +482,7 @@ export function ReflectionSheet({
                 testID="reflection-attach-image"
               >
                 <Feather
-                  name="image"
+                  name={pendingImage ? "image" : "plus"}
                   size={14}
                   color={pendingImage ? colors.primary : colors.mutedForeground}
                 />
@@ -495,7 +495,7 @@ export function ReflectionSheet({
                     },
                   ]}
                 >
-                  {pendingImage ? "Photo attached" : "Add photo"}
+                  {pendingImage ? "Photo attached" : "Add media"}
                 </Text>
               </Pressable>
 
