@@ -144,6 +144,8 @@ export function PhaseCard({
                 styles.title,
                 { color: colors.foreground, fontFamily: "Inter_700Bold" },
               ]}
+              numberOfLines={2}
+              ellipsizeMode="tail"
             >
               {phase.title}
             </Text>
@@ -235,8 +237,16 @@ export function PhaseCard({
           <Animated.View entering={FadeIn.duration(180)} style={styles.body}>
             <Text
               style={[
+                styles.fullTitle,
+                { color: colors.foreground, fontFamily: "Inter_700Bold" },
+              ]}
+            >
+              {phase.title}
+            </Text>
+            <Text
+              style={[
                 styles.focus,
-                { color: colors.foreground, fontFamily: "Inter_400Regular" },
+                { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
               ]}
             >
               {phase.focus}
@@ -394,12 +404,18 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
   },
   body: {
-    gap: 14,
+    gap: 10,
     paddingTop: 4,
   },
+  fullTitle: {
+    fontSize: 16,
+    lineHeight: 22,
+    letterSpacing: -0.2,
+  },
   focus: {
-    fontSize: 14.5,
-    lineHeight: 21,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 4,
   },
   milestones: {
     gap: 12,
