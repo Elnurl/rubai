@@ -1,9 +1,38 @@
 import type { Request } from "express";
-
-import { openai } from "@workspace/integrations-openai-ai-server";
+import OpenAI from "openai";
 
 import { recordUsage } from "./aiUsage";
 import { logger } from "./logger";
+
+/**
+ * Embeddings need a DIRECT OpenAI client, not the Replit AI Integrations
+ * proxy. The proxy explicitly does not support `POST /embeddings` (it
+ * returns `{"code":"INVALID_ENDPOINT"}`). Chat/vision still flow through
+ * the proxy via `@workspace/integrations-openai-ai-server`; only this
+ * module bypasses it so RAG indexing actually works.
+ *
+ * Lazy-initialised so a missing key only logs a warning the first time
+ * embedTexts is called instead of crashing the entire api-server boot.
+ */
+let directOpenAI: OpenAI | null = null;
+let warnedMissingKey = false;
+function getEmbeddingsClient(): OpenAI | null {
+  if (directOpenAI) return directOpenAI;
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) {
+    if (!warnedMissingKey) {
+      warnedMissingKey = true;
+      logger.warn(
+        "OPENAI_API_KEY missing — RAG indexing/retrieval disabled. " +
+          "Add a direct OpenAI key (the AI Integrations proxy does not " +
+          "support /embeddings).",
+      );
+    }
+    return null;
+  }
+  directOpenAI = new OpenAI({ apiKey: key });
+  return directOpenAI;
+}
 
 /**
  * OpenAI embedding model used for the RAG corpus.
@@ -49,6 +78,8 @@ export async function embedTexts(
 ): Promise<Array<number[] | null>> {
   const out: Array<number[] | null> = new Array(texts.length).fill(null);
   if (texts.length === 0) return out;
+  const client = getEmbeddingsClient();
+  if (!client) return out; // No key — leave every slot null; callers skip.
   const userId = req.userId ?? null;
   const route = `${req.baseUrl ?? ""}${req.path ?? ""}` || "embeddings";
 
@@ -57,7 +88,7 @@ export async function embedTexts(
     const inputs = slice.map((t) => clampForEmbedding(t));
     const t0 = Date.now();
     try {
-      const resp = await openai.embeddings.create({
+      const resp = await client.embeddings.create({
         model: EMBEDDING_MODEL,
         input: inputs,
       });
