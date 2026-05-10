@@ -34,11 +34,12 @@ export function PhaseCard({
   const colors = useColors();
   const isActive = status === "active";
   const isCompleted = status === "completed";
-  // Active phase is open by default — that's the one the user actually
-  // needs to read right now. Everything else is collapsed to keep the
-  // roadmap scannable instead of an overwhelming wall of text.
-  const [expanded, setExpanded] = useState(isActive);
   const milestoneCount = phase.milestones.length;
+  const hasMilestones = milestoneCount > 0;
+  // Active phase opens its milestones by default. Other phases stay
+  // collapsed so the timeline reads as a quick scannable list — matching
+  // the design reference.
+  const [expanded, setExpanded] = useState(isActive);
 
   const chevronRotation = useSharedValue(isActive ? 180 : 0);
   const chevronStyle = useAnimatedStyle(() => ({
@@ -46,68 +47,52 @@ export function PhaseCard({
   }));
 
   const toggle = () => {
+    if (!hasMilestones) return;
     const next = !expanded;
     setExpanded(next);
     chevronRotation.value = withTiming(next ? 180 : 0, { duration: 180 });
   };
 
-  // Marker visual states
-  const markerBg = isActive
+  // Tiny dot on the rail — bright primary for active, muted ring for the
+  // rest, filled primary for completed.
+  const dotBg = isActive
     ? colors.primary
     : isCompleted
-      ? colors.primary + "22"
+      ? colors.primary
       : colors.card;
-  const markerBorder = isActive
-    ? colors.primary
-    : isCompleted
-      ? colors.primary
-      : colors.border;
-  const markerFg = isActive
-    ? colors.primaryForeground
-    : isCompleted
-      ? colors.primary
-      : colors.mutedForeground;
+  const dotBorder = isActive || isCompleted ? colors.primary : colors.border;
 
-  // Connector line: solid primary if the phase ABOVE this connector is
-  // completed (i.e. progress has flowed through it), muted otherwise.
   const connectorColor = isCompleted ? colors.primary : colors.border;
+
+  // "Week N" if single-week phase, "Week N – M" otherwise.
+  const weekLabel =
+    phase.startWeek === phase.endWeek
+      ? `Week ${phase.startWeek}`
+      : `Week ${phase.startWeek}–${phase.endWeek}`;
 
   return (
     <Animated.View
       entering={FadeInDown.delay(index * 60).duration(320)}
       style={styles.row}
     >
-      {/* Left rail — marker on top, line down to next phase */}
+      {/* Left rail — small dot, line down to next phase */}
       <View style={styles.rail}>
         <View
           style={[
-            styles.marker,
+            styles.dot,
             {
-              backgroundColor: markerBg,
-              borderColor: markerBorder,
+              backgroundColor: dotBg,
+              borderColor: dotBorder,
             },
             isActive && {
               shadowColor: colors.primary,
-              shadowOpacity: 0.35,
+              shadowOpacity: 0.45,
               shadowRadius: 6,
               shadowOffset: { width: 0, height: 0 },
               elevation: 4,
             },
           ]}
-        >
-          {isCompleted ? (
-            <Feather name="check" size={16} color={markerFg} />
-          ) : (
-            <Text
-              style={[
-                styles.markerText,
-                { color: markerFg, fontFamily: "Inter_700Bold" },
-              ]}
-            >
-              {String(index + 1).padStart(2, "0")}
-            </Text>
-          )}
-        </View>
+        />
         {!isLast && (
           <View
             style={[styles.connector, { backgroundColor: connectorColor }]}
@@ -123,7 +108,7 @@ export function PhaseCard({
             backgroundColor: colors.card,
             borderColor: isActive ? colors.primary : colors.border,
             borderRadius: colors.radius,
-            borderWidth: isActive ? 2 : 1,
+            borderWidth: isActive ? 1.5 : 1,
           },
         ]}
       >
@@ -131,11 +116,11 @@ export function PhaseCard({
           onPress={toggle}
           accessibilityRole="button"
           accessibilityState={{ expanded }}
-          accessibilityLabel={`${phase.title}, ${expanded ? "collapse" : "expand"}`}
+          accessibilityLabel={`${weekLabel} ${phase.title}, ${expanded ? "collapse" : "expand"}`}
           android_ripple={{ color: colors.muted }}
           style={({ pressed }) => [
             styles.header,
-            pressed && { opacity: 0.7 },
+            pressed && hasMilestones && { opacity: 0.7 },
           ]}
         >
           <View style={styles.titleRow}>
@@ -147,168 +132,162 @@ export function PhaseCard({
               numberOfLines={expanded ? undefined : 2}
               ellipsizeMode="tail"
             >
+              <Text style={{ color: colors.foreground }}>
+                {weekLabel}
+              </Text>
+              <Text style={{ color: colors.mutedForeground }}> · </Text>
               {phase.title}
             </Text>
-            <Animated.View style={chevronStyle}>
-              <Feather
-                name="chevron-down"
-                size={20}
-                color={colors.mutedForeground}
-              />
-            </Animated.View>
-          </View>
-          <View style={styles.metaRow}>
-            <Text
-              style={[
-                styles.weeks,
-                { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
-              ]}
-              numberOfLines={1}
-            >
-              Week {phase.startWeek} – Week {phase.endWeek}
-              {milestoneCount > 0
-                ? ` • ${milestoneCount} milestone${milestoneCount === 1 ? "" : "s"}`
-                : ""}
-            </Text>
-            {(updated || isActive || isCompleted) && (
-              <View style={styles.headerChips}>
-                {updated && (
-                  <View
+            <View style={styles.headerChips}>
+              {updated && (
+                <View
+                  style={[
+                    styles.updatedChip,
+                    {
+                      borderColor: colors.accent,
+                      backgroundColor: colors.accent + "15",
+                    },
+                  ]}
+                >
+                  <Feather name="zap" size={10} color={colors.accent} />
+                  <Text
                     style={[
-                      styles.updatedChip,
+                      styles.chipText,
+                      { color: colors.accent, fontFamily: "Inter_600SemiBold" },
+                    ]}
+                  >
+                    UPDATED
+                  </Text>
+                </View>
+              )}
+              {isActive && (
+                <View
+                  style={[
+                    styles.activeChip,
+                    { backgroundColor: colors.primary },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
                       {
-                        borderColor: colors.accent,
-                        backgroundColor: colors.accent + "15",
+                        color: colors.primaryForeground,
+                        fontFamily: "Inter_600SemiBold",
                       },
                     ]}
                   >
-                    <Feather name="zap" size={10} color={colors.accent} />
-                    <Text
-                      style={[
-                        styles.chipText,
-                        { color: colors.accent, fontFamily: "Inter_600SemiBold" },
-                      ]}
-                    >
-                      UPDATED
-                    </Text>
-                  </View>
-                )}
-                {isActive && (
-                  <View
-                    style={[styles.activeChip, { backgroundColor: colors.primary }]}
-                  >
-                    <Text
-                      style={[
-                        styles.chipText,
-                        {
-                          color: colors.primaryForeground,
-                          fontFamily: "Inter_600SemiBold",
-                        },
-                      ]}
-                    >
-                      NOW
-                    </Text>
-                  </View>
-                )}
-                {isCompleted && (
-                  <View
+                    NOW
+                  </Text>
+                </View>
+              )}
+              {isCompleted && (
+                <View
+                  style={[
+                    styles.doneChip,
+                    {
+                      borderColor: colors.primary,
+                      backgroundColor: colors.primary + "15",
+                    },
+                  ]}
+                >
+                  <Text
                     style={[
-                      styles.doneChip,
+                      styles.chipText,
                       {
-                        borderColor: colors.primary,
-                        backgroundColor: colors.primary + "15",
+                        color: colors.primary,
+                        fontFamily: "Inter_600SemiBold",
                       },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.chipText,
-                        {
-                          color: colors.primary,
-                          fontFamily: "Inter_600SemiBold",
-                        },
-                      ]}
-                    >
-                      DONE
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
+                    DONE
+                  </Text>
+                </View>
+              )}
+              {hasMilestones && (
+                <Animated.View style={chevronStyle}>
+                  <Feather
+                    name="chevron-down"
+                    size={18}
+                    color={colors.mutedForeground}
+                  />
+                </Animated.View>
+              )}
+            </View>
           </View>
-        </Pressable>
 
-        {expanded && (
-          <Animated.View entering={FadeIn.duration(180)} style={styles.body}>
+          {phase.focus ? (
             <Text
               style={[
                 styles.focus,
-                { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
+                {
+                  color: colors.mutedForeground,
+                  fontFamily: "Inter_400Regular",
+                },
               ]}
             >
               {phase.focus}
             </Text>
+          ) : null}
+        </Pressable>
 
-            {milestoneCount > 0 && (
-              <View style={styles.milestones}>
-                {phase.milestones.map((m) => (
-                  <View key={m.id} style={styles.milestoneRow}>
-                    <View
+        {expanded && hasMilestones && (
+          <Animated.View entering={FadeIn.duration(180)} style={styles.body}>
+            {phase.milestones.map((m) => (
+              <View key={m.id} style={styles.milestoneRow}>
+                <View
+                  style={[
+                    styles.milestoneDot,
+                    {
+                      backgroundColor: isActive
+                        ? colors.primary
+                        : colors.mutedForeground + "55",
+                    },
+                  ]}
+                />
+                <View style={styles.milestoneText}>
+                  <Text
+                    style={[
+                      styles.milestoneTitle,
+                      {
+                        color: colors.foreground,
+                        fontFamily: "Inter_600SemiBold",
+                      },
+                    ]}
+                  >
+                    {m.title}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.milestoneDescription,
+                      {
+                        color: colors.mutedForeground,
+                        fontFamily: "Inter_400Regular",
+                      },
+                    ]}
+                  >
+                    {m.description}
+                  </Text>
+                  <View style={styles.weekTag}>
+                    <Feather
+                      name="calendar"
+                      size={11}
+                      color={colors.mutedForeground}
+                    />
+                    <Text
                       style={[
-                        styles.dot,
+                        styles.weekTagText,
                         {
-                          backgroundColor: isActive
-                            ? colors.primary
-                            : colors.mutedForeground + "55",
+                          color: colors.mutedForeground,
+                          fontFamily: "Inter_500Medium",
                         },
                       ]}
-                    />
-                    <View style={styles.milestoneText}>
-                      <Text
-                        style={[
-                          styles.milestoneTitle,
-                          {
-                            color: colors.foreground,
-                            fontFamily: "Inter_600SemiBold",
-                          },
-                        ]}
-                      >
-                        {m.title}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.milestoneDescription,
-                          {
-                            color: colors.mutedForeground,
-                            fontFamily: "Inter_400Regular",
-                          },
-                        ]}
-                      >
-                        {m.description}
-                      </Text>
-                      <View style={styles.weekTag}>
-                        <Feather
-                          name="calendar"
-                          size={11}
-                          color={colors.mutedForeground}
-                        />
-                        <Text
-                          style={[
-                            styles.weekTagText,
-                            {
-                              color: colors.mutedForeground,
-                              fontFamily: "Inter_500Medium",
-                            },
-                          ]}
-                        >
-                          Week {m.weekNumber}
-                        </Text>
-                      </View>
-                    </View>
+                    >
+                      Week {m.weekNumber}
+                    </Text>
                   </View>
-                ))}
+                </View>
               </View>
-            )}
+            ))}
           </Animated.View>
         )}
       </Animated.View>
@@ -316,8 +295,8 @@ export function PhaseCard({
   );
 }
 
-const MARKER_SIZE = 36;
-const RAIL_WIDTH = 44;
+const DOT_SIZE = 12;
+const RAIL_WIDTH = 28;
 
 const styles = StyleSheet.create({
   row: {
@@ -327,32 +306,27 @@ const styles = StyleSheet.create({
   rail: {
     width: RAIL_WIDTH,
     alignItems: "center",
-    paddingTop: 14,
+    paddingTop: 18,
   },
-  marker: {
-    width: MARKER_SIZE,
-    height: MARKER_SIZE,
-    borderRadius: MARKER_SIZE / 2,
+  dot: {
+    width: DOT_SIZE,
+    height: DOT_SIZE,
+    borderRadius: DOT_SIZE / 2,
     borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  markerText: {
-    fontSize: 12,
-    letterSpacing: 1,
   },
   connector: {
     width: 2,
     flex: 1,
-    marginTop: 6,
+    marginTop: 4,
     marginBottom: -16,
     borderRadius: 1,
   },
   card: {
     flex: 1,
-    padding: 14,
-    gap: 12,
-    marginLeft: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+    marginLeft: 2,
   },
   header: {
     gap: 6,
@@ -364,34 +338,24 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    fontSize: 16,
-    lineHeight: 21,
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  weeks: {
-    fontSize: 12,
-    letterSpacing: 0.3,
-    flexShrink: 1,
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: -0.1,
   },
   headerChips: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginLeft: "auto",
+    marginTop: 1,
   },
   activeChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
     borderRadius: 999,
   },
   doneChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+    paddingHorizontal: 9,
+    paddingVertical: 2.5,
     borderRadius: 999,
     borderWidth: 1,
   },
@@ -399,40 +363,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     borderRadius: 999,
     borderWidth: 1,
   },
   chipText: {
-    fontSize: 10,
-    letterSpacing: 1.4,
-  },
-  body: {
-    gap: 10,
-    paddingTop: 4,
-  },
-  fullTitle: {
-    fontSize: 16,
-    lineHeight: 22,
-    letterSpacing: -0.2,
+    fontSize: 9.5,
+    letterSpacing: 1.2,
   },
   focus: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 4,
+    fontSize: 13.5,
+    lineHeight: 19,
   },
-  milestones: {
+  body: {
     gap: 12,
+    paddingTop: 6,
   },
   milestoneRow: {
     flexDirection: "row",
     gap: 12,
     alignItems: "flex-start",
   },
-  dot: {
-    width: 8,
-    height: 8,
+  milestoneDot: {
+    width: 7,
+    height: 7,
     borderRadius: 4,
     marginTop: 7,
   },
@@ -441,7 +396,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   milestoneTitle: {
-    fontSize: 14.5,
+    fontSize: 14,
   },
   milestoneDescription: {
     fontSize: 12.5,
