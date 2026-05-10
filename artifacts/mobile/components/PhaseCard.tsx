@@ -144,7 +144,7 @@ export function PhaseCard({
                 styles.title,
                 { color: colors.foreground, fontFamily: "Inter_700Bold" },
               ]}
-              numberOfLines={2}
+              numberOfLines={expanded ? undefined : 2}
               ellipsizeMode="tail"
             >
               {phase.title}
@@ -235,14 +235,6 @@ export function PhaseCard({
 
         {expanded && (
           <Animated.View entering={FadeIn.duration(180)} style={styles.body}>
-            <Text
-              style={[
-                styles.fullTitle,
-                { color: colors.foreground, fontFamily: "Inter_700Bold" },
-              ]}
-            >
-              {phase.title}
-            </Text>
             <Text
               style={[
                 styles.focus,
