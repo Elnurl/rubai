@@ -144,7 +144,6 @@ export function PhaseCard({
                 styles.title,
                 { color: colors.foreground, fontFamily: "Inter_700Bold" },
               ]}
-              numberOfLines={2}
             >
               {phase.title}
             </Text>
