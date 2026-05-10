@@ -500,6 +500,10 @@ export interface ReflectionEntry {
   completed: boolean;
   reasonTag?: ReflectionReasonTag;
   note?: string;
+  /** Whisper-transcribed text from a voice note attached to this reflection. Audio bytes are not stored. */
+  noteAudioTranscript?: string;
+  /** One-paragraph vision analysis produced once on submit. Other AI steps consume this text instead of the raw image. */
+  noteImageAnalysis?: string;
   reflectedAt: string;
 }
 
@@ -629,6 +633,22 @@ export interface AdaptResponse {
   difficultyAdjustment: AdaptResponseDifficultyAdjustment;
   adjustments: string[];
   encouragement: string;
+}
+
+export interface AnalyzeReflectionImageRequest {
+  /** Base64-encoded image bytes (no data: prefix). */
+  imageBase64: string;
+  /** One of image/jpeg, image/png, image/webp, image/gif. */
+  imageMimeType: string;
+  taskTitle: string;
+  completed: boolean;
+  reasonTag?: ReflectionReasonTag;
+  note?: string;
+}
+
+export interface AnalyzeReflectionImageResponse {
+  /** Plain-prose paragraph the AI sees on every downstream reflection-aware call. */
+  analysis: string;
 }
 
 export type BehavioralProfileRequestRecentHistoryItem = {

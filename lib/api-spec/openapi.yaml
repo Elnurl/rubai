@@ -252,6 +252,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/TranscribeResponse"
 
+  /atlas/analyze-reflection-image:
+    post:
+      operationId: atlasAnalyzeReflectionImage
+      tags: [atlas]
+      summary: Run a one-shot vision pass on a reflection photo and return a short text analysis stored on the reflection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeReflectionImageRequest"
+      responses:
+        "200":
+          description: Plain-prose analysis used by all downstream reflection-aware AI calls
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyzeReflectionImageResponse"
+
   /atlas/adapt:
     post:
       operationId: atlasAdaptPlan
@@ -1466,9 +1485,42 @@ components:
           $ref: "#/components/schemas/ReflectionReasonTag"
         note:
           type: string
+        noteAudioTranscript:
+          type: string
+          description: Whisper-transcribed text from a voice note attached to this reflection. Audio bytes are not stored.
+        noteImageAnalysis:
+          type: string
+          description: One-paragraph vision analysis produced once on submit. Other AI steps consume this text instead of the raw image.
         reflectedAt:
           type: string
       required: [taskId, taskTitle, date, completed, reflectedAt]
+
+    AnalyzeReflectionImageRequest:
+      type: object
+      properties:
+        imageBase64:
+          type: string
+          description: "Base64-encoded image bytes (no data: prefix)."
+        imageMimeType:
+          type: string
+          description: One of image/jpeg, image/png, image/webp, image/gif.
+        taskTitle:
+          type: string
+        completed:
+          type: boolean
+        reasonTag:
+          $ref: "#/components/schemas/ReflectionReasonTag"
+        note:
+          type: string
+      required: [imageBase64, imageMimeType, taskTitle, completed]
+
+    AnalyzeReflectionImageResponse:
+      type: object
+      properties:
+        analysis:
+          type: string
+          description: Plain-prose paragraph the AI sees on every downstream reflection-aware call.
+      required: [analysis]
 
     BehavioralProfileRequest:
       type: object

@@ -14,5 +14,9 @@ export interface ReflectionEntry {
   completed: boolean;
   reasonTag?: ReflectionReasonTag;
   note?: string;
+  /** Whisper-transcribed text from a voice note attached to this reflection. Audio bytes are not stored. */
+  noteAudioTranscript?: string;
+  /** One-paragraph vision analysis produced once on submit. Other AI steps consume this text instead of the raw image. */
+  noteImageAnalysis?: string;
   reflectedAt: string;
 }

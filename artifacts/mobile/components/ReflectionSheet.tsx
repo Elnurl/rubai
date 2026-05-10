@@ -1,7 +1,12 @@
 import { Feather } from "@expo/vector-icons";
-import React, { useEffect, useMemo, useState } from "react";
+import * as ImagePicker from "expo-image-picker";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,7 +18,12 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
-import type { ReflectionEntry } from "@workspace/api-client-react";
+import { useVoiceRecorder, type RecordedClip } from "@/hooks/useVoiceRecorder";
+import {
+  customFetch,
+  useAtlasAnalyzeReflectionImage,
+  type ReflectionEntry,
+} from "@workspace/api-client-react";
 
 type ReasonOption = {
   value: NonNullable<ReflectionEntry["reasonTag"]>;
@@ -51,6 +61,36 @@ type Props = {
   onSubmit: (entry: ReflectionEntry) => void;
 };
 
+type PendingImage = {
+  base64: string;
+  mimeType: string;
+  previewUri: string;
+};
+
+// Whisper round-trip. Mirrors the helper in app/(tabs)/coach.tsx but kept
+// inline here so reflections don't depend on the coach module.
+async function transcribeClip(clip: RecordedClip): Promise<string> {
+  const form = new FormData();
+  if (clip.kind === "web-blob") {
+    form.append("audio", clip.blob, clip.filename);
+  } else {
+    form.append(
+      "audio",
+      {
+        uri: clip.uri,
+        name: clip.filename,
+        type: clip.mimeType,
+      } as unknown as Blob,
+    );
+  }
+  const data = await customFetch<{ text?: string }>("/api/atlas/transcribe", {
+    method: "POST",
+    body: form,
+    responseType: "json",
+  });
+  return (data.text ?? "").trim();
+}
+
 export function ReflectionSheet({
   visible,
   taskId,
@@ -66,18 +106,172 @@ export function ReflectionSheet({
   const insets = useSafeAreaInsets();
   const [reasonTag, setReasonTag] = useState<ReflectionEntry["reasonTag"]>(initialReasonTag);
   const [note, setNote] = useState(initialNote ?? "");
+  const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
+  const [voiceTranscript, setVoiceTranscript] = useState<string>("");
+  const [transcribing, setTranscribing] = useState(false);
+  const recorder = useVoiceRecorder();
+  const mountedRef = useRef(true);
+
+  const analyzeImage = useAtlasAnalyzeReflectionImage();
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Reset state when the sheet is reopened for a different task / day.
   useEffect(() => {
     if (visible) {
       setReasonTag(initialReasonTag);
       setNote(initialNote ?? "");
+      setPendingImage(null);
+      setVoiceTranscript("");
+      setTranscribing(false);
     }
   }, [visible, taskId, date, initialReasonTag, initialNote]);
 
   const tags = useMemo(() => (completed ? COMPLETED_TAGS : SKIPPED_TAGS), [completed]);
 
-  const handleSave = () => {
+  const handlePickedAsset = useCallback(
+    (asset: ImagePicker.ImagePickerAsset) => {
+      if (!asset.base64) return;
+      setPendingImage({
+        base64: asset.base64,
+        mimeType: asset.mimeType || "image/jpeg",
+        previewUri: asset.uri,
+      });
+    },
+    [],
+  );
+
+  const pickFromLibrary = useCallback(async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        if (Platform.OS !== "web") {
+          Alert.alert("Photos", "Allow photo access to attach an image.");
+        }
+        return;
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.6,
+        allowsMultipleSelection: false,
+        base64: true,
+      });
+      if (res.canceled || !res.assets?.[0]) return;
+      handlePickedAsset(res.assets[0]);
+    } catch {
+      // ignore — picker errors are usually permission cancellations
+    }
+  }, [handlePickedAsset]);
+
+  const pickFromCamera = useCallback(async () => {
+    if (Platform.OS === "web") {
+      await pickFromLibrary();
+      return;
+    }
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Camera", "Allow camera access to snap a photo.");
+        return;
+      }
+      const res = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        quality: 0.6,
+        allowsEditing: false,
+        base64: true,
+      });
+      if (res.canceled || !res.assets?.[0]) return;
+      handlePickedAsset(res.assets[0]);
+    } catch {
+      // ignore
+    }
+  }, [handlePickedAsset, pickFromLibrary]);
+
+  const onAttachImagePress = useCallback(() => {
+    if (Platform.OS === "web") {
+      void pickFromLibrary();
+      return;
+    }
+    Alert.alert(
+      "Attach a photo",
+      "Snap a photo or pick one from your library.",
+      [
+        { text: "Camera", onPress: () => void pickFromCamera() },
+        { text: "Photo Library", onPress: () => void pickFromLibrary() },
+        { text: "Cancel", style: "cancel" },
+      ],
+      { cancelable: true },
+    );
+  }, [pickFromCamera, pickFromLibrary]);
+
+  const onMicPress = useCallback(async () => {
+    if (recorder.state === "recording") {
+      try {
+        const clip = await recorder.stop();
+        if (!clip || !mountedRef.current) return;
+        setTranscribing(true);
+        const text = await transcribeClip(clip);
+        if (!mountedRef.current) return;
+        if (text.length > 0) {
+          setVoiceTranscript((prev) =>
+            prev ? `${prev.trim()} ${text}`.trim() : text,
+          );
+        }
+      } catch (err) {
+        if (!mountedRef.current) return;
+        const message =
+          err instanceof Error ? err.message : "Couldn't transcribe that clip.";
+        if (Platform.OS === "web") {
+          // eslint-disable-next-line no-alert
+          window.alert(message);
+        } else {
+          Alert.alert("Voice", message);
+        }
+      } finally {
+        if (mountedRef.current) setTranscribing(false);
+      }
+      return;
+    }
+    if (recorder.state === "processing" || transcribing) return;
+    await recorder.start();
+  }, [recorder, transcribing]);
+
+  const isRecording = recorder.state === "recording";
+  const recordingSeconds = Math.floor(recorder.durationMs / 1000);
+  const isAnalyzingImage = analyzeImage.isPending;
+
+  const handleSave = async () => {
+    let noteImageAnalysis: string | undefined;
+    let analysisFailed = false;
+    if (pendingImage) {
+      try {
+        const res = await analyzeImage.mutateAsync({
+          data: {
+            imageBase64: pendingImage.base64,
+            imageMimeType: pendingImage.mimeType,
+            taskTitle,
+            completed,
+            ...(reasonTag ? { reasonTag } : {}),
+            ...(note.trim().length > 0 ? { note: note.trim() } : {}),
+          },
+        });
+        if (!mountedRef.current) return;
+        noteImageAnalysis = res.analysis.trim();
+      } catch {
+        // Best-effort: image analysis failures must NOT block saving the
+        // reflection. Reason tag / text note / voice transcript are still
+        // valuable on their own. We surface a non-blocking warning and save
+        // without the noteImageAnalysis field.
+        if (!mountedRef.current) return;
+        analysisFailed = true;
+      }
+    }
+
     const entry: ReflectionEntry = {
       taskId,
       taskTitle,
@@ -86,12 +280,42 @@ export function ReflectionSheet({
       reflectedAt: new Date().toISOString(),
       ...(reasonTag ? { reasonTag } : {}),
       ...(note.trim().length > 0 ? { note: note.trim() } : {}),
+      ...(voiceTranscript.trim().length > 0
+        ? { noteAudioTranscript: voiceTranscript.trim() }
+        : {}),
+      ...(noteImageAnalysis && noteImageAnalysis.length > 0
+        ? { noteImageAnalysis }
+        : {}),
     };
     onSubmit(entry);
     onClose();
+    if (analysisFailed) {
+      const msg =
+        "Saved your reflection, but couldn't analyse the photo this time.";
+      if (Platform.OS === "web") {
+        // eslint-disable-next-line no-alert
+        window.alert(msg);
+      } else {
+        Alert.alert("Photo", msg);
+      }
+    }
   };
 
-  const canSave = Boolean(reasonTag) || note.trim().length > 0;
+  const isBusy = isAnalyzingImage || transcribing || isRecording;
+  const canSave =
+    !isBusy &&
+    (Boolean(reasonTag) ||
+      note.trim().length > 0 ||
+      voiceTranscript.trim().length > 0 ||
+      pendingImage !== null);
+
+  // Block close paths while async media work is in flight so the user
+  // doesn't get a stale "saved" or a half-transcribed note dropped on the
+  // floor. Recorder must be explicitly stopped first.
+  const safeClose = useCallback(() => {
+    if (isBusy) return;
+    onClose();
+  }, [isBusy, onClose]);
 
   return (
     <Modal
@@ -99,9 +323,9 @@ export function ReflectionSheet({
       animationType="fade"
       transparent
       statusBarTranslucent
-      onRequestClose={onClose}
+      onRequestClose={safeClose}
     >
-      <Pressable style={styles.backdrop} onPress={onClose}>
+      <Pressable style={styles.backdrop} onPress={safeClose}>
         <KeyboardAvoidingView
           behavior="padding"
           keyboardVerticalOffset={0}
@@ -153,8 +377,12 @@ export function ReflectionSheet({
                   {completed ? "Marked done" : "Not done"}
                 </Text>
               </View>
-              <Pressable onPress={onClose} hitSlop={10}>
-                <Feather name="x" size={20} color={colors.mutedForeground} />
+              <Pressable onPress={safeClose} hitSlop={10} disabled={isBusy}>
+                <Feather
+                  name="x"
+                  size={20}
+                  color={isBusy ? colors.muted : colors.mutedForeground}
+                />
               </Pressable>
             </View>
 
@@ -236,9 +464,181 @@ export function ReflectionSheet({
               ]}
             />
 
+            {/* Media row: photo + voice. Both attachments feed AI directly. */}
+            <View style={styles.mediaRow}>
+              <Pressable
+                onPress={onAttachImagePress}
+                disabled={isAnalyzingImage}
+                style={({ pressed }) => [
+                  styles.mediaBtn,
+                  {
+                    borderColor: pendingImage ? colors.primary : colors.border,
+                    backgroundColor: pendingImage
+                      ? colors.primary + "1A"
+                      : colors.background,
+                    opacity: pressed || isAnalyzingImage ? 0.7 : 1,
+                  },
+                ]}
+                testID="reflection-attach-image"
+              >
+                <Feather
+                  name="image"
+                  size={14}
+                  color={pendingImage ? colors.primary : colors.mutedForeground}
+                />
+                <Text
+                  style={[
+                    styles.mediaBtnText,
+                    {
+                      color: pendingImage ? colors.primary : colors.foreground,
+                      fontFamily: "Inter_500Medium",
+                    },
+                  ]}
+                >
+                  {pendingImage ? "Photo attached" : "Add photo"}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => void onMicPress()}
+                disabled={transcribing}
+                style={({ pressed }) => [
+                  styles.mediaBtn,
+                  {
+                    borderColor: isRecording ? colors.destructive : colors.border,
+                    backgroundColor: isRecording
+                      ? colors.destructive + "1A"
+                      : colors.background,
+                    opacity: pressed || transcribing ? 0.7 : 1,
+                  },
+                ]}
+                testID="reflection-record-voice"
+              >
+                {transcribing ? (
+                  <ActivityIndicator size="small" color={colors.mutedForeground} />
+                ) : (
+                  <Feather
+                    name={isRecording ? "square" : "mic"}
+                    size={14}
+                    color={isRecording ? colors.destructive : colors.mutedForeground}
+                  />
+                )}
+                <Text
+                  style={[
+                    styles.mediaBtnText,
+                    {
+                      color: isRecording
+                        ? colors.destructive
+                        : colors.foreground,
+                      fontFamily: "Inter_500Medium",
+                    },
+                  ]}
+                >
+                  {isRecording
+                    ? `Recording ${recordingSeconds}s — tap to stop`
+                    : transcribing
+                    ? "Transcribing…"
+                    : voiceTranscript
+                    ? "Add more voice"
+                    : "Voice note"}
+                </Text>
+              </Pressable>
+            </View>
+
+            {pendingImage ? (
+              <View
+                style={[
+                  styles.imagePreview,
+                  {
+                    borderColor: colors.border,
+                    borderRadius: colors.radius,
+                    backgroundColor: colors.background,
+                  },
+                ]}
+              >
+                <Image
+                  source={{ uri: pendingImage.previewUri }}
+                  style={styles.imageThumb}
+                  resizeMode="cover"
+                />
+                <View style={styles.imagePreviewBody}>
+                  <Text
+                    style={[
+                      styles.imagePreviewCaption,
+                      {
+                        color: colors.mutedForeground,
+                        fontFamily: "Inter_500Medium",
+                      },
+                    ]}
+                  >
+                    rubai will analyse this photo when you save.
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => setPendingImage(null)}
+                  hitSlop={10}
+                  style={styles.imageRemove}
+                >
+                  <Feather name="x" size={16} color={colors.mutedForeground} />
+                </Pressable>
+              </View>
+            ) : null}
+
+            {voiceTranscript ? (
+              <View
+                style={[
+                  styles.transcriptBox,
+                  {
+                    borderColor: colors.border,
+                    borderRadius: colors.radius,
+                    backgroundColor: colors.background,
+                  },
+                ]}
+              >
+                <View style={styles.transcriptHeader}>
+                  <Feather
+                    name="mic"
+                    size={12}
+                    color={colors.mutedForeground}
+                  />
+                  <Text
+                    style={[
+                      styles.transcriptLabel,
+                      {
+                        color: colors.mutedForeground,
+                        fontFamily: "Inter_600SemiBold",
+                      },
+                    ]}
+                  >
+                    VOICE NOTE
+                  </Text>
+                  <Pressable
+                    onPress={() => setVoiceTranscript("")}
+                    hitSlop={10}
+                    style={styles.transcriptClear}
+                  >
+                    <Feather name="x" size={14} color={colors.mutedForeground} />
+                  </Pressable>
+                </View>
+                <TextInput
+                  value={voiceTranscript}
+                  onChangeText={setVoiceTranscript}
+                  multiline
+                  style={[
+                    styles.transcriptText,
+                    {
+                      color: colors.foreground,
+                      fontFamily: "Inter_400Regular",
+                    },
+                  ]}
+                />
+              </View>
+            ) : null}
+
             <View style={styles.actionRow}>
               <Pressable
-                onPress={onClose}
+                onPress={safeClose}
+                disabled={isBusy}
                 style={({ pressed }) => [
                   styles.secondaryBtn,
                   {
@@ -261,7 +661,7 @@ export function ReflectionSheet({
                 </Text>
               </Pressable>
               <Pressable
-                onPress={handleSave}
+                onPress={() => void handleSave()}
                 disabled={!canSave}
                 style={({ pressed }) => [
                   styles.primaryBtn,
@@ -272,17 +672,21 @@ export function ReflectionSheet({
                   },
                 ]}
               >
-                <Text
-                  style={[
-                    styles.primaryText,
-                    {
-                      color: canSave ? colors.primaryForeground : colors.mutedForeground,
-                      fontFamily: "Inter_700Bold",
-                    },
-                  ]}
-                >
-                  Save reflection
-                </Text>
+                {isAnalyzingImage ? (
+                  <ActivityIndicator size="small" color={colors.primaryForeground} />
+                ) : (
+                  <Text
+                    style={[
+                      styles.primaryText,
+                      {
+                        color: canSave ? colors.primaryForeground : colors.mutedForeground,
+                        fontFamily: "Inter_700Bold",
+                      },
+                    ]}
+                  >
+                    {pendingImage ? "Analyse & save" : "Save reflection"}
+                  </Text>
+                )}
               </Pressable>
             </View>
           </ScrollView>
@@ -364,6 +768,72 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlignVertical: "top",
     marginTop: 4,
+  },
+  mediaRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 2,
+  },
+  mediaBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: 999,
+  },
+  mediaBtnText: {
+    fontSize: 12.5,
+  },
+  imagePreview: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    padding: 8,
+    gap: 10,
+  },
+  imageThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+  },
+  imagePreviewBody: {
+    flex: 1,
+  },
+  imagePreviewCaption: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  imageRemove: {
+    padding: 4,
+  },
+  transcriptBox: {
+    borderWidth: 1,
+    padding: 10,
+    gap: 6,
+  },
+  transcriptHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  transcriptLabel: {
+    fontSize: 10.5,
+    letterSpacing: 0.6,
+    flex: 1,
+  },
+  transcriptClear: {
+    padding: 2,
+  },
+  transcriptText: {
+    fontSize: 13.5,
+    lineHeight: 19,
+    minHeight: 40,
+    textAlignVertical: "top",
+    padding: 0,
   },
   actionRow: {
     flexDirection: "row",

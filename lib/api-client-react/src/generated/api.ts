@@ -19,6 +19,8 @@ import type {
 import type {
   AdaptRequest,
   AdaptResponse,
+  AnalyzeReflectionImageRequest,
+  AnalyzeReflectionImageResponse,
   BehavioralProfileRequest,
   BehavioralProfileResponse,
   CoachRequest,
@@ -1063,6 +1065,96 @@ export const useAtlasTranscribe = <
   TContext
 > => {
   return useMutation(getAtlasTranscribeMutationOptions(options));
+};
+
+/**
+ * @summary Run a one-shot vision pass on a reflection photo and return a short text analysis stored on the reflection
+ */
+export const getAtlasAnalyzeReflectionImageUrl = () => {
+  return `/api/atlas/analyze-reflection-image`;
+};
+
+export const atlasAnalyzeReflectionImage = async (
+  analyzeReflectionImageRequest: AnalyzeReflectionImageRequest,
+  options?: RequestInit,
+): Promise<AnalyzeReflectionImageResponse> => {
+  return customFetch<AnalyzeReflectionImageResponse>(
+    getAtlasAnalyzeReflectionImageUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(analyzeReflectionImageRequest),
+    },
+  );
+};
+
+export const getAtlasAnalyzeReflectionImageMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasAnalyzeReflectionImage>>,
+    TError,
+    { data: BodyType<AnalyzeReflectionImageRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof atlasAnalyzeReflectionImage>>,
+  TError,
+  { data: BodyType<AnalyzeReflectionImageRequest> },
+  TContext
+> => {
+  const mutationKey = ["atlasAnalyzeReflectionImage"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof atlasAnalyzeReflectionImage>>,
+    { data: BodyType<AnalyzeReflectionImageRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return atlasAnalyzeReflectionImage(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AtlasAnalyzeReflectionImageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof atlasAnalyzeReflectionImage>>
+>;
+export type AtlasAnalyzeReflectionImageMutationBody =
+  BodyType<AnalyzeReflectionImageRequest>;
+export type AtlasAnalyzeReflectionImageMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Run a one-shot vision pass on a reflection photo and return a short text analysis stored on the reflection
+ */
+export const useAtlasAnalyzeReflectionImage = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof atlasAnalyzeReflectionImage>>,
+    TError,
+    { data: BodyType<AnalyzeReflectionImageRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof atlasAnalyzeReflectionImage>>,
+  TError,
+  { data: BodyType<AnalyzeReflectionImageRequest> },
+  TContext
+> => {
+  return useMutation(getAtlasAnalyzeReflectionImageMutationOptions(options));
 };
 
 /**

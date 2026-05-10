@@ -41,7 +41,36 @@ import {
   AtlasBehavioralProfileBody as atlasBehavioralProfileBody,
   AtlasEvolveRoadmapBody as atlasEvolveRoadmapBody,
   AtlasRegisterPushTokenBody as atlasRegisterPushTokenBody,
+  AtlasAnalyzeReflectionImageBody as atlasAnalyzeReflectionImageBody,
 } from "@workspace/api-zod";
+
+// Shared reflection-line builder. Used by buildCoachContext, behavioural
+// profile and evolve-roadmap so the AI sees voice transcripts and the
+// pre-computed image analysis from `/atlas/analyze-reflection-image`
+// uniformly across every prompt.
+function formatReflectionLine(
+  r: {
+    taskTitle: string;
+    date: string;
+    completed: boolean;
+    reasonTag?: string | null;
+    note?: string | null;
+    noteAudioTranscript?: string | null;
+    noteImageAnalysis?: string | null;
+  },
+  bullet: string,
+): string {
+  const status = r.completed ? "done" : "skipped";
+  const reason = r.reasonTag ? ` [${r.reasonTag}]` : "";
+  const note = r.note ? ` — "${r.note}"` : "";
+  const voice = r.noteAudioTranscript
+    ? ` [voice note: "${r.noteAudioTranscript}"]`
+    : "";
+  const image = r.noteImageAnalysis
+    ? ` [photo: ${r.noteImageAnalysis}]`
+    : "";
+  return `${bullet}${r.date} • ${status} • ${r.taskTitle}${reason}${note}${voice}${image}`;
+}
 
 function summarizeLearnedProfile(p: unknown): string {
   if (!p || typeof p !== "object") return "";
@@ -418,6 +447,8 @@ type CoachContextInput = {
     completed: boolean;
     reasonTag?: string | null;
     note?: string | null;
+    noteAudioTranscript?: string | null;
+    noteImageAnalysis?: string | null;
   }[];
   recentEvolutions?: {
     evolvedAt: string;
@@ -474,12 +505,7 @@ function buildCoachContext(input: CoachContextInput): string {
   if (recentReflections.length > 0) {
     const lines = recentReflections
       .slice(0, 5)
-      .map((r) => {
-        const status = r.completed ? "DID" : "SKIPPED";
-        const reason = r.reasonTag ? ` [${r.reasonTag}]` : "";
-        const note = r.note ? ` — "${r.note}"` : "";
-        return `  • ${r.date} ${status} "${r.taskTitle}"${reason}${note}`;
-      })
+      .map((r) => formatReflectionLine(r, "  • "))
       .join("\n");
     blocks.push(`RECENT REFLECTIONS (most recent last):\n${lines}`);
   }
@@ -1733,12 +1759,7 @@ router.post("/behavioral-profile", async (req, res) => {
   const completionRate = total > 0 ? completed / total : 0;
   const reflectionLines = reflections
     .slice(-12)
-    .map(
-      (r) =>
-        `- ${r.date} • ${r.completed ? "done" : "skipped"} • ${r.taskTitle}${
-          r.reasonTag ? ` [${r.reasonTag}]` : ""
-        }${r.note ? ` — "${r.note}"` : ""}`,
-    )
+    .map((r) => formatReflectionLine(r, "- "))
     .join("\n");
 
   try {
@@ -1839,12 +1860,7 @@ router.post("/evolve-roadmap", async (req, res) => {
 
   const reflectionLines = recentReflections
     .slice(-12)
-    .map(
-      (r) =>
-        `- ${r.date} • ${r.completed ? "done" : "skipped"} • ${r.taskTitle}${
-          r.reasonTag ? ` [${r.reasonTag}]` : ""
-        }${r.note ? ` — "${r.note}"` : ""}`,
-    )
+    .map((r) => formatReflectionLine(r, "- "))
     .join("\n");
 
   try {
@@ -1988,6 +2004,85 @@ router.post("/transcribe", audioUploadMiddleware("audio"), async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "transcribe failed");
     res.status(500).json({ error: "transcription failed" });
+  }
+});
+
+// Vision pre-pass on a reflection photo. Runs ONCE when the user saves
+// the reflection and persists the resulting paragraph on the entry as
+// `noteImageAnalysis`. Every downstream AI step (coach, behavioural
+// profile, evolve-roadmap) reads that text via formatReflectionLine,
+// so the user's photos influence guidance without re-sending bytes.
+const REFLECTION_ALLOWED_IMAGE_MIMES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+const REFLECTION_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+router.post("/analyze-reflection-image", async (req, res) => {
+  const parsed = atlasAnalyzeReflectionImageBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const { imageBase64, imageMimeType, taskTitle, completed, reasonTag, note } =
+    parsed.data;
+
+  if (!REFLECTION_ALLOWED_IMAGE_MIMES.has(imageMimeType)) {
+    res.status(415).json({
+      error: "Unsupported image type. Use JPEG, PNG, WebP, or GIF.",
+    });
+    return;
+  }
+  const decodedBytes = Math.floor((imageBase64.length * 3) / 4);
+  if (decodedBytes > REFLECTION_MAX_IMAGE_BYTES) {
+    res.status(413).json({
+      error: "Image is too large. Please attach an image under 5 MB.",
+    });
+    return;
+  }
+
+  try {
+    const completion = await trackedCreate(req, {
+      model: MODEL_VISION,
+      max_completion_tokens: 350,
+      messages: [
+        {
+          role: "system",
+          content: `You analyse a photo the user attached to a task reflection inside rubai (an AI execution coach). Write ONE plain-prose paragraph (60-90 words) covering: what you see, the apparent state/quality of the work, any signal about effort, mood or environment, and how it relates to whether the task was done or skipped. Be concrete. No emojis, no markdown, no bullet lists, no headings. Do not invent details that aren't visible. Do not address the user in second person — write descriptively so other AI steps can quote you.`,
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `TASK: ${taskTitle}\nSTATUS: ${completed ? "marked done" : "skipped"}${
+                reasonTag ? `\nREASON TAG: ${reasonTag}` : ""
+              }${note ? `\nUSER NOTE: ${note}` : ""}\n\nDescribe the attached photo in light of this reflection.`,
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${imageMimeType};base64,${imageBase64}`,
+                detail: "low",
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const analysis = (completion.choices[0]?.message?.content ?? "")
+      .toString()
+      .trim();
+    if (!analysis) {
+      res.status(502).json({ error: "Image analysis returned empty." });
+      return;
+    }
+    res.json({ analysis });
+  } catch (err) {
+    req.log.error({ err }, "analyze-reflection-image failed");
+    res.status(500).json({ error: "Image analysis failed." });
   }
 });
 

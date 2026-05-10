@@ -754,6 +754,18 @@ export const AtlasCoachBody = zod.object({
           ])
           .optional(),
         note: zod.string().optional(),
+        noteAudioTranscript: zod
+          .string()
+          .optional()
+          .describe(
+            "Whisper-transcribed text from a voice note attached to this reflection. Audio bytes are not stored.",
+          ),
+        noteImageAnalysis: zod
+          .string()
+          .optional()
+          .describe(
+            "One-paragraph vision analysis produced once on submit. Other AI steps consume this text instead of the raw image.",
+          ),
         reflectedAt: zod.string(),
       }),
     )
@@ -983,6 +995,43 @@ export const AtlasTranscribeResponse = zod.object({
 });
 
 /**
+ * @summary Run a one-shot vision pass on a reflection photo and return a short text analysis stored on the reflection
+ */
+export const AtlasAnalyzeReflectionImageBody = zod.object({
+  imageBase64: zod
+    .string()
+    .describe("Base64-encoded image bytes (no data: prefix)."),
+  imageMimeType: zod
+    .string()
+    .describe("One of image\/jpeg, image\/png, image\/webp, image\/gif."),
+  taskTitle: zod.string(),
+  completed: zod.boolean(),
+  reasonTag: zod
+    .enum([
+      "easy",
+      "just_right",
+      "tough",
+      "skipped",
+      "energized",
+      "tired",
+      "distracted",
+      "focused",
+      "no_time",
+      "blocked",
+    ])
+    .optional(),
+  note: zod.string().optional(),
+});
+
+export const AtlasAnalyzeReflectionImageResponse = zod.object({
+  analysis: zod
+    .string()
+    .describe(
+      "Plain-prose paragraph the AI sees on every downstream reflection-aware call.",
+    ),
+});
+
+/**
  * @summary Adapt the plan based on behavioural performance data
  */
 export const AtlasAdaptPlanBody = zod.object({
@@ -1127,6 +1176,18 @@ export const AtlasBehavioralProfileBody = zod.object({
           ])
           .optional(),
         note: zod.string().optional(),
+        noteAudioTranscript: zod
+          .string()
+          .optional()
+          .describe(
+            "Whisper-transcribed text from a voice note attached to this reflection. Audio bytes are not stored.",
+          ),
+        noteImageAnalysis: zod
+          .string()
+          .optional()
+          .describe(
+            "One-paragraph vision analysis produced once on submit. Other AI steps consume this text instead of the raw image.",
+          ),
         reflectedAt: zod.string(),
       }),
     )
@@ -1390,6 +1451,18 @@ export const AtlasEvolveRoadmapBody = zod.object({
           ])
           .optional(),
         note: zod.string().optional(),
+        noteAudioTranscript: zod
+          .string()
+          .optional()
+          .describe(
+            "Whisper-transcribed text from a voice note attached to this reflection. Audio bytes are not stored.",
+          ),
+        noteImageAnalysis: zod
+          .string()
+          .optional()
+          .describe(
+            "One-paragraph vision analysis produced once on submit. Other AI steps consume this text instead of the raw image.",
+          ),
         reflectedAt: zod.string(),
       }),
     )
