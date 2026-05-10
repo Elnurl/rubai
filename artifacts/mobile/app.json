@@ -54,6 +54,13 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow rubai to use your camera so you can snap what you're working on and ask the coach about it.",
+          "photosPermission": "Allow rubai to read your photos so you can share screenshots and reference images with the coach."
+        }
+      ],
+      [
         "expo-notifications",
         {
           "color": "#84CC16"

@@ -498,7 +498,28 @@ export default function CoachScreen() {
     await recorder.start();
   }, [recorder, send, transcribing]);
 
-  const onAttachmentPress = useCallback(async () => {
+  // Shared post-pick handler — both the camera and the library funnel into
+  // here so the coach receives a uniform PendingAttachment.
+  const handlePickedAsset = useCallback(
+    (asset: ImagePicker.ImagePickerAsset, fallbackName: string) => {
+      const filename = asset.fileName || fallbackName;
+      const sizeKb = asset.fileSize ? Math.round(asset.fileSize / 1024) : null;
+      const label = sizeKb ? `${filename} · ${formatSize(sizeKb)}` : filename;
+      // Heuristic mime type: ImagePicker's mimeType field is reliable on
+      // iOS/Android; fall back to JPEG since that's what the picker emits
+      // by default after compression.
+      const mimeType = asset.mimeType || "image/jpeg";
+      setPendingAttachment({
+        filename,
+        label,
+        base64: asset.base64 ?? undefined,
+        mimeType,
+      });
+    },
+    [],
+  );
+
+  const pickFromLibrary = useCallback(async () => {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
@@ -518,24 +539,63 @@ export default function CoachScreen() {
         base64: true,
       });
       if (res.canceled || !res.assets?.[0]) return;
-      const asset = res.assets[0];
-      const filename = asset.fileName || "image";
-      const sizeKb = asset.fileSize ? Math.round(asset.fileSize / 1024) : null;
-      const label = sizeKb ? `${filename} · ${formatSize(sizeKb)}` : filename;
-      // Heuristic mime type: ImagePicker's mimeType field is reliable on
-      // iOS/Android; fall back to JPEG since that's what the picker emits
-      // by default after compression.
-      const mimeType = asset.mimeType || "image/jpeg";
-      setPendingAttachment({
-        filename,
-        label,
-        base64: asset.base64 ?? undefined,
-        mimeType,
-      });
+      handlePickedAsset(res.assets[0], "image");
     } catch {
       // ignore — picker errors are usually permission cancellations
     }
-  }, []);
+  }, [handlePickedAsset]);
+
+  const pickFromCamera = useCallback(async () => {
+    // Web has no native camera UI via ImagePicker — fall back to the library
+    // picker which on web also accepts capture-from-camera input.
+    if (Platform.OS === "web") {
+      await pickFromLibrary();
+      return;
+    }
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(
+          "Camera",
+          "Allow camera access to snap what you're working on.",
+        );
+        return;
+      }
+      const res = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        quality: 0.6,
+        // Skip the in-OS edit step — for "show the coach what I'm doing
+        // right now" the friction of cropping every shot kills the flow.
+        allowsEditing: false,
+        base64: true,
+      });
+      if (res.canceled || !res.assets?.[0]) return;
+      handlePickedAsset(res.assets[0], "snapshot.jpg");
+    } catch {
+      // ignore — picker errors are usually permission cancellations
+    }
+  }, [handlePickedAsset, pickFromLibrary]);
+
+  // Tapping "+" opens a tiny chooser. On iOS/Android we use the native
+  // Alert sheet (cheapest cross-platform action sheet) so the user picks
+  // Camera vs Library; on web we go straight to the file picker since
+  // there's no native camera UI to invoke.
+  const onAttachmentPress = useCallback(() => {
+    if (Platform.OS === "web") {
+      void pickFromLibrary();
+      return;
+    }
+    Alert.alert(
+      "Attach an image",
+      "Snap a photo of what you're working on, or pick one from your library.",
+      [
+        { text: "Camera", onPress: () => void pickFromCamera() },
+        { text: "Photo Library", onPress: () => void pickFromLibrary() },
+        { text: "Cancel", style: "cancel" },
+      ],
+      { cancelable: true },
+    );
+  }, [pickFromCamera, pickFromLibrary]);
 
   // Footer below the chat list: typing indicator, then per-turn suggestions
   // and action card so they always appear right under the latest assistant
