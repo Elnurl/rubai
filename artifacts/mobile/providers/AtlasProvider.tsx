@@ -48,6 +48,7 @@ import {
   DEFAULT_ACCOUNT,
   DEFAULT_SUBSCRIPTION,
   type AccountPrefs,
+  type ChatSession,
   type EarnedAward,
   type Goal,
   type IntakeDraft,
@@ -137,6 +138,33 @@ type AtlasContextValue = AtlasState & {
   ) => Promise<void>;
   setActiveCoachHistory: (history: ChatMessage[]) => Promise<void>;
   appendActiveCoachMessage: (msg: ChatMessage) => Promise<void>;
+  /** Multi-chat (per-goal sessions). */
+  activeCoachSessions: ChatSession[];
+  activeCoachSessionId: string | null;
+  createCoachSession: () => Promise<string | null>;
+  switchCoachSession: (sessionId: string) => Promise<void>;
+  deleteCoachSession: (sessionId: string) => Promise<void>;
+  /**
+   * CAS rename — only updates the title if the session still exists AND its
+   * current title is the "New chat" placeholder (or empty). Prevents a
+   * late-returning auto-title from overwriting a user-renamed session.
+   */
+  renameCoachSession: (
+    sessionId: string,
+    title: string,
+    opts?: { goalId?: string; onlyIfPlaceholder?: boolean },
+  ) => Promise<void>;
+  /**
+   * Session-pinned commit — writes to the (goalId, sessionId) pair captured
+   * at send-time so a late stream completion can't land in whichever session
+   * happens to be active by the time the network call returns. No-ops if the
+   * pinned session has been deleted in the meantime.
+   */
+  appendCoachMessageToSession: (
+    goalId: string,
+    sessionId: string,
+    msg: ChatMessage,
+  ) => Promise<void>;
   setActiveCoachMemory: (memory: CoachMemory | null) => Promise<void>;
   applyCoachMemoryUpdate: (update: {
     summary: string;
@@ -221,7 +249,7 @@ function computeCurrentWeek(startDate: string | null): number {
 // the rest of the provider can rely on them being defined. Also runs on goals
 // loaded from the cloud, since older clients may have pushed sparser blobs.
 function ensureGoalShape(goal: Goal): Goal {
-  return {
+  const base: Goal = {
     ...goal,
     reflections: goal.reflections ?? [],
     behavioralProfile: goal.behavioralProfile ?? null,
@@ -229,6 +257,55 @@ function ensureGoalShape(goal: Goal): Goal {
     lastEvolvedAt: goal.lastEvolvedAt ?? null,
     coachMemory: goal.coachMemory ?? null,
     earnedAwards: goal.earnedAwards ?? [],
+    coachHistory: goal.coachHistory ?? [],
+    coachSessions: goal.coachSessions ?? [],
+    activeSessionId: goal.activeSessionId ?? null,
+  };
+
+  // One-time migration: if the user has a legacy single coachHistory but no
+  // sessions yet, lift it into one default session so the multi-chat UI has
+  // something to show. We don't clear the legacy field — older clients on
+  // other devices may still read it.
+  if (base.coachSessions.length === 0) {
+    if (base.coachHistory.length > 0) {
+      const now = new Date().toISOString();
+      const seeded: ChatSession = {
+        id: makeId("session"),
+        title: "Earlier conversation",
+        createdAt: base.createdAt ?? now,
+        lastMessageAt: now,
+        messages: base.coachHistory,
+      };
+      base.coachSessions = [seeded];
+      base.activeSessionId = seeded.id;
+    }
+  } else if (
+    base.activeSessionId === null ||
+    !base.coachSessions.find((s) => s.id === base.activeSessionId)
+  ) {
+    // Active id missing or stale — point at the most recently touched.
+    const sorted = [...base.coachSessions].sort((a, b) =>
+      (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""),
+    );
+    base.activeSessionId = sorted[0]?.id ?? null;
+  }
+
+  return base;
+}
+
+function getActiveSession(goal: Goal | null): ChatSession | null {
+  if (!goal || !goal.activeSessionId) return null;
+  return goal.coachSessions.find((s) => s.id === goal.activeSessionId) ?? null;
+}
+
+function makeNewSession(): ChatSession {
+  const now = new Date().toISOString();
+  return {
+    id: makeId("session"),
+    title: "New chat",
+    createdAt: now,
+    lastMessageAt: now,
+    messages: [],
   };
 }
 
@@ -873,6 +950,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       if (completedCount >= currentLimit) {
         throw new GoalLimitError(currentLimit);
       }
+      const seedSession = makeNewSession();
       const goal: Goal = {
         id: makeId("goal"),
         createdAt: new Date().toISOString(),
@@ -881,6 +959,8 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
         roadmap: null,
         dailyPlan: null,
         coachHistory: [],
+        coachSessions: [seedSession],
+        activeSessionId: seedSession.id,
         taskHistory: [],
         reflections: [],
         behavioralProfile: null,
@@ -1110,21 +1190,189 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     [updateGoal],
   );
 
+  // Internal helper: ensure the active goal has a non-null active session,
+  // creating one if needed. Returns the (possibly mutated) goal.
+  const withEnsuredActiveSession = useCallback((g: Goal): Goal => {
+    if (g.activeSessionId && g.coachSessions.find((s) => s.id === g.activeSessionId)) {
+      return g;
+    }
+    const session = makeNewSession();
+    return {
+      ...g,
+      coachSessions: [session, ...g.coachSessions],
+      activeSessionId: session.id,
+    };
+  }, []);
+
   const setActiveCoachHistory = useCallback(
     async (history: ChatMessage[]) => {
-      await updateActiveGoal((g) => ({ ...g, coachHistory: history.slice(-30) }));
+      const trimmed = history.slice(-30);
+      const now = new Date().toISOString();
+      await updateActiveGoal((g) => {
+        const ensured = withEnsuredActiveSession(g);
+        const sessions = ensured.coachSessions.map((s) =>
+          s.id === ensured.activeSessionId
+            ? { ...s, messages: trimmed, lastMessageAt: now }
+            : s,
+        );
+        // Keep legacy mirror in sync for older clients reading coachHistory.
+        return { ...ensured, coachSessions: sessions, coachHistory: trimmed };
+      });
     },
-    [updateActiveGoal],
+    [updateActiveGoal, withEnsuredActiveSession],
   );
 
   const appendActiveCoachMessage = useCallback(
     async (msg: ChatMessage) => {
-      await updateActiveGoal((g) => ({
+      const now = new Date().toISOString();
+      await updateActiveGoal((g) => {
+        const ensured = withEnsuredActiveSession(g);
+        const sessions = ensured.coachSessions.map((s) => {
+          if (s.id !== ensured.activeSessionId) return s;
+          const messages = [...s.messages, msg].slice(-30);
+          return { ...s, messages, lastMessageAt: now };
+        });
+        const activeMessages =
+          sessions.find((s) => s.id === ensured.activeSessionId)?.messages ?? [];
+        return {
+          ...ensured,
+          coachSessions: sessions,
+          coachHistory: activeMessages,
+        };
+      });
+    },
+    [updateActiveGoal, withEnsuredActiveSession],
+  );
+
+  const createCoachSession = useCallback(async (): Promise<string | null> => {
+    const id = activeIdRef.current;
+    if (!id) return null;
+    const session = makeNewSession();
+    await updateGoal(id, (g) => {
+      // If the current active session is empty, just reuse it instead of
+      // creating a second empty session.
+      const current = g.coachSessions.find((s) => s.id === g.activeSessionId);
+      if (current && current.messages.length === 0) {
+        return { ...g, activeSessionId: current.id };
+      }
+      return {
         ...g,
-        coachHistory: [...g.coachHistory, msg].slice(-30),
-      }));
+        coachSessions: [session, ...g.coachSessions],
+        activeSessionId: session.id,
+        coachHistory: [],
+      };
+    });
+    // Return whichever id is now active so the caller can focus it.
+    const nextGoal = goalsRef.current.find((g) => g.id === id) ?? null;
+    return nextGoal?.activeSessionId ?? session.id;
+  }, [updateGoal]);
+
+  const switchCoachSession = useCallback(
+    async (sessionId: string) => {
+      await updateActiveGoal((g) => {
+        if (!g.coachSessions.find((s) => s.id === sessionId)) return g;
+        const target = g.coachSessions.find((s) => s.id === sessionId);
+        return {
+          ...g,
+          activeSessionId: sessionId,
+          coachHistory: target?.messages ?? [],
+        };
+      });
     },
     [updateActiveGoal],
+  );
+
+  const deleteCoachSession = useCallback(
+    async (sessionId: string) => {
+      await updateActiveGoal((g) => {
+        const remaining = g.coachSessions.filter((s) => s.id !== sessionId);
+        let nextActive = g.activeSessionId;
+        let nextHistory = g.coachHistory;
+        if (g.activeSessionId === sessionId) {
+          // Pick the most recent remaining session, or seed an empty new one
+          // so the coach UI never lands on a null session state.
+          if (remaining.length > 0) {
+            const sorted = [...remaining].sort((a, b) =>
+              (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""),
+            );
+            nextActive = sorted[0]!.id;
+            nextHistory = sorted[0]!.messages;
+          } else {
+            const fresh = makeNewSession();
+            return {
+              ...g,
+              coachSessions: [fresh],
+              activeSessionId: fresh.id,
+              coachHistory: [],
+            };
+          }
+        }
+        return {
+          ...g,
+          coachSessions: remaining,
+          activeSessionId: nextActive,
+          coachHistory: nextHistory,
+        };
+      });
+    },
+    [updateActiveGoal],
+  );
+
+  const renameCoachSession = useCallback(
+    async (
+      sessionId: string,
+      title: string,
+      opts?: { goalId?: string; onlyIfPlaceholder?: boolean },
+    ) => {
+      const trimmed = title.trim().slice(0, 60);
+      if (trimmed.length === 0) return;
+      // Goal-pin so a late auto-title for goal A can't rename a session in
+      // whichever goal happens to be active when the response returns.
+      const targetGoalId = opts?.goalId ?? activeIdRef.current;
+      if (!targetGoalId) return;
+      await updateGoal(targetGoalId, (g) => {
+        const target = g.coachSessions.find((s) => s.id === sessionId);
+        if (!target) return g;
+        if (opts?.onlyIfPlaceholder) {
+          // CAS guard: only rename when the title is still untouched. Lets
+          // the user pick a custom name without it being clobbered by a
+          // late-returning generate-title call.
+          const cur = (target.title ?? "").trim();
+          if (cur.length > 0 && cur !== "New chat") return g;
+        }
+        return {
+          ...g,
+          coachSessions: g.coachSessions.map((s) =>
+            s.id === sessionId ? { ...s, title: trimmed } : s,
+          ),
+        };
+      });
+    },
+    [updateGoal],
+  );
+
+  const appendCoachMessageToSession = useCallback(
+    async (goalId: string, sessionId: string, msg: ChatMessage) => {
+      const now = new Date().toISOString();
+      await updateGoal(goalId, (g) => {
+        const target = g.coachSessions.find((s) => s.id === sessionId);
+        if (!target) return g; // Session was deleted while request in flight.
+        const sessions = g.coachSessions.map((s) => {
+          if (s.id !== sessionId) return s;
+          const messages = [...s.messages, msg].slice(-30);
+          return { ...s, messages, lastMessageAt: now };
+        });
+        // Only mirror to legacy coachHistory if we're writing to the goal's
+        // currently-active session — otherwise we'd corrupt the visible
+        // history with a message from a backgrounded session.
+        const mirror =
+          g.activeSessionId === sessionId
+            ? sessions.find((s) => s.id === sessionId)?.messages ?? g.coachHistory
+            : g.coachHistory;
+        return { ...g, coachSessions: sessions, coachHistory: mirror };
+      });
+    },
+    [updateGoal],
   );
 
   const setActiveCoachMemory = useCallback(
@@ -1290,7 +1538,10 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     activeProfile: activeGoal?.profile ?? null,
     activeRoadmap: activeGoal?.roadmap ?? null,
     activeDailyPlan: activeGoal?.dailyPlan ?? null,
-    activeCoachHistory: activeGoal?.coachHistory ?? [],
+    activeCoachHistory:
+      getActiveSession(activeGoal)?.messages ?? activeGoal?.coachHistory ?? [],
+    activeCoachSessions: activeGoal?.coachSessions ?? [],
+    activeCoachSessionId: activeGoal?.activeSessionId ?? null,
     activeTaskHistory: activeGoal?.taskHistory ?? [],
     activeReflections: activeGoal?.reflections ?? [],
     activeBehavioralProfile: activeGoal?.behavioralProfile ?? null,
@@ -1320,6 +1571,11 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     applyRoadmapEvolution,
     setActiveCoachHistory,
     appendActiveCoachMessage,
+    createCoachSession,
+    switchCoachSession,
+    deleteCoachSession,
+    renameCoachSession,
+    appendCoachMessageToSession,
     setActiveCoachMemory,
     applyCoachMemoryUpdate,
     setPendingDraft,

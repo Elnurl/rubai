@@ -40,6 +40,14 @@ export type EarnedAward = {
   earnedOn: string;
 };
 
+export type ChatSession = {
+  id: string;
+  title: string;
+  createdAt: string;
+  lastMessageAt: string;
+  messages: ChatMessage[];
+};
+
 export type Goal = {
   id: string;
   createdAt: string;
@@ -47,7 +55,17 @@ export type Goal = {
   profile: UserProfile;
   roadmap: Roadmap | null;
   dailyPlan: StoredDailyPlan | null;
+  /**
+   * Legacy single conversation. Kept for back-compat / one-time migration.
+   * New code should write to `coachSessions[activeSessionId].messages` via
+   * the AtlasProvider helpers. Migration in `ensureGoalShape` lifts any
+   * non-empty `coachHistory` into a default session on first read.
+   */
   coachHistory: ChatMessage[];
+  /** Multi-conversation per goal (ChatGPT-style). */
+  coachSessions: ChatSession[];
+  /** Currently visible session in the coach UI. */
+  activeSessionId: string | null;
   taskHistory: TaskHistoryEntry[];
   reflections: ReflectionEntry[];
   behavioralProfile: BehavioralProfile | null;

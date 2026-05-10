@@ -37,11 +37,13 @@ import {
 import {
   customFetch,
   useAtlasCoach,
+  useAtlasGenerateTitle,
   type ChatMessage,
   type CoachActionSuggestion,
   type ProposedCoachAction,
 } from "@workspace/api-client-react";
 import { streamCoachReply } from "@/lib/coachStream";
+import type { ChatSession } from "@/types/atlas";
 
 const COLD_START_SUGGESTIONS = [
   "I'm feeling stuck today",
@@ -84,16 +86,25 @@ export default function CoachScreen() {
     activeCurrentPhase,
     activeCoachHistory,
     activeCoachMemory,
+    activeCoachSessions,
+    activeCoachSessionId,
+    createCoachSession,
+    switchCoachSession,
+    deleteCoachSession,
+    renameCoachSession,
     setActiveCoachHistory,
     appendActiveCoachMessage,
+    appendCoachMessageToSession,
     setActiveCoachMemory,
     applyCoachMemoryUpdate,
     setActiveDailyPlan,
     updateActiveGoal,
+    activeGoal,
     account,
   } = useAtlas();
 
   const coach = useAtlasCoach();
+  const generateTitle = useAtlasGenerateTitle();
   const { evolve, isEvolving } = useEvolveRoadmap();
   const recorder = useVoiceRecorder();
   const tts = useTextToSpeech();
@@ -104,6 +115,7 @@ export default function CoachScreen() {
     useState<ProposedCoachAction | null>(null);
   const [applyingAction, setApplyingAction] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modelChoice, setModelChoice] = useState<ModelChoice>("smart");
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
@@ -191,11 +203,52 @@ export default function CoachScreen() {
       setLastAction(null);
       setLastProposedAction(null);
 
+      // Pin (goalId, sessionId) AT SEND TIME so a late stream completion or
+      // image-turn response can't land in whichever session happens to be
+      // active by the time the network call returns. The provider's
+      // `appendCoachMessageToSession` is a no-op if the pinned session was
+      // deleted while the request was in flight.
+      const pinnedGoalId = activeGoal?.id ?? null;
+      const pinnedSessionId = activeCoachSessionId;
+      if (!pinnedGoalId || !pinnedSessionId) return;
+
       const visibleContent = attachment
         ? `${message}\n📎 ${attachment.label}`
         : message;
       const userMsg: ChatMessage = { role: "user", content: visibleContent };
-      await appendActiveCoachMessage(userMsg);
+      await appendCoachMessageToSession(pinnedGoalId, pinnedSessionId, userMsg);
+
+      // Fire-and-forget: when the user sends the FIRST real message in a
+      // session that still has the placeholder "New chat" title, ask the AI
+      // for a short 2-5 word title. The provider's CAS rename guards against
+      // (a) double-fires if state hasn't repainted yet, and (b) clobbering a
+      // user-renamed session with a late title response.
+      const session = activeCoachSessions.find((s) => s.id === pinnedSessionId);
+      const isFirstUserMessage =
+        !!session &&
+        (session.title === "New chat" || session.title.trim().length === 0) &&
+        session.messages.filter((m) => m.role === "user").length === 0;
+      if (isFirstUserMessage && activeProfile) {
+        void generateTitle
+          .mutateAsync({
+            data: {
+              goalType: activeProfile.goalType,
+              userInput: message.slice(0, 240),
+            },
+          })
+          .then((res) => {
+            const title = (res?.title ?? "").trim();
+            if (title.length > 0) {
+              void renameCoachSession(pinnedSessionId, title, {
+                goalId: pinnedGoalId,
+                onlyIfPlaceholder: true,
+              });
+            }
+          })
+          .catch(() => {
+            // Title is cosmetic — silent failure leaves "New chat" in place.
+          });
+      }
 
       const calendarContext = await loadCalendarContextIfEnabled(
         account.calendarSync,
@@ -240,7 +293,12 @@ export default function CoachScreen() {
           role: "assistant",
           content: res.reply,
         };
-        await appendActiveCoachMessage(assistantMsg);
+        // Pinned commit — see capture above.
+        await appendCoachMessageToSession(
+          pinnedGoalId,
+          pinnedSessionId,
+          assistantMsg,
+        );
         setLastSuggestedReplies(res.suggestedReplies ?? []);
         const action = res.actionSuggestion;
         setLastAction(action && action.kind !== "none" ? action : null);
@@ -318,15 +376,26 @@ export default function CoachScreen() {
             proposedAction: res.proposedAction ?? null,
           });
         }
-      } catch {
+      } catch (err) {
         setStreamingText(null);
         setIsStreaming(false);
+        // Silent cancel: a deliberate session switch / new-chat / unmount
+        // aborts the in-flight stream; surfacing a "connection interrupted"
+        // bubble would be wrong UX. We treat any AbortError (or a
+        // signal that's now aborted) as user-initiated cancellation.
+        const aborted =
+          (err instanceof Error && err.name === "AbortError") ||
+          // streamCoachReply may wrap, so also check the controller signal.
+          // The controller is only allocated on the streaming path; for the
+          // image-turn path we fall through and DO show the error message.
+          false;
+        if (aborted) return;
         const errMsg: ChatMessage = {
           role: "assistant",
           content:
             "Bağlantı bir anlığa kəsildi. Mesajını yenidən göndər — davam edək.",
         };
-        await appendActiveCoachMessage(errMsg);
+        await appendCoachMessageToSession(pinnedGoalId, pinnedSessionId, errMsg);
       }
     },
     [
@@ -342,7 +411,7 @@ export default function CoachScreen() {
       activeCoachMemory,
       activeReflections,
       activeRoadmapEvolutions,
-      appendActiveCoachMessage,
+      appendCoachMessageToSession,
       applyCoachMemoryUpdate,
       modelChoice,
       pendingAttachment,
@@ -350,7 +419,56 @@ export default function CoachScreen() {
       tts,
       isStreaming,
       account.calendarSync,
+      activeGoal,
+      activeCoachSessionId,
+      activeCoachSessions,
+      generateTitle,
+      renameCoachSession,
     ],
+  );
+
+  const onNewChat = useCallback(async () => {
+    setSidebarOpen(false);
+    setLastSuggestedReplies([]);
+    setLastAction(null);
+    setLastProposedAction(null);
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+    await createCoachSession();
+  }, [createCoachSession]);
+
+  const onPickSession = useCallback(
+    async (sessionId: string) => {
+      setSidebarOpen(false);
+      if (sessionId === activeCoachSessionId) return;
+      setLastSuggestedReplies([]);
+      setLastAction(null);
+      setLastProposedAction(null);
+      streamAbortRef.current?.abort();
+      streamAbortRef.current = null;
+      await switchCoachSession(sessionId);
+    },
+    [activeCoachSessionId, switchCoachSession],
+  );
+
+  const onDeleteSession = useCallback(
+    (sessionId: string, title: string) => {
+      const goAhead = () => void deleteCoachSession(sessionId);
+      if (Platform.OS === "web") {
+        // eslint-disable-next-line no-alert
+        if (window.confirm(`Delete "${title}"?`)) goAhead();
+        return;
+      }
+      Alert.alert(
+        "Delete chat",
+        `Delete "${title}"? This cannot be undone.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: goAhead },
+        ],
+      );
+    },
+    [deleteCoachSession],
   );
 
   const onActionPress = async () => {
@@ -738,6 +856,23 @@ export default function CoachScreen() {
     >
       <View style={[styles.header, { paddingTop: topPad }]}>
         <View style={styles.headerInner}>
+          <Pressable
+            onPress={() => setSidebarOpen(true)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Open chat history"
+            testID="open-sidebar"
+            style={({ pressed }) => [
+              styles.hamburgerBtn,
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.muted,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <Feather name="menu" size={16} color={colors.foreground} />
+          </Pressable>
           <View style={{ flex: 1 }}>
             <AtlasLogo size="lg" />
           </View>
@@ -1096,9 +1231,294 @@ export default function CoachScreen() {
         </View>
       </View>
     </KeyboardAvoidingView>
+    <ChatSessionsSidebar
+      visible={sidebarOpen}
+      onClose={() => setSidebarOpen(false)}
+      sessions={activeCoachSessions}
+      activeSessionId={activeCoachSessionId}
+      goalTitle={activeGoal?.profile?.goalType ?? ""}
+      onNewChat={onNewChat}
+      onPickSession={onPickSession}
+      onDeleteSession={onDeleteSession}
+    />
     </View>
   );
 }
+
+// ---------------------------------------------------------------------------
+// ChatGPT-style sidebar listing every coaching session for the active goal.
+// Slides in from the left over a dim backdrop. Each row shows the session
+// title, a one-line preview of the latest message, and the time it landed.
+// Long-press (or the trash icon) deletes a session after confirmation.
+// ---------------------------------------------------------------------------
+
+function ChatSessionsSidebar({
+  visible,
+  onClose,
+  sessions,
+  activeSessionId,
+  goalTitle,
+  onNewChat,
+  onPickSession,
+  onDeleteSession,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  sessions: ChatSession[];
+  activeSessionId: string | null;
+  goalTitle: string;
+  onNewChat: () => void;
+  onPickSession: (id: string) => void;
+  onDeleteSession: (id: string, title: string) => void;
+}) {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  // Newest first; sessions without messages bubble to the top via createdAt.
+  const ordered = [...sessions].sort((a, b) => {
+    const aT = Date.parse(a.lastMessageAt || a.createdAt) || 0;
+    const bT = Date.parse(b.lastMessageAt || b.createdAt) || 0;
+    return bT - aT;
+  });
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={sidebarStyles.backdropRow}>
+        <View
+          style={[
+            sidebarStyles.panel,
+            {
+              backgroundColor: colors.background,
+              borderRightColor: colors.border,
+              paddingTop: insets.top + 12,
+              paddingBottom: insets.bottom + 12,
+            },
+          ]}
+        >
+          <View style={sidebarStyles.panelHeader}>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={[
+                  sidebarStyles.eyebrow,
+                  {
+                    color: colors.mutedForeground,
+                    fontFamily: "Inter_600SemiBold",
+                  },
+                ]}
+                numberOfLines={1}
+              >
+                {goalTitle ? goalTitle.toUpperCase() : "CHATS"}
+              </Text>
+              <Text
+                style={[
+                  sidebarStyles.title,
+                  { color: colors.foreground, fontFamily: "Inter_700Bold" },
+                ]}
+              >
+                Chats
+              </Text>
+            </View>
+            <Pressable
+              onPress={onClose}
+              hitSlop={10}
+              accessibilityLabel="Close chat history"
+              style={({ pressed }) => [
+                sidebarStyles.iconBtn,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: colors.muted,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <Feather name="x" size={16} color={colors.foreground} />
+            </Pressable>
+          </View>
+
+          <Pressable
+            onPress={onNewChat}
+            style={({ pressed }) => [
+              sidebarStyles.newBtn,
+              {
+                backgroundColor: colors.primary,
+                opacity: pressed ? 0.85 : 1,
+              },
+            ]}
+            testID="new-chat-button"
+          >
+            <Feather name="plus" size={16} color={colors.primaryForeground} />
+            <Text
+              style={[
+                sidebarStyles.newBtnText,
+                {
+                  color: colors.primaryForeground,
+                  fontFamily: "Inter_600SemiBold",
+                },
+              ]}
+            >
+              New chat
+            </Text>
+          </Pressable>
+
+          {ordered.length === 0 ? (
+            <View style={sidebarStyles.empty}>
+              <Text
+                style={[
+                  sidebarStyles.emptyText,
+                  {
+                    color: colors.mutedForeground,
+                    fontFamily: "Inter_500Medium",
+                  },
+                ]}
+              >
+                No chats yet. Tap "New chat" to start.
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={ordered}
+              keyExtractor={(s) => s.id}
+              contentContainerStyle={{ paddingVertical: 8 }}
+              renderItem={({ item }) => {
+                const isActive = item.id === activeSessionId;
+                const lastMsg =
+                  item.messages.length > 0
+                    ? item.messages[item.messages.length - 1].content
+                    : "";
+                const preview = lastMsg.replace(/\s+/g, " ").trim();
+                return (
+                  <Pressable
+                    onPress={() => onPickSession(item.id)}
+                    onLongPress={() => onDeleteSession(item.id, item.title)}
+                    style={({ pressed }) => [
+                      sidebarStyles.row,
+                      {
+                        borderColor: colors.border,
+                        backgroundColor: isActive
+                          ? colors.primary + "18"
+                          : pressed
+                            ? colors.muted
+                            : "transparent",
+                      },
+                    ]}
+                    testID={`session-row-${item.id}`}
+                  >
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          sidebarStyles.rowTitle,
+                          {
+                            color: colors.foreground,
+                            fontFamily: "Inter_600SemiBold",
+                          },
+                        ]}
+                      >
+                        {item.title || "New chat"}
+                      </Text>
+                      {preview ? (
+                        <Text
+                          numberOfLines={1}
+                          style={[
+                            sidebarStyles.rowPreview,
+                            {
+                              color: colors.mutedForeground,
+                              fontFamily: "Inter_400Regular",
+                            },
+                          ]}
+                        >
+                          {preview}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Pressable
+                      onPress={() => onDeleteSession(item.id, item.title)}
+                      hitSlop={8}
+                      accessibilityLabel="Delete chat"
+                      style={({ pressed }) => ({
+                        padding: 6,
+                        opacity: pressed ? 0.6 : 0.8,
+                      })}
+                    >
+                      <Feather
+                        name="trash-2"
+                        size={14}
+                        color={colors.mutedForeground}
+                      />
+                    </Pressable>
+                  </Pressable>
+                );
+              }}
+            />
+          )}
+        </View>
+        <Pressable
+          style={sidebarStyles.dismiss}
+          onPress={onClose}
+          accessibilityLabel="Close chat history"
+        />
+      </View>
+    </Modal>
+  );
+}
+
+const sidebarStyles = StyleSheet.create({
+  backdropRow: {
+    flex: 1,
+    flexDirection: "row",
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  panel: {
+    width: "82%",
+    maxWidth: 360,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+  },
+  panelHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 4,
+    paddingBottom: 12,
+  },
+  eyebrow: { fontSize: 10, letterSpacing: 1.2 },
+  title: { fontSize: 22, marginTop: 2 },
+  iconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  newBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginBottom: 6,
+  },
+  newBtnText: { fontSize: 14 },
+  empty: { paddingTop: 28, paddingHorizontal: 8 },
+  emptyText: { fontSize: 13, lineHeight: 18 },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginVertical: 2,
+  },
+  rowTitle: { fontSize: 14 },
+  rowPreview: { fontSize: 12, marginTop: 2 },
+  dismiss: { flex: 1 },
+});
 
 // ---------------------------------------------------------------------------
 // Voice transcription helper. Uploads the recorded clip to /api/atlas/transcribe
@@ -1265,6 +1685,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
+  hamburgerBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   memoryBanner: {
     marginTop: 12,
     paddingVertical: 10,
@@ -1300,9 +1728,13 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
+    maxWidth: "100%",
+    flexShrink: 1,
   },
   factText: {
     fontSize: 12,
+    flexShrink: 1,
+    flexWrap: "wrap",
   },
   forgetButton: {
     flexDirection: "row",
