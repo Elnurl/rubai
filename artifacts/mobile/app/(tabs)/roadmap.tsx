@@ -203,18 +203,24 @@ export default function RoadmapScreen() {
         </View>
 
         <View style={styles.phases}>
-          {activeRoadmap.phases.map((phase, i) => (
-            <PhaseCard
-              key={phase.id}
-              phase={phase}
-              index={i}
-              isActive={
-                activeCurrentWeek >= phase.startWeek &&
-                activeCurrentWeek <= phase.endWeek
-              }
-              updated={updatedPhaseIds.has(phase.id)}
-            />
-          ))}
+          {activeRoadmap.phases.map((phase, i) => {
+            const status =
+              activeCurrentWeek > phase.endWeek
+                ? "completed"
+                : activeCurrentWeek >= phase.startWeek
+                  ? "active"
+                  : "upcoming";
+            return (
+              <PhaseCard
+                key={phase.id}
+                phase={phase}
+                index={i}
+                status={status}
+                isLast={i === activeRoadmap.phases.length - 1}
+                updated={updatedPhaseIds.has(phase.id)}
+              />
+            );
+          })}
         </View>
 
         {activeRoadmap.riskAnalysis.length > 0 && (
@@ -316,7 +322,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   phases: {
-    gap: 12,
+    gap: 0,
   },
   risksCard: {
     padding: 18,
