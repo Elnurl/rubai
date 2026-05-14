@@ -1,4 +1,5 @@
 import { useAuth, useSignUp, useSSO } from "@clerk/expo";
+import { Feather } from "@expo/vector-icons";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import { Link, useRouter } from "expo-router";
@@ -73,17 +74,14 @@ export default function SignUpScreen() {
 
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
-  const [code, setCode] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [oauthLoading, setOauthLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [resending, setResending] = useState(false);
 
   const handleSubmit = useCallback(async () => {
     if (!signUp) return;
     setSubmitError(null);
-    setInfo(null);
     if (password.length < 8) {
       setSubmitError("Password must be at least 8 characters long.");
       return;
@@ -101,9 +99,10 @@ export default function SignUpScreen() {
         unverified: signUp.unverifiedFields,
         missing: signUp.missingFields,
       });
-      // Some Clerk instances (e.g. when email verification is disabled) finish
-      // the sign-up immediately. Don't sit on the verification screen waiting
-      // for a code that will never come — finalize and route home.
+      // The 6-digit email verification step has been removed for now.
+      // If Clerk's instance is configured to require email verification,
+      // status will stay at "missing_requirements" — surface a clear
+      // error rather than rendering the (deleted) verify UI.
       if (signUp.status === "complete") {
         await signUp.finalize({
           navigate: ({ session }) => {
@@ -113,23 +112,8 @@ export default function SignUpScreen() {
         });
         return;
       }
-      const needsEmailVerify =
-        signUp.status === "missing_requirements" &&
-        signUp.unverifiedFields?.includes("email_address");
-      if (!needsEmailVerify) {
-        setSubmitError(
-          "We couldn't continue your sign-up. Please try again or contact support.",
-        );
-        return;
-      }
-      const { error: sendErr } = await signUp.verifications.sendEmailCode();
-      if (sendErr) {
-        debug("sendEmailCode error", sendErr);
-        setSubmitError(friendlyAuthError(sendErr));
-        return;
-      }
-      setInfo(
-        `We emailed a 6-digit code to ${emailAddress}. It can take a minute — be sure to check your spam or promotions folder.`,
+      setSubmitError(
+        "We couldn't finish creating your account. Email verification appears to still be required on the server. Please contact support.",
       );
     } catch (err) {
       debug("submit threw", err);
@@ -138,68 +122,6 @@ export default function SignUpScreen() {
       setSubmitting(false);
     }
   }, [signUp, emailAddress, password, router]);
-
-  const handleVerify = useCallback(async () => {
-    if (!signUp) return;
-    setSubmitError(null);
-    setInfo(null);
-    const trimmed = code.trim().replace(/\s+/g, "");
-    if (trimmed.length === 0) {
-      setSubmitError("Enter the 6-digit code we emailed you.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      debug("verify attempt");
-      const { error } = await signUp.verifications.verifyEmailCode({
-        code: trimmed,
-      });
-      if (error) {
-        debug("verify error", error);
-        setSubmitError(friendlyAuthError(error));
-        return;
-      }
-      debug("verify ok, status =", signUp.status);
-      if (signUp.status === "complete") {
-        await signUp.finalize({
-          navigate: ({ session }) => {
-            if (session?.currentTask) return;
-            router.replace("/");
-          },
-        });
-      } else {
-        setSubmitError(
-          "We couldn't finish creating your account. Tap 'Resend code' and try again.",
-        );
-      }
-    } catch (err) {
-      debug("verify threw", err);
-      setSubmitError(friendlyAuthError(err));
-    } finally {
-      setSubmitting(false);
-    }
-  }, [signUp, code, router]);
-
-  const handleResend = useCallback(async () => {
-    if (!signUp) return;
-    setSubmitError(null);
-    setInfo(null);
-    setResending(true);
-    try {
-      const { error } = await signUp.verifications.sendEmailCode();
-      if (error) {
-        setSubmitError(friendlyAuthError(error));
-        return;
-      }
-      setInfo(
-        `A new code is on its way to ${emailAddress}. Check your spam or promotions folder if you don't see it.`,
-      );
-    } catch (err) {
-      setSubmitError(friendlyAuthError(err));
-    } finally {
-      setResending(false);
-    }
-  }, [signUp, emailAddress]);
 
   const handleGoogle = useCallback(async () => {
     setSubmitError(null);
@@ -248,12 +170,6 @@ export default function SignUpScreen() {
 
   const isFetching = fetchStatus === "fetching" || submitting;
   const disabled = !emailAddress || !password || isFetching;
-  const verifyDisabled = !code || isFetching;
-
-  const needsVerification =
-    signUp.status === "missing_requirements" &&
-    signUp.unverifiedFields?.includes("email_address") &&
-    (signUp.missingFields?.length ?? 0) === 0;
 
   // Surface any global Clerk errors (captcha rejection, bot protection,
   // rate-limits, network problems) that aren't returned via the .password()
@@ -275,104 +191,14 @@ export default function SignUpScreen() {
               <AtlasLogo size="lg" />
             </View>
             <Text style={styles.title} maxFontSizeMultiplier={1.4}>
-              {needsVerification ? "Check your email" : "Create your account"}
+              Create your account
             </Text>
             <Text style={styles.subtitle} maxFontSizeMultiplier={1.4}>
-              {needsVerification
-                ? `We sent a 6-digit code to ${emailAddress}. Enter it below to finish setting up your account.`
-                : "Start your AI-coached journey toward your biggest goal."}
+              Start your AI-coached journey toward your biggest goal.
             </Text>
           </View>
 
-          {needsVerification ? (
-            <>
-              <Text style={styles.label} maxFontSizeMultiplier={1.3}>
-                Verification code
-              </Text>
-              <TextInput
-                style={[styles.input, styles.codeInput]}
-                value={code}
-                onChangeText={setCode}
-                placeholder="123456"
-                placeholderTextColor={BRAND.muted}
-                keyboardType="number-pad"
-                autoComplete="one-time-code"
-                textContentType="oneTimeCode"
-                returnKeyType="go"
-                maxLength={6}
-                onSubmitEditing={handleVerify}
-                editable={!isFetching}
-              />
-              {errors?.fields?.code?.message && (
-                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
-                  {errors.fields.code.message}
-                </Text>
-              )}
-              {info && !submitError && (
-                <Text style={styles.infoText} maxFontSizeMultiplier={1.3}>
-                  {info}
-                </Text>
-              )}
-              <Text style={styles.hintText} maxFontSizeMultiplier={1.3}>
-                Codes can take up to a minute. If nothing arrives, check your
-                spam or promotions folder, then tap Resend code.
-              </Text>
-              {submitError && (
-                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
-                  {submitError}
-                </Text>
-              )}
-              {globalClerkError && (
-                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
-                  {globalClerkError}
-                </Text>
-              )}
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.primaryBtn,
-                  verifyDisabled && styles.primaryBtnDisabled,
-                  pressed &&
-                    !verifyDisabled &&
-                    Platform.OS === "ios" && { opacity: 0.9 },
-                ]}
-                android_ripple={{ color: "#FFFFFF22" }}
-                onPress={handleVerify}
-                disabled={verifyDisabled}
-                accessibilityRole="button"
-              >
-                {isFetching ? (
-                  <ActivityIndicator color="#FAF6EE" />
-                ) : (
-                  <Text
-                    style={styles.primaryBtnText}
-                    maxFontSizeMultiplier={1.3}
-                  >
-                    Verify and continue
-                  </Text>
-                )}
-              </Pressable>
-
-              <Pressable
-                hitSlop={8}
-                onPress={handleResend}
-                disabled={resending}
-                style={{
-                  alignSelf: "center",
-                  marginTop: 16,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-                accessibilityRole="button"
-              >
-                {resending && <ActivityIndicator size="small" color={BRAND.primary} />}
-                <Text style={styles.linkText} maxFontSizeMultiplier={1.3}>
-                  {resending ? "Sending…" : "Resend code"}
-                </Text>
-              </Pressable>
-            </>
-          ) : (
+          {(
             <>
               {isWebInIframe() && (
                 <View style={styles.iframeNotice}>
@@ -450,18 +276,35 @@ export default function SignUpScreen() {
               >
                 Password
               </Text>
-              <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="At least 8 characters"
-                placeholderTextColor={BRAND.muted}
-                secureTextEntry
-                autoComplete="password-new"
-                returnKeyType="go"
-                onSubmitEditing={handleSubmit}
-                editable={!isFetching}
-              />
+              <View style={styles.passwordRow}>
+                <TextInput
+                  style={[styles.input, styles.passwordInput]}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="At least 8 characters"
+                  placeholderTextColor={BRAND.muted}
+                  secureTextEntry={!showPassword}
+                  autoComplete="password-new"
+                  returnKeyType="go"
+                  onSubmitEditing={handleSubmit}
+                  editable={!isFetching}
+                />
+                <Pressable
+                  onPress={() => setShowPassword((v) => !v)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    showPassword ? "Hide password" : "Show password"
+                  }
+                  style={styles.eyeBtn}
+                >
+                  <Feather
+                    name={showPassword ? "eye-off" : "eye"}
+                    size={18}
+                    color={BRAND.muted}
+                  />
+                </Pressable>
+              </View>
               {errors?.fields?.password?.message && (
                 <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
                   {errors.fields.password.message}
@@ -611,11 +454,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: BRAND.fg,
   },
-  codeInput: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 22,
-    letterSpacing: 6,
-    textAlign: "center",
+  passwordRow: {
+    position: "relative",
+    justifyContent: "center",
+  },
+  passwordInput: {
+    paddingRight: 44,
+  },
+  eyeBtn: {
+    position: "absolute",
+    right: 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+    paddingHorizontal: 4,
   },
   errorText: {
     fontFamily: "Inter_500Medium",

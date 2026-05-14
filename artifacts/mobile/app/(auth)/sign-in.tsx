@@ -1,4 +1,6 @@
 import { useAuth, useSignIn, useSSO } from "@clerk/expo";
+import { Feather } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import { Link, useRouter } from "expo-router";
@@ -19,6 +21,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { GoogleGIcon } from "@/components/GoogleGIcon";
 import { friendlyAuthError } from "@/lib/authErrors";
+
+// Remembers the last email the user signed in with on this device, so
+// repeat sign-ins are one tap + password. Storing the email itself is
+// industry-standard "remember me" UX. We never store the password.
+const REMEMBER_EMAIL_KEY = "atlas:v2:auth:rememberEmail";
+const REMEMBER_FLAG_KEY = "atlas:v2:auth:rememberFlag";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -83,9 +91,45 @@ export default function SignInScreen() {
 
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [oauthLoading, setOauthLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Hydrate "remember me" choice + last-used email from local storage on
+  // first mount. Defaults: flag = true (remember), email = empty.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [flagRaw, savedEmail] = await Promise.all([
+          AsyncStorage.getItem(REMEMBER_FLAG_KEY),
+          AsyncStorage.getItem(REMEMBER_EMAIL_KEY),
+        ]);
+        if (cancelled) return;
+        const remembered = flagRaw !== "0";
+        setRememberMe(remembered);
+        if (remembered && savedEmail) setEmailAddress(savedEmail);
+      } catch {
+        // ignore — remembering email is best-effort
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Persist remember preference + saved email each time the toggle flips
+  // or the email field changes. Only the email is stored; never the password.
+  useEffect(() => {
+    void AsyncStorage.setItem(REMEMBER_FLAG_KEY, rememberMe ? "1" : "0");
+    if (!rememberMe) {
+      void AsyncStorage.removeItem(REMEMBER_EMAIL_KEY);
+    } else if (emailAddress.trim().length > 0) {
+      void AsyncStorage.setItem(REMEMBER_EMAIL_KEY, emailAddress.trim());
+    }
+  }, [rememberMe, emailAddress]);
 
   const handleSubmit = useCallback(async () => {
     if (!signIn) return;
@@ -143,18 +187,15 @@ export default function SignInScreen() {
         return;
       }
 
-      // Clerk's "client trust" path — fired when signing in from a new
-      // device/browser. Clerk sends a 6-digit code by email; we ask for
-      // it on the verify screen. THIS is the path users see most often
-      // and is what people commonly call "the 2FA / 6-digit step".
-      // The verify screen owns the actual sendEmailCode call (single
-      // source of truth) — we just route there with the right strategy.
+      // The "needs_client_trust" 6-digit email verification has been
+      // removed for now. If Clerk still requires it (instance is in a
+      // strict-trust mode) the only way past it is via the dashboard
+      // setting — we surface a clear error rather than dead-routing.
       if (signIn.status === "needs_client_trust") {
-        debug("needs_client_trust — routing to verify");
-        router.push({
-          pathname: "/verify",
-          params: { strategy: "email_code", email: emailAddress },
-        });
+        debug("needs_client_trust — verification removed");
+        setSubmitError(
+          "Sign-in needs an extra verification step that's currently disabled in this build. Please contact support.",
+        );
         return;
       }
 
@@ -315,23 +356,60 @@ export default function SignInScreen() {
               </Pressable>
             </Link>
           </View>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Your password"
-            placeholderTextColor={BRAND.muted}
-            secureTextEntry
-            autoComplete="password"
-            returnKeyType="go"
-            onSubmitEditing={handleSubmit}
-            editable={!isFetching}
-          />
+          <View style={styles.passwordRow}>
+            <TextInput
+              style={[styles.input, styles.passwordInput]}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Your password"
+              placeholderTextColor={BRAND.muted}
+              secureTextEntry={!showPassword}
+              autoComplete="password"
+              returnKeyType="go"
+              onSubmitEditing={handleSubmit}
+              editable={!isFetching}
+            />
+            <Pressable
+              onPress={() => setShowPassword((v) => !v)}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+              style={styles.eyeBtn}
+            >
+              <Feather
+                name={showPassword ? "eye-off" : "eye"}
+                size={18}
+                color={BRAND.muted}
+              />
+            </Pressable>
+          </View>
           {errors?.fields?.password?.message && (
             <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
               {errors.fields.password.message}
             </Text>
           )}
+
+          <Pressable
+            onPress={() => setRememberMe((v) => !v)}
+            style={styles.rememberRow}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: rememberMe }}
+            hitSlop={6}
+          >
+            <View
+              style={[
+                styles.checkbox,
+                rememberMe && styles.checkboxChecked,
+              ]}
+            >
+              {rememberMe && (
+                <Feather name="check" size={14} color="#FAF6EE" />
+              )}
+            </View>
+            <Text style={styles.rememberText} maxFontSizeMultiplier={1.3}>
+              Remember me on this device
+            </Text>
+          </Pressable>
 
           {submitError && (
             <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
@@ -473,6 +551,47 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     fontSize: 15,
     color: BRAND.fg,
+  },
+  passwordRow: {
+    position: "relative",
+    justifyContent: "center",
+  },
+  passwordInput: {
+    paddingRight: 44,
+  },
+  eyeBtn: {
+    position: "absolute",
+    right: 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  rememberRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 14,
+    paddingVertical: 4,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: BRAND.border,
+    backgroundColor: BRAND.card,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxChecked: {
+    backgroundColor: BRAND.primary,
+    borderColor: BRAND.primary,
+  },
+  rememberText: {
+    fontFamily: "Inter_500Medium",
+    color: BRAND.fg,
+    fontSize: 14,
   },
   errorText: {
     fontFamily: "Inter_500Medium",
