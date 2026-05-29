@@ -198,7 +198,6 @@ export default function GoalsScreen() {
 
       <CoachQuickBar
         placeholder="Add a goal or ask rubai to design one..."
-        chips={["Design a new goal", "Compare two goals", "Make a goal easier"]}
         onHeight={setQuickBarHeight}
       />
     </View>

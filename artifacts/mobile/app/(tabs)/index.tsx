@@ -410,7 +410,6 @@ export default function TodayScreen() {
 
       <CoachQuickBar
         placeholder="Talk to rubai about today..."
-        chips={["Reschedule next task", "I'm losing focus", "Make today lighter"]}
         onHeight={setQuickBarHeight}
       />
 

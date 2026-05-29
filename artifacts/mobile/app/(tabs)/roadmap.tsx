@@ -1,8 +1,8 @@
 import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated, { FadeIn } from "react-native-reanimated";
 
 import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { AdaptiveEngineCard } from "@/components/AdaptiveEngineCard";
@@ -11,10 +11,12 @@ import { CoachQuickBar } from "@/components/CoachQuickBar";
 import { EmptyState } from "@/components/EmptyState";
 import { PhaseCard } from "@/components/PhaseCard";
 import { SectionHeader } from "@/components/SectionHeader";
+import { TodayAnchorsCard } from "@/components/TodayAnchorsCard";
 import { profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { useEvolveRoadmap } from "@/hooks/useEvolveRoadmap";
 import { useAtlas } from "@/providers/AtlasProvider";
+import { todayISO } from "@/lib/storage";
 
 export default function RoadmapScreen() {
   const colors = useColors();
@@ -23,6 +25,7 @@ export default function RoadmapScreen() {
   const topPad = isWeb ? 67 : insets.top + 8;
   const bottomTab = isWeb ? 100 : 110;
   const [quickBarHeight, setQuickBarHeight] = useState(0);
+  const router = useRouter();
   const {
     activeRoadmap,
     activeProfile,
@@ -30,8 +33,21 @@ export default function RoadmapScreen() {
     activeRoadmapEvolutions,
     activeLastEvolvedAt,
     activeBehavioralProfile,
+    activeDailyPlan,
+    activeTaskHistory,
   } = useAtlas();
   const { evolve, isEvolving } = useEvolveRoadmap();
+
+  const today = todayISO();
+  const planIsForToday = activeDailyPlan?.plan.date === today;
+  const todaysTasks = planIsForToday ? (activeDailyPlan?.plan.tasks ?? []) : [];
+  const todaysCompletions = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const e of activeTaskHistory) {
+      if (e.date === today) map.set(e.taskId, e.completed);
+    }
+    return map;
+  }, [activeTaskHistory, today]);
   const [evolveError, setEvolveError] = useState<string | null>(null);
   const [lastNoChangeAt, setLastNoChangeAt] = useState<string | null>(null);
 
@@ -107,16 +123,50 @@ export default function RoadmapScreen() {
         <View style={styles.hero}>
           <SectionHeader
             title={activeRoadmap.headline}
-            subtitle={`${activeRoadmap.totalWeeks} weeks${goalLabel ? ` • ${goalLabel}` : ""}`}
+            subtitle={`Week ${activeCurrentWeek} of ${activeRoadmap.totalWeeks}${goalLabel ? ` · ${goalLabel}` : ""}`}
           />
-          <Text
-            style={[
-              styles.summary,
-              { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-            ]}
-          >
-            {activeRoadmap.summary}
-          </Text>
+        </View>
+
+        {todaysTasks.length > 0 && (
+          <TodayAnchorsCard
+            tasks={todaysTasks}
+            completions={todaysCompletions}
+            onPressTask={(task) =>
+              router.push({
+                pathname: "/(tabs)/coach",
+                params: { prefill: `Help me adjust "${task.title}"` },
+              })
+            }
+          />
+        )}
+
+        <Text
+          style={[
+            styles.eyebrow,
+            { color: colors.primary, fontFamily: "Inter_600SemiBold" },
+          ]}
+        >
+          {activeRoadmap.totalWeeks}-WEEK ARC
+        </Text>
+
+        <View style={styles.phases}>
+          {activeRoadmap.phases.map((phase, i) => {
+            const status =
+              activeCurrentWeek > phase.endWeek
+                ? "completed"
+                : activeCurrentWeek >= phase.startWeek
+                  ? "active"
+                  : "upcoming";
+            return (
+              <PhaseCard
+                key={phase.id}
+                phase={phase}
+                index={i}
+                status={status}
+                updated={updatedPhaseIds.has(phase.id)}
+              />
+            );
+          })}
         </View>
 
         <AdaptiveEngineCard
@@ -202,35 +252,6 @@ export default function RoadmapScreen() {
           >
             {activeRoadmap.strategy}
           </Text>
-        </View>
-
-        <Text
-          style={[
-            styles.eyebrow,
-            { color: colors.primary, fontFamily: "Inter_600SemiBold" },
-          ]}
-        >
-          {activeRoadmap.totalWeeks}-WEEK ARC
-        </Text>
-
-        <View style={styles.phases}>
-          {activeRoadmap.phases.map((phase, i) => {
-            const status =
-              activeCurrentWeek > phase.endWeek
-                ? "completed"
-                : activeCurrentWeek >= phase.startWeek
-                  ? "active"
-                  : "upcoming";
-            return (
-              <PhaseCard
-                key={phase.id}
-                phase={phase}
-                index={i}
-                status={status}
-                updated={updatedPhaseIds.has(phase.id)}
-              />
-            );
-          })}
         </View>
 
         {activeRoadmap.riskAnalysis.length > 0 && (
