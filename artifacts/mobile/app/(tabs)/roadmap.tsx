@@ -7,6 +7,7 @@ import Animated, { FadeIn } from "react-native-reanimated";
 import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { AdaptiveEngineCard } from "@/components/AdaptiveEngineCard";
 import { AskCoachPill } from "@/components/AskCoachPill";
+import { CoachQuickBar } from "@/components/CoachQuickBar";
 import { EmptyState } from "@/components/EmptyState";
 import { PhaseCard } from "@/components/PhaseCard";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -21,6 +22,7 @@ export default function RoadmapScreen() {
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 8;
   const bottomTab = isWeb ? 100 : 110;
+  const [quickBarHeight, setQuickBarHeight] = useState(0);
   const {
     activeRoadmap,
     activeProfile,
@@ -82,7 +84,7 @@ export default function RoadmapScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: topPad, paddingBottom: bottomTab },
+          { paddingTop: topPad, paddingBottom: bottomTab + quickBarHeight },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -271,6 +273,11 @@ export default function RoadmapScreen() {
           </View>
         )}
       </ScrollView>
+
+      <CoachQuickBar
+        placeholder="Adjust roadmap, reschedule, or ask why..."
+        onHeight={setQuickBarHeight}
+      />
     </View>
   );
 }

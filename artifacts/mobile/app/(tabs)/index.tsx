@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { AtlasButton } from "@/components/AtlasButton";
 import { AskCoachPill } from "@/components/AskCoachPill";
+import { CoachQuickBar } from "@/components/CoachQuickBar";
 import { EmptyState } from "@/components/EmptyState";
 import { ReflectionSheet } from "@/components/ReflectionSheet";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -42,6 +43,7 @@ export default function TodayScreen() {
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 8;
   const bottomTab = isWeb ? 100 : 110;
+  const [quickBarHeight, setQuickBarHeight] = useState(0);
 
   const {
     activeGoalId,
@@ -224,7 +226,7 @@ export default function TodayScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: topPad, paddingBottom: bottomTab },
+          { paddingTop: topPad, paddingBottom: bottomTab + quickBarHeight },
         ]}
         refreshControl={
           <RefreshControl
@@ -405,6 +407,12 @@ export default function TodayScreen() {
           )}
         </View>
       </ScrollView>
+
+      <CoachQuickBar
+        placeholder="Talk to rubai about today..."
+        chips={["Reschedule next task", "I'm losing focus", "Make today lighter"]}
+        onHeight={setQuickBarHeight}
+      />
 
       {reflectTarget && (
         <ReflectionSheet

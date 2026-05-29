@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -141,6 +141,7 @@ export default function CoachScreen() {
   const recorder = useVoiceRecorder();
   const tts = useTextToSpeech();
   const [draft, setDraft] = useState("");
+  const inputRef = useRef<TextInput>(null);
   const [lastSuggestedReplies, setLastSuggestedReplies] = useState<string[]>([]);
   const [lastAction, setLastAction] = useState<CoachActionSuggestion | null>(null);
   const [applyingAction, setApplyingAction] = useState(false);
@@ -489,6 +490,58 @@ export default function CoachScreen() {
       renameCoachSession,
     ],
   );
+
+  // Consume params handed in by the CoachQuickBar on Today / Roadmap / Goals.
+  // `prefill` + `autostart` → send the prompt; `focus` → just focus the input.
+  // We key off the prefill text so the same chip can be tapped again later
+  // (params are cleared after handling, which resets the guard).
+  const params = useLocalSearchParams<{
+    prefill?: string;
+    autostart?: string;
+    focus?: string;
+  }>();
+  const handledPrefillRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (params.focus === "1") {
+      router.setParams({ focus: "" });
+      const t = setTimeout(() => inputRef.current?.focus(), 350);
+      return () => clearTimeout(t);
+    }
+  }, [params.focus, router]);
+  useEffect(() => {
+    const prefill =
+      typeof params.prefill === "string" ? params.prefill.trim() : "";
+    if (!prefill) {
+      handledPrefillRef.current = null;
+      return;
+    }
+    if (handledPrefillRef.current === prefill) return;
+    const auto = params.autostart === "1";
+    // A turn already in flight is a *transient* block — wait for it to settle
+    // (deps below re-run this effect) before consuming the param.
+    if (auto && (coach.isPending || isStreaming)) return;
+    handledPrefillRef.current = prefill;
+    router.setParams({ prefill: "", autostart: "" });
+    // Only auto-send when the coach is actually unlocked. If there's no active
+    // profile/roadmap the coach screen is locked, so we can't (and must not
+    // later silently) send — stash the text as a draft instead so the param is
+    // consumed now and never fires unexpectedly once prerequisites appear.
+    if (auto && activeProfile && activeRoadmap) {
+      void send(prefill);
+    } else {
+      setDraft(prefill);
+      setTimeout(() => inputRef.current?.focus(), 350);
+    }
+  }, [
+    params.prefill,
+    params.autostart,
+    activeProfile,
+    activeRoadmap,
+    coach.isPending,
+    isStreaming,
+    send,
+    router,
+  ]);
 
   const onNewChat = useCallback(async () => {
     setSidebarOpen(false);
@@ -1361,6 +1414,7 @@ export default function CoachScreen() {
             </View>
           ) : (
             <TextInput
+              ref={inputRef}
               value={draft}
               onChangeText={setDraft}
               placeholder="Talk to your coach..."
