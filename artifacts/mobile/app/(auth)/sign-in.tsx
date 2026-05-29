@@ -173,17 +173,15 @@ export default function SignInScreen() {
         return;
       }
 
-      // Replit-managed Clerk doesn't support MFA today, but if Clerk ever
-      // returns `needs_second_factor` (e.g. TOTP/SMS configured externally)
-      // we route to the verify screen with a sensible default strategy.
+      // The dedicated verify screen has been removed along with the
+      // 6-digit step. Replit-managed Clerk doesn't support MFA today, so
+      // if Clerk ever returns `needs_second_factor` (external TOTP/SMS)
+      // we surface a clear error instead of routing to a deleted screen.
       if (signIn.status === "needs_second_factor") {
-        const factors = signIn.supportedSecondFactors ?? [];
-        const preferred =
-          factors.find((f) => f.strategy === "totp")?.strategy ??
-          factors.find((f) => f.strategy === "phone_code")?.strategy ??
-          factors.find((f) => f.strategy === "backup_code")?.strategy ??
-          "totp";
-        router.push({ pathname: "/verify", params: { strategy: preferred } });
+        debug("needs_second_factor — verify screen removed");
+        setSubmitError(
+          "Your account requires two-factor verification, which isn't available in this build. Please contact support.",
+        );
         return;
       }
 
