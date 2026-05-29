@@ -578,13 +578,35 @@ const coachMemoryUpdateValidator = z
   })
   .nullable();
 
-const coachProposedTaskValidator = z
+const coachTaskShape = z.object({
+  title: z.string(),
+  description: z.string(),
+  durationMinutes: z.number().int(),
+  category: z.string(),
+  priority: z.enum(["critical", "high", "normal"]),
+});
+
+const coachProposedTaskValidator = coachTaskShape.nullable();
+
+// Partial edit for an existing task — every field nullable so the model can
+// patch only what changed. Strict-mode still requires each key present.
+const coachTaskPatchValidator = z
+  .object({
+    title: z.string().nullable(),
+    description: z.string().nullable(),
+    durationMinutes: z.number().int().nullable(),
+    category: z.string().nullable(),
+    priority: z.enum(["critical", "high", "normal"]).nullable(),
+  })
+  .nullable();
+
+// A single calendar event the coach can add on the user's behalf.
+const coachCalendarEventValidator = z
   .object({
     title: z.string(),
-    description: z.string(),
-    durationMinutes: z.number().int(),
-    category: z.string(),
-    priority: z.enum(["critical", "high", "normal"]),
+    notes: z.string().nullable(),
+    startISO: z.string().nullable(),
+    durationMinutes: z.number().int().nullable(),
   })
   .nullable();
 
@@ -592,10 +614,14 @@ const coachProposedActionValidator = z
   .object({
     kind: z.enum([
       "addTaskToday",
+      "addTasksToday",
       "removeTaskToday",
+      "editTaskToday",
       "renameGoal",
       "lightenToday",
+      "regenerateDay",
       "syncToCalendar",
+      "addCalendarEvent",
       "none",
     ]),
     label: z.string(),
@@ -604,10 +630,13 @@ const coachProposedActionValidator = z
     // action carries every payload field — populate the ones relevant to the
     // chosen kind, leave the others null/empty.
     task: coachProposedTaskValidator,
+    tasks: z.array(coachTaskShape),
+    taskPatch: coachTaskPatchValidator,
     taskId: z.string().nullable(),
     taskTitle: z.string().nullable(),
     newTitle: z.string().nullable(),
     removeTaskIds: z.array(z.string()),
+    event: coachCalendarEventValidator,
   })
   .nullable();
 
@@ -622,6 +651,23 @@ export const coachResponseValidator = z.object({
   memoryUpdate: coachMemoryUpdateValidator,
   proposedAction: coachProposedActionValidator,
 });
+
+// Shared description of the proposedAction vocabulary, embedded verbatim into
+// BOTH the /coach and /coach/stream system prompts so the model sees the exact
+// same action set in either path. The mobile app applies these INSTANTLY and
+// shows an Undo affordance — the copy below tells the model to speak as if the
+// change is already done.
+const PROPOSED_ACTION_RULES = `- "proposedAction": include ONLY when the user is asking you to MODIFY their plan, goal, or calendar in THIS turn. The mobile app APPLIES it immediately and shows the user a short "Undo", so you MAY speak as if it's already done (e.g. "Done — added a 10-min walk to today. Tap undo if that's off."). 'label' is a 2-5 word summary; 'rationale' is one concrete sentence tied to their context. Pick EXACTLY one kind and set the unused payload fields to null/[]:
+    • addTaskToday — add ONE task to TODAY. Fill 'task' (title ≤6 words, description, durationMinutes, category, priority).
+    • addTasksToday — add SEVERAL tasks to TODAY at once. Fill 'tasks' with 2-8 items, same shape as 'task'. Use when the user lists multiple things.
+    • editTaskToday — change an EXISTING today task. Fill 'taskId' + 'taskTitle' from the TODAY tasks list and 'taskPatch' with ONLY the fields to change (leave the rest null).
+    • removeTaskToday — drop ONE specific task. Fill 'taskId' + 'taskTitle' from TODAY's tasks.
+    • lightenToday — the day is too heavy / they have limited time. Fill 'removeTaskIds' with the lowest-priority task ids to cut.
+    • regenerateDay — they want a fresh or different plan for today. No payload.
+    • renameGoal — rename the current goal. Fill 'newTitle' (2-5 words, Title Case).
+    • syncToCalendar — put TODAY's tasks on their calendar. No payload; the app writes each task as an event.
+    • addCalendarEvent — add ONE meeting/event to their calendar. Fill 'event' (title; notes or null; startISO in ISO-8601 if a specific time is implied else null; durationMinutes or null).
+  Otherwise return null. Only act when they clearly ask. Reply text and the action must agree. Never repeat an action you already performed on the previous turn. When you reference a behavioral pattern (peak hours, consistency, momentum), state it plainly in 'reply' rather than only pointing them elsewhere.`;
 
 /**
  * Stream fallback resolver. Pulled out as a pure exported helper so the
@@ -932,13 +978,7 @@ Hard rules:
     • refresh_insights — they're asking about themselves / patterns / "what should I focus on" and the learned profile feels stale.
     • reflect_on_task — they mentioned a specific task they did or skipped and haven't reflected on it.
   Otherwise return null. Don't suggest the same action two turns in a row.
-- "proposedAction": include ONLY when the user is asking you to MODIFY their plan or goal in this turn. The mobile UI will show a Confirm/Cancel card with these — never claim the change is done; phrase your reply as "I can add this — confirm below if that's right.":
-    • addTaskToday — user asked to add a new task to TODAY (e.g. "add a 10-min reading task at 8 PM"). Fill 'task' with title/description/durationMinutes/category/priority. Keep titles concrete (≤6 words). Set the other payload fields to null/[].
-    • removeTaskToday — user asked to drop a SPECIFIC task from today. Fill taskId AND taskTitle with the matching task from the TODAY's tasks list in CONTEXT. Other fields null/[].
-    • renameGoal — user asked to rename their current goal. Fill newTitle (2-5 words, Title Case). Other fields null/[].
-    • lightenToday — user said today feels too heavy / "make today easier" / "I only have 30 minutes today". Fill removeTaskIds with the lowest-priority task ids that should be cut. Other fields null/[].
-    • syncToCalendar — user asked you to send / add / put today's tasks on their calendar (e.g. "send today's tasks to my calendar", "add them as events", "mail them to me as invites", "put my plan on the calendar"). All payload fields null/[]. The mobile app will write each task in TODAY's plan as a calendar event when the user confirms — do NOT do it without proposing this action first.
-  Otherwise return null. Reply text and proposedAction must agree — if you propose an addTask, your reply should preview the task. If the user already said "yes, do it" twice, don't keep proposing the same thing — assume the previous turn was confirmed.
+${PROPOSED_ACTION_RULES}
 - "memoryUpdate": include ONLY when the user revealed something durable in THIS message (a constraint, preference, life event, identity statement). Otherwise null. The summary you write replaces the prior summary; keep it ≤ 3 sentences. newFacts must not duplicate existing facts.
 - If the user goes off-topic, steer back to their goal in one sentence.
 
@@ -1020,10 +1060,30 @@ type CoachRawOutput = {
       category?: string;
       priority?: "critical" | "high" | "normal";
     } | null;
+    tasks?: Array<{
+      title?: string;
+      description?: string;
+      durationMinutes?: number;
+      category?: string;
+      priority?: "critical" | "high" | "normal";
+    }>;
+    taskPatch?: {
+      title?: string | null;
+      description?: string | null;
+      durationMinutes?: number | null;
+      category?: string | null;
+      priority?: "critical" | "high" | "normal" | null;
+    } | null;
     taskId?: string | null;
     taskTitle?: string | null;
     newTitle?: string | null;
     removeTaskIds?: string[];
+    event?: {
+      title?: string;
+      notes?: string | null;
+      startISO?: string | null;
+      durationMinutes?: number | null;
+    } | null;
   } | null;
 };
 
@@ -1057,95 +1117,161 @@ function normalizeCoachOutput(
   const todayTaskIds = new Set(
     (todayPlan?.tasks ?? []).map((t: { id: string }) => t.id),
   );
+  const clampNewTask = (t: {
+    title?: string;
+    description?: string;
+    durationMinutes?: number;
+    category?: string;
+    priority?: "critical" | "high" | "normal";
+  }) => ({
+    id: `task_${crypto.randomUUID()}`,
+    title: (t.title ?? "").trim().slice(0, 120),
+    description: (t.description ?? "").trim().slice(0, 1000),
+    durationMinutes: Math.min(
+      240,
+      Math.max(5, Math.round(t.durationMinutes || 15)),
+    ),
+    category: (t.category ?? "general").trim().slice(0, 60),
+    priority: (t.priority && ["critical", "high", "normal"].includes(t.priority)
+      ? t.priority
+      : "normal") as "critical" | "high" | "normal",
+  });
+
   const proposedAction = (() => {
     const a = parsedJson.proposedAction;
     if (!a || a.kind === "none") return null;
     const label = (a.label ?? "").trim().slice(0, 80);
     const rationale = (a.rationale ?? "").trim().slice(0, 240);
     if (!label || !rationale) return null;
+    // Strict-mode parity: every action carries every payload field so the
+    // wire shape is uniform regardless of kind. `empty` provides the null/[]
+    // defaults; each case overrides only the fields it owns.
+    const empty = {
+      label,
+      rationale,
+      task: null as ReturnType<typeof clampNewTask> | null,
+      tasks: [] as ReturnType<typeof clampNewTask>[],
+      taskPatch: null as {
+        title: string | null;
+        description: string | null;
+        durationMinutes: number | null;
+        category: string | null;
+        priority: "critical" | "high" | "normal" | null;
+      } | null,
+      taskId: null as string | null,
+      taskTitle: null as string | null,
+      newTitle: null as string | null,
+      removeTaskIds: [] as string[],
+      event: null as {
+        title: string;
+        notes: string | null;
+        startISO: string | null;
+        durationMinutes: number | null;
+      } | null,
+    };
     switch (a.kind) {
       case "addTaskToday": {
         const t = a.task;
         if (!t || !t.title?.trim()) return null;
-        return {
-          kind: "addTaskToday" as const,
-          label,
-          rationale,
-          task: {
-            id: `task_${crypto.randomUUID()}`,
-            title: t.title.trim().slice(0, 120),
-            description: (t.description ?? "").trim().slice(0, 1000),
-            durationMinutes: Math.min(
-              240,
-              Math.max(5, Math.round(t.durationMinutes || 15)),
-            ),
-            category: (t.category ?? "general").trim().slice(0, 60),
-            priority:
-              t.priority && ["critical", "high", "normal"].includes(t.priority)
-                ? t.priority
-                : ("normal" as const),
-          },
-          taskId: null,
-          taskTitle: null,
-          newTitle: null,
-          removeTaskIds: [],
-        };
+        return { kind: "addTaskToday" as const, ...empty, task: clampNewTask(t) };
+      }
+      case "addTasksToday": {
+        const tasks = (a.tasks ?? [])
+          .filter((t) => t && t.title?.trim())
+          .slice(0, 8)
+          .map((t) => clampNewTask(t));
+        if (tasks.length === 0) return null;
+        return { kind: "addTasksToday" as const, ...empty, tasks };
       }
       case "removeTaskToday": {
         const id = (a.taskId ?? "").trim();
         if (!id || !todayTaskIds.has(id)) return null;
         return {
           kind: "removeTaskToday" as const,
-          label,
-          rationale,
-          task: null,
+          ...empty,
           taskId: id,
           taskTitle: (a.taskTitle ?? "").trim().slice(0, 120) || null,
-          newTitle: null,
-          removeTaskIds: [],
+        };
+      }
+      case "editTaskToday": {
+        const id = (a.taskId ?? "").trim();
+        if (!id || !todayTaskIds.has(id)) return null;
+        const p = a.taskPatch;
+        if (!p) return null;
+        const patch = {
+          title:
+            p.title != null && p.title.trim()
+              ? p.title.trim().slice(0, 120)
+              : null,
+          description:
+            p.description != null ? p.description.trim().slice(0, 1000) : null,
+          durationMinutes:
+            p.durationMinutes != null
+              ? Math.min(240, Math.max(5, Math.round(p.durationMinutes)))
+              : null,
+          category:
+            p.category != null && p.category.trim()
+              ? p.category.trim().slice(0, 60)
+              : null,
+          priority:
+            p.priority && ["critical", "high", "normal"].includes(p.priority)
+              ? p.priority
+              : null,
+        };
+        if (
+          !patch.title &&
+          patch.description == null &&
+          patch.durationMinutes == null &&
+          !patch.category &&
+          !patch.priority
+        ) {
+          return null;
+        }
+        return {
+          kind: "editTaskToday" as const,
+          ...empty,
+          taskId: id,
+          taskTitle: (a.taskTitle ?? "").trim().slice(0, 120) || null,
+          taskPatch: patch,
         };
       }
       case "renameGoal": {
         const newTitle = (a.newTitle ?? "").trim().slice(0, 60);
         if (newTitle.length < 2) return null;
-        return {
-          kind: "renameGoal" as const,
-          label,
-          rationale,
-          task: null,
-          taskId: null,
-          taskTitle: null,
-          newTitle,
-          removeTaskIds: [],
-        };
+        return { kind: "renameGoal" as const, ...empty, newTitle };
       }
       case "lightenToday": {
         const ids = (a.removeTaskIds ?? [])
           .map((s) => s.trim())
           .filter((s) => s.length > 0 && todayTaskIds.has(s));
         if (ids.length === 0) return null;
-        return {
-          kind: "lightenToday" as const,
-          label,
-          rationale,
-          task: null,
-          taskId: null,
-          taskTitle: null,
-          newTitle: null,
-          removeTaskIds: ids,
-        };
+        return { kind: "lightenToday" as const, ...empty, removeTaskIds: ids };
+      }
+      case "regenerateDay": {
+        return { kind: "regenerateDay" as const, ...empty };
       }
       case "syncToCalendar": {
         if (todayTaskIds.size === 0) return null;
+        return { kind: "syncToCalendar" as const, ...empty };
+      }
+      case "addCalendarEvent": {
+        const e = a.event;
+        if (!e || !e.title?.trim()) return null;
         return {
-          kind: "syncToCalendar" as const,
-          label,
-          rationale,
-          task: null,
-          taskId: null,
-          taskTitle: null,
-          newTitle: null,
-          removeTaskIds: [],
+          kind: "addCalendarEvent" as const,
+          ...empty,
+          event: {
+            title: e.title.trim().slice(0, 120),
+            notes: e.notes != null ? e.notes.trim().slice(0, 1000) : null,
+            startISO:
+              e.startISO != null && e.startISO.trim()
+                ? e.startISO.trim()
+                : null,
+            durationMinutes:
+              e.durationMinutes != null
+                ? Math.min(480, Math.max(10, Math.round(e.durationMinutes)))
+                : null,
+          },
         };
       }
       default:
@@ -1317,7 +1443,8 @@ Speak conversationally, with warmth and precision. EVERY reply must ground itsel
 Hard rules:
 - "reply" is plain prose. No markdown, headings, bullets, or emojis. Under 110 words unless they explicitly ask for detail.
 - "suggestedReplies": 0-3 short follow-ups (<= 50 chars each).
-- "actionSuggestion" / "proposedAction" / "memoryUpdate": same rules as the non-streaming /coach endpoint.
+- "actionSuggestion" / "memoryUpdate": same rules as the non-streaming /coach endpoint.
+${PROPOSED_ACTION_RULES}
 
 CONTEXT:
 ${contextBlock}${

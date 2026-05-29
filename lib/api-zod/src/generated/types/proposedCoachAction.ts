@@ -5,19 +5,24 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { CoachCalendarEvent } from "./coachCalendarEvent";
+import type { CoachTaskPatch } from "./coachTaskPatch";
 import type { DailyTask } from "./dailyTask";
 import type { ProposedCoachActionKind } from "./proposedCoachActionKind";
 
 /**
- * A concrete plan-modifying action the AI proposes for user confirmation.
+ * A concrete plan/goal/calendar-modifying action the AI applies instantly (with Undo).
  */
 export interface ProposedCoachAction {
   kind: ProposedCoachActionKind;
   label: string;
   rationale: string;
   task?: DailyTask | null;
+  tasks?: DailyTask[];
+  taskPatch?: CoachTaskPatch | null;
   taskId?: string | null;
   taskTitle?: string | null;
   newTitle?: string | null;
   removeTaskIds?: string[];
+  event?: CoachCalendarEvent | null;
 }

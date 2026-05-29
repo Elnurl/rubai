@@ -577,29 +577,57 @@ export interface TranscribeResponse {
   text: string;
 }
 
+/**
+ * Partial edit applied to an existing daily task. Null fields are left unchanged.
+ */
+export interface CoachTaskPatch {
+  title: string | null;
+  description: string | null;
+  durationMinutes: number | null;
+  category: string | null;
+  priority: "critical" | "high" | "normal" | null;
+}
+
+/**
+ * A single calendar event the coach can add on the user's behalf.
+ */
+export interface CoachCalendarEvent {
+  title: string;
+  notes: string | null;
+  startISO: string | null;
+  durationMinutes: number | null;
+}
+
 export type ProposedCoachActionKind =
   (typeof ProposedCoachActionKind)[keyof typeof ProposedCoachActionKind];
 
 export const ProposedCoachActionKind = {
   addTaskToday: "addTaskToday",
+  addTasksToday: "addTasksToday",
   removeTaskToday: "removeTaskToday",
+  editTaskToday: "editTaskToday",
   renameGoal: "renameGoal",
   lightenToday: "lightenToday",
+  regenerateDay: "regenerateDay",
   syncToCalendar: "syncToCalendar",
+  addCalendarEvent: "addCalendarEvent",
 } as const;
 
 /**
- * A concrete plan-modifying action the AI proposes for user confirmation.
+ * A concrete plan/goal/calendar-modifying action the AI applies instantly (with Undo).
  */
 export interface ProposedCoachAction {
   kind: ProposedCoachActionKind;
   label: string;
   rationale: string;
   task?: DailyTask | null;
+  tasks?: DailyTask[];
+  taskPatch?: CoachTaskPatch | null;
   taskId?: string | null;
   taskTitle?: string | null;
   newTitle?: string | null;
   removeTaskIds?: string[];
+  event?: CoachCalendarEvent | null;
 }
 
 export interface CoachResponse {
@@ -608,7 +636,7 @@ export interface CoachResponse {
   suggestedReplies: string[];
   /** Optional CTA for a concrete app action. Use kind=none (or null) when no action fits. */
   actionSuggestion: CoachActionSuggestion | null;
-  /** Optional plan-modifying action requiring explicit user confirmation in the UI. */
+  /** Optional plan/goal/calendar-modifying action the client applies instantly (with an Undo affordance); null when no action fits. */
   proposedAction: ProposedCoachAction | null;
   /** Optional update to long-term coach memory. Only set when the user revealed something durable this turn. */
   memoryUpdate: CoachMemoryUpdate | null;

@@ -1314,13 +1314,71 @@ components:
         text:
           type: string
 
+    CoachTaskPatch:
+      type: object
+      description: Partial edit applied to an existing daily task. Null fields are left unchanged.
+      properties:
+        title:
+          oneOf:
+            - type: string
+            - type: "null"
+        description:
+          oneOf:
+            - type: string
+            - type: "null"
+        durationMinutes:
+          oneOf:
+            - type: integer
+            - type: "null"
+        category:
+          oneOf:
+            - type: string
+            - type: "null"
+        priority:
+          oneOf:
+            - type: string
+              enum: [critical, high, normal]
+            - type: "null"
+      required: [title, description, durationMinutes, category, priority]
+
+    CoachCalendarEvent:
+      type: object
+      description: A single calendar event the coach can add on the user's behalf.
+      properties:
+        title:
+          type: string
+        notes:
+          oneOf:
+            - type: string
+            - type: "null"
+        startISO:
+          oneOf:
+            - type: string
+            - type: "null"
+        durationMinutes:
+          oneOf:
+            - type: integer
+            - type: "null"
+      required: [title, notes, startISO, durationMinutes]
+
     ProposedCoachAction:
       type: object
-      description: A concrete plan-modifying action the AI proposes for user confirmation.
+      description: A concrete plan/goal/calendar-modifying action the AI applies instantly (with Undo).
       properties:
         kind:
           type: string
-          enum: [addTaskToday, removeTaskToday, renameGoal, lightenToday, syncToCalendar]
+          enum:
+            [
+              addTaskToday,
+              addTasksToday,
+              removeTaskToday,
+              editTaskToday,
+              renameGoal,
+              lightenToday,
+              regenerateDay,
+              syncToCalendar,
+              addCalendarEvent,
+            ]
         label:
           type: string
         rationale:
@@ -1328,6 +1386,14 @@ components:
         task:
           oneOf:
             - $ref: "#/components/schemas/DailyTask"
+            - type: "null"
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyTask"
+        taskPatch:
+          oneOf:
+            - $ref: "#/components/schemas/CoachTaskPatch"
             - type: "null"
         taskId:
           oneOf:
@@ -1345,6 +1411,10 @@ components:
           type: array
           items:
             type: string
+        event:
+          oneOf:
+            - $ref: "#/components/schemas/CoachCalendarEvent"
+            - type: "null"
       required: [kind, label, rationale]
 
     CoachResponse:
@@ -1366,7 +1436,7 @@ components:
           oneOf:
             - $ref: "#/components/schemas/ProposedCoachAction"
             - type: "null"
-          description: Optional plan-modifying action requiring explicit user confirmation in the UI.
+          description: Optional plan/goal/calendar-modifying action the client applies instantly (with an Undo affordance); null when no action fits.
         memoryUpdate:
           oneOf:
             - $ref: "#/components/schemas/CoachMemoryUpdate"

@@ -15,7 +15,7 @@ export interface CoachResponse {
   suggestedReplies: string[];
   /** Optional CTA for a concrete app action. Use kind=none (or null) when no action fits. */
   actionSuggestion: CoachActionSuggestion | null;
-  /** Optional plan-modifying action requiring explicit user confirmation in the UI. */
+  /** Optional plan/goal/calendar-modifying action the client applies instantly (with an Undo affordance); null when no action fits. */
   proposedAction: ProposedCoachAction | null;
   /** Optional update to long-term coach memory. Only set when the user revealed something durable this turn. */
   memoryUpdate: CoachMemoryUpdate | null;

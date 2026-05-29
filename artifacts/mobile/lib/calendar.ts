@@ -295,6 +295,66 @@ export async function writePlanToCalendarOnDemand(
   return { ok: true, written };
 }
 
+export type SingleEventInput = {
+  title: string;
+  notes?: string | null;
+  startISO?: string | null;
+  durationMinutes?: number | null;
+};
+
+/**
+ * On-demand write of a SINGLE calendar event triggered by an AI proposed
+ * action (e.g. "add a 3pm meeting"). Mirrors the consent gating of
+ * writePlanToCalendarOnDemand. When no start time is given we default to the
+ * next quarter hour. Calendar writes are external, so there's no undo — the
+ * UI just reports the structured outcome.
+ */
+export async function writeSingleEventOnDemand(
+  prefs: CalendarSyncLike | undefined,
+  event: SingleEventInput,
+): Promise<WriteOutcome> {
+  if (!event || !event.title.trim()) return { ok: false, reason: "no-plan" };
+  if (!prefs || !prefs.enabled) return { ok: false, reason: "disabled" };
+  if (!prefs.calendarId) return { ok: false, reason: "no-calendar" };
+  const dur = Math.max(10, Math.min(event.durationMinutes ?? 30, 480));
+  if (prefs.provider === "google") {
+    try {
+      const res = await syncTasksToGoogleCalendar(prefs.calendarId, [
+        {
+          title: event.title,
+          ...(event.notes ? { description: event.notes } : {}),
+          durationMinutes: dur,
+        },
+      ]);
+      return { ok: true, written: res.written };
+    } catch {
+      return { ok: false, reason: "no-calendar" };
+    }
+  }
+  if (Platform.OS === "web") return { ok: false, reason: "web" };
+  const status = await getCalendarPermissionStatus();
+  if (status !== "granted") return { ok: false, reason: "no-permission" };
+  let startISO = event.startISO ?? null;
+  if (!startISO) {
+    const cursor = new Date();
+    const m = cursor.getMinutes();
+    const roundUp = (15 - (m % 15)) % 15;
+    cursor.setMinutes(m + roundUp, 0, 0);
+    startISO = cursor.toISOString();
+  }
+  try {
+    await createTaskEvent(prefs.calendarId, {
+      title: event.title,
+      ...(event.notes ? { notes: event.notes } : {}),
+      startISO,
+      durationMinutes: dur,
+    });
+    return { ok: true, written: 1 };
+  } catch {
+    return { ok: false, reason: "no-calendar" };
+  }
+}
+
 export function summarizeEventsForPrompt(events: LightEvent[]): string {
   if (events.length === 0) return "No calendar events scheduled today.";
   const lines = events

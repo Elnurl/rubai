@@ -921,10 +921,14 @@ export const AtlasCoachResponse = zod.object({
         .object({
           kind: zod.enum([
             "addTaskToday",
+            "addTasksToday",
             "removeTaskToday",
+            "editTaskToday",
             "renameGoal",
             "lightenToday",
+            "regenerateDay",
             "syncToCalendar",
+            "addCalendarEvent",
           ]),
           label: zod.string(),
           rationale: zod.string(),
@@ -941,18 +945,64 @@ export const AtlasCoachResponse = zod.object({
               zod.null(),
             ])
             .optional(),
+          tasks: zod
+            .array(
+              zod.object({
+                id: zod.string(),
+                title: zod.string(),
+                description: zod.string(),
+                durationMinutes: zod.number(),
+                category: zod.string(),
+                priority: zod.enum(["critical", "high", "normal"]),
+              }),
+            )
+            .optional(),
+          taskPatch: zod
+            .union([
+              zod
+                .object({
+                  title: zod.union([zod.string(), zod.null()]),
+                  description: zod.union([zod.string(), zod.null()]),
+                  durationMinutes: zod.union([zod.number(), zod.null()]),
+                  category: zod.union([zod.string(), zod.null()]),
+                  priority: zod.union([
+                    zod.enum(["critical", "high", "normal"]),
+                    zod.null(),
+                  ]),
+                })
+                .describe(
+                  "Partial edit applied to an existing daily task. Null fields are left unchanged.",
+                ),
+              zod.null(),
+            ])
+            .optional(),
           taskId: zod.union([zod.string(), zod.null()]).optional(),
           taskTitle: zod.union([zod.string(), zod.null()]).optional(),
           newTitle: zod.union([zod.string(), zod.null()]).optional(),
           removeTaskIds: zod.array(zod.string()).optional(),
+          event: zod
+            .union([
+              zod
+                .object({
+                  title: zod.string(),
+                  notes: zod.union([zod.string(), zod.null()]),
+                  startISO: zod.union([zod.string(), zod.null()]),
+                  durationMinutes: zod.union([zod.number(), zod.null()]),
+                })
+                .describe(
+                  "A single calendar event the coach can add on the user's behalf.",
+                ),
+              zod.null(),
+            ])
+            .optional(),
         })
         .describe(
-          "A concrete plan-modifying action the AI proposes for user confirmation.",
+          "A concrete plan\/goal\/calendar-modifying action the AI applies instantly (with Undo).",
         ),
       zod.null(),
     ])
     .describe(
-      "Optional plan-modifying action requiring explicit user confirmation in the UI.",
+      "Optional plan\/goal\/calendar-modifying action the client applies instantly (with an Undo affordance); null when no action fits.",
     ),
   memoryUpdate: zod
     .union([

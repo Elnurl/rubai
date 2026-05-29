@@ -11,8 +11,12 @@ export type ProposedCoachActionKind =
 
 export const ProposedCoachActionKind = {
   addTaskToday: "addTaskToday",
+  addTasksToday: "addTasksToday",
   removeTaskToday: "removeTaskToday",
+  editTaskToday: "editTaskToday",
   renameGoal: "renameGoal",
   lightenToday: "lightenToday",
+  regenerateDay: "regenerateDay",
   syncToCalendar: "syncToCalendar",
+  addCalendarEvent: "addCalendarEvent",
 } as const;

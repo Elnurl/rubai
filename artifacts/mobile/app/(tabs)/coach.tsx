@@ -24,7 +24,6 @@ import { AtlasLogo } from "@/components/AtlasLogo";
 import { BrandDot } from "@/components/BrandDot";
 import { ChatBubble } from "@/components/ChatBubble";
 import { EmptyState } from "@/components/EmptyState";
-import { ProposedActionCard } from "@/components/ProposedActionCard";
 import { useColors } from "@/hooks/useColors";
 import { useEvolveRoadmap } from "@/hooks/useEvolveRoadmap";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
@@ -33,10 +32,15 @@ import { useAtlas } from "@/providers/AtlasProvider";
 import {
   loadCalendarContextIfEnabled,
   writePlanToCalendarOnDemand,
+  writePlanToCalendarIfEnabled,
+  writeSingleEventOnDemand,
+  type WriteOutcome,
 } from "@/lib/calendar";
+import { todayISO } from "@/lib/storage";
 import {
   customFetch,
   useAtlasCoach,
+  useAtlasGenerateDailyPlan,
   useAtlasGenerateTitle,
   type ChatMessage,
   type CoachActionSuggestion,
@@ -55,6 +59,31 @@ const COLD_START_SUGGESTIONS = [
 ];
 
 type ModelChoice = "smart" | "fast";
+
+// Turns a calendar WriteOutcome into a short, honest user-facing line. Used
+// when an AI calendar action succeeds or hits a consent/permission gap.
+function calendarOutcomeMessage(
+  outcome: WriteOutcome,
+  calendarTitle?: string | null,
+): string {
+  if (outcome.ok) {
+    return `Added ${outcome.written} task${
+      outcome.written === 1 ? "" : "s"
+    } to ${calendarTitle ?? "your calendar"}.`;
+  }
+  switch (outcome.reason) {
+    case "no-permission":
+      return "I need calendar permission first. Open Account → Calendar sync to grant access.";
+    case "no-calendar":
+      return "Pick a calendar in Account → Calendar sync, then ask me again.";
+    case "web":
+      return "Calendar sync is mobile-only — try this from the iOS or Android app.";
+    case "disabled":
+      return "Turn on calendar sync in Account → Calendar sync first.";
+    default:
+      return "There's nothing to add to your calendar yet.";
+  }
+}
 
 type PendingAttachment = {
   filename: string;
@@ -107,15 +136,22 @@ export default function CoachScreen() {
 
   const coach = useAtlasCoach();
   const generateTitle = useAtlasGenerateTitle();
+  const generateDaily = useAtlasGenerateDailyPlan();
   const { evolve, isEvolving } = useEvolveRoadmap();
   const recorder = useVoiceRecorder();
   const tts = useTextToSpeech();
   const [draft, setDraft] = useState("");
   const [lastSuggestedReplies, setLastSuggestedReplies] = useState<string[]>([]);
   const [lastAction, setLastAction] = useState<CoachActionSuggestion | null>(null);
-  const [lastProposedAction, setLastProposedAction] =
-    useState<ProposedCoachAction | null>(null);
   const [applyingAction, setApplyingAction] = useState(false);
+  // Transient "Undo" bar shown right after the AI applies a change instantly.
+  // `onUndo` is null for non-revertible actions (e.g. calendar writes) — the
+  // bar then just confirms what happened and auto-dismisses.
+  const [undoBar, setUndoBar] = useState<{
+    message: string;
+    onUndo: (() => Promise<void>) | null;
+  } | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modelChoice, setModelChoice] = useState<ModelChoice>("smart");
   const [autoSpeak, setAutoSpeak] = useState(false);
@@ -141,6 +177,8 @@ export default function CoachScreen() {
     return () => {
       streamAbortRef.current?.abort();
       streamAbortRef.current = null;
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
     };
   }, []);
 
@@ -202,7 +240,6 @@ export default function CoachScreen() {
       // Clear ephemeral per-turn UI as soon as the next turn starts.
       setLastSuggestedReplies([]);
       setLastAction(null);
-      setLastProposedAction(null);
 
       // Pin (goalId, sessionId) AT SEND TIME so a late stream completion or
       // image-turn response can't land in whichever session happens to be
@@ -303,7 +340,11 @@ export default function CoachScreen() {
         setLastSuggestedReplies(res.suggestedReplies ?? []);
         const action = res.actionSuggestion;
         setLastAction(action && action.kind !== "none" ? action : null);
-        setLastProposedAction(res.proposedAction ?? null);
+        // Agentic coach: apply the proposed change INSTANTLY (with Undo) instead
+        // of surfacing a confirm card. The model already spoke as if it acted.
+        if (res.proposedAction) {
+          void applyActionInstant(res.proposedAction);
+        }
         if (res.memoryUpdate) {
           await applyCoachMemoryUpdate({
             summary: res.memoryUpdate.summary,
@@ -453,7 +494,7 @@ export default function CoachScreen() {
     setSidebarOpen(false);
     setLastSuggestedReplies([]);
     setLastAction(null);
-    setLastProposedAction(null);
+    setUndoBar(null);
     streamAbortRef.current?.abort();
     streamAbortRef.current = null;
     await createCoachSession();
@@ -465,7 +506,7 @@ export default function CoachScreen() {
       if (sessionId === activeCoachSessionId) return;
       setLastSuggestedReplies([]);
       setLastAction(null);
-      setLastProposedAction(null);
+      setUndoBar(null);
       streamAbortRef.current?.abort();
       streamAbortRef.current = null;
       await switchCoachSession(sessionId);
@@ -509,99 +550,287 @@ export default function CoachScreen() {
     }
   };
 
-  // Confirm = apply the proposed plan/goal mutation locally, then drop a tiny
-  // assistant follow-up so the chat reflects what just happened.
-  // Cancel = silently dismiss the card.
-  const onConfirmProposed = useCallback(async () => {
-    const action = lastProposedAction;
-    if (!action || applyingAction) return;
-    setApplyingAction(true);
-    try {
-      let confirmation = "Done.";
-      if (action.kind === "addTaskToday" && action.task) {
-        const currentPlan = activeDailyPlan?.plan;
-        if (currentPlan) {
-          await setActiveDailyPlan({
-            ...currentPlan,
-            tasks: [...currentPlan.tasks, action.task],
-          });
-          confirmation = `Added "${action.task.title}" to today.`;
-        }
-      } else if (action.kind === "removeTaskToday" && action.taskId) {
-        const currentPlan = activeDailyPlan?.plan;
-        if (currentPlan) {
-          const removed = currentPlan.tasks.find((t) => t.id === action.taskId);
-          await setActiveDailyPlan({
-            ...currentPlan,
-            tasks: currentPlan.tasks.filter((t) => t.id !== action.taskId),
-          });
-          confirmation = removed
-            ? `Removed "${removed.title}" from today.`
-            : "Removed that task.";
-        }
-      } else if (action.kind === "renameGoal" && action.newTitle) {
-        const newTitle = action.newTitle;
-        await updateActiveGoal((g) => ({
-          ...g,
-          profile: { ...g.profile, customGoalTitle: newTitle },
-        }));
-        confirmation = `Renamed your goal to "${newTitle}".`;
-      } else if (action.kind === "lightenToday") {
-        const ids = action.removeTaskIds ?? [];
-        const currentPlan = activeDailyPlan?.plan;
-        if (ids.length > 0 && currentPlan) {
-          const drop = new Set(ids);
-          await setActiveDailyPlan({
-            ...currentPlan,
-            tasks: currentPlan.tasks.filter((t) => !drop.has(t.id)),
-          });
-          confirmation = `Lightened today by ${ids.length} task${
-            ids.length === 1 ? "" : "s"
-          }.`;
-        }
-      } else if (action.kind === "syncToCalendar") {
-        const currentPlan = activeDailyPlan?.plan;
-        const outcome = await writePlanToCalendarOnDemand(
-          account.calendarSync,
-          currentPlan,
-        );
-        if (outcome.ok) {
-          confirmation = `Added ${outcome.written} task${
-            outcome.written === 1 ? "" : "s"
-          } to ${account.calendarSync.calendarTitle ?? "your calendar"}.`;
-        } else if (outcome.reason === "no-permission") {
-          confirmation =
-            "I need calendar permission first. Open Account → Calendar sync to grant access.";
-        } else if (outcome.reason === "no-calendar") {
-          confirmation =
-            "Pick a calendar in Account → Calendar sync, then ask me again.";
-        } else if (outcome.reason === "web") {
-          confirmation =
-            "Calendar sync is mobile-only — try this from the iOS or Android app.";
-        } else {
-          confirmation = "No tasks to sync yet.";
-        }
-      }
-      setLastProposedAction(null);
-      await appendActiveCoachMessage({ role: "assistant", content: confirmation });
-    } catch {
-      // Soft-fail: leave the card up so the user can retry.
-    } finally {
-      setApplyingAction(false);
-    }
-  }, [
-    lastProposedAction,
-    applyingAction,
-    activeDailyPlan,
-    setActiveDailyPlan,
-    updateActiveGoal,
-    appendActiveCoachMessage,
-    account.calendarSync,
-  ]);
+  // Show a transient Undo bar (auto-dismisses after 8s). `onUndo` is null for
+  // actions that can't be reverted (calendar writes).
+  const showUndo = useCallback(
+    (message: string, onUndo: (() => Promise<void>) | null) => {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      setUndoBar({ message, onUndo });
+      undoTimerRef.current = setTimeout(() => {
+        setUndoBar(null);
+        undoTimerRef.current = null;
+      }, 8000);
+    },
+    [],
+  );
 
-  const onCancelProposed = useCallback(() => {
-    setLastProposedAction(null);
-  }, []);
+  const onUndoPress = useCallback(async () => {
+    const bar = undoBar;
+    if (!bar?.onUndo) return;
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = null;
+    setUndoBar(null);
+    try {
+      await bar.onUndo();
+      await appendActiveCoachMessage({
+        role: "assistant",
+        content: "Reverted — back to how it was.",
+      });
+    } catch {
+      // best-effort revert; ignore failures
+    }
+  }, [undoBar, appendActiveCoachMessage]);
+
+  // Agentic apply: run the AI's proposed change IMMEDIATELY against local state
+  // (the source of truth syncs in the background), then expose Undo. The model
+  // already narrated what it did + why in its streamed reply, so for successful
+  // changes we only surface the Undo bar; failures append an honest correction.
+  const applyActionInstant = useCallback(
+    async (action: ProposedCoachAction) => {
+      if (applyingAction) return;
+      setApplyingAction(true);
+      try {
+        const planSnapshot = activeDailyPlan?.plan ?? null;
+        const restorePlan = planSnapshot
+          ? async () => {
+              await setActiveDailyPlan(planSnapshot);
+            }
+          : null;
+        let confirmation = "Done.";
+        let undoFn: (() => Promise<void>) | null = null;
+        let permanentNote: string | null = null;
+        let applied = false;
+
+        switch (action.kind) {
+          case "addTaskToday": {
+            if (action.task && planSnapshot) {
+              await setActiveDailyPlan({
+                ...planSnapshot,
+                tasks: [...planSnapshot.tasks, action.task],
+              });
+              confirmation = `Added "${action.task.title}" to today.`;
+              undoFn = restorePlan;
+              applied = true;
+            }
+            break;
+          }
+          case "addTasksToday": {
+            const tasks = action.tasks ?? [];
+            if (tasks.length > 0 && planSnapshot) {
+              await setActiveDailyPlan({
+                ...planSnapshot,
+                tasks: [...planSnapshot.tasks, ...tasks],
+              });
+              confirmation = `Added ${tasks.length} task${
+                tasks.length === 1 ? "" : "s"
+              } to today.`;
+              undoFn = restorePlan;
+              applied = true;
+            }
+            break;
+          }
+          case "removeTaskToday": {
+            if (action.taskId && planSnapshot) {
+              const removed = planSnapshot.tasks.find(
+                (t) => t.id === action.taskId,
+              );
+              await setActiveDailyPlan({
+                ...planSnapshot,
+                tasks: planSnapshot.tasks.filter((t) => t.id !== action.taskId),
+              });
+              confirmation = removed
+                ? `Removed "${removed.title}" from today.`
+                : "Removed that task.";
+              undoFn = restorePlan;
+              applied = true;
+            }
+            break;
+          }
+          case "editTaskToday": {
+            const patch = action.taskPatch;
+            if (action.taskId && patch && planSnapshot) {
+              const edited = planSnapshot.tasks.find(
+                (t) => t.id === action.taskId,
+              );
+              await setActiveDailyPlan({
+                ...planSnapshot,
+                tasks: planSnapshot.tasks.map((t) =>
+                  t.id === action.taskId
+                    ? {
+                        ...t,
+                        ...(patch.title != null ? { title: patch.title } : {}),
+                        ...(patch.description != null
+                          ? { description: patch.description }
+                          : {}),
+                        ...(patch.durationMinutes != null
+                          ? { durationMinutes: patch.durationMinutes }
+                          : {}),
+                        ...(patch.category != null
+                          ? { category: patch.category }
+                          : {}),
+                        ...(patch.priority != null
+                          ? { priority: patch.priority }
+                          : {}),
+                      }
+                    : t,
+                ),
+              });
+              confirmation = edited
+                ? `Updated "${edited.title}".`
+                : "Updated that task.";
+              undoFn = restorePlan;
+              applied = true;
+            }
+            break;
+          }
+          case "lightenToday": {
+            const ids = action.removeTaskIds ?? [];
+            if (ids.length > 0 && planSnapshot) {
+              const drop = new Set(ids);
+              await setActiveDailyPlan({
+                ...planSnapshot,
+                tasks: planSnapshot.tasks.filter((t) => !drop.has(t.id)),
+              });
+              confirmation = `Lightened today by ${ids.length} task${
+                ids.length === 1 ? "" : "s"
+              }.`;
+              undoFn = restorePlan;
+              applied = true;
+            }
+            break;
+          }
+          case "renameGoal": {
+            if (action.newTitle) {
+              const newTitle = action.newTitle;
+              const prevTitle =
+                activeGoal?.profile?.customGoalTitle ?? null;
+              await updateActiveGoal((g) => ({
+                ...g,
+                profile: { ...g.profile, customGoalTitle: newTitle },
+              }));
+              confirmation = `Renamed your goal to "${newTitle}".`;
+              undoFn = async () => {
+                await updateActiveGoal((g) => ({
+                  ...g,
+                  profile: {
+                    ...g.profile,
+                    customGoalTitle: prevTitle ?? g.profile.customGoalTitle,
+                  },
+                }));
+              };
+              applied = true;
+            }
+            break;
+          }
+          case "regenerateDay": {
+            if (activeProfile && activeRoadmap) {
+              const calendarContext = await loadCalendarContextIfEnabled(
+                account.calendarSync,
+              );
+              const plan = await generateDaily.mutateAsync({
+                data: {
+                  profile: activeProfile,
+                  roadmap: activeRoadmap,
+                  behavioral: activeBehavioral,
+                  date: todayISO(),
+                  currentWeek: activeCurrentWeek,
+                  ...(activeBehavioralProfile
+                    ? { learnedProfile: activeBehavioralProfile }
+                    : {}),
+                  ...(calendarContext ? { calendarContext } : {}),
+                },
+              });
+              await setActiveDailyPlan(plan);
+              void writePlanToCalendarIfEnabled(
+                account.calendarSync,
+                plan,
+                account.reminderTime,
+              );
+              confirmation = "Rebuilt today's plan from scratch.";
+              undoFn = restorePlan;
+              applied = true;
+            }
+            break;
+          }
+          case "syncToCalendar": {
+            const outcome = await writePlanToCalendarOnDemand(
+              account.calendarSync,
+              planSnapshot,
+            );
+            const msg = calendarOutcomeMessage(
+              outcome,
+              account.calendarSync.calendarTitle,
+            );
+            if (outcome.ok) {
+              confirmation = msg;
+              applied = true;
+            } else {
+              permanentNote = msg;
+            }
+            break;
+          }
+          case "addCalendarEvent": {
+            if (action.event) {
+              const outcome = await writeSingleEventOnDemand(
+                account.calendarSync,
+                action.event,
+              );
+              if (outcome.ok) {
+                confirmation = `Added "${action.event.title}" to ${
+                  account.calendarSync.calendarTitle ?? "your calendar"
+                }.`;
+                applied = true;
+              } else {
+                permanentNote = calendarOutcomeMessage(
+                  outcome,
+                  account.calendarSync.calendarTitle,
+                );
+              }
+            }
+            break;
+          }
+        }
+
+        if (permanentNote) {
+          await appendActiveCoachMessage({
+            role: "assistant",
+            content: permanentNote,
+          });
+        } else if (applied) {
+          showUndo(confirmation, undoFn);
+        } else {
+          await appendActiveCoachMessage({
+            role: "assistant",
+            content: "I couldn't apply that just now — want me to try again?",
+          });
+        }
+      } catch {
+        await appendActiveCoachMessage({
+          role: "assistant",
+          content: "I couldn't apply that just now — want me to try again?",
+        });
+      } finally {
+        setApplyingAction(false);
+      }
+    },
+    [
+      applyingAction,
+      activeDailyPlan,
+      setActiveDailyPlan,
+      updateActiveGoal,
+      appendActiveCoachMessage,
+      account.calendarSync,
+      account.reminderTime,
+      activeGoal,
+      activeProfile,
+      activeRoadmap,
+      activeBehavioral,
+      activeCurrentWeek,
+      activeBehavioralProfile,
+      generateDaily,
+      showUndo,
+    ],
+  );
 
   const onForgetMemory = async () => {
     await setActiveCoachMemory(null);
@@ -760,13 +989,37 @@ export default function CoachScreen() {
     }
     return (
       <View style={styles.footerStack}>
-        {lastProposedAction ? (
-          <ProposedActionCard
-            action={lastProposedAction}
-            pending={applyingAction}
-            onConfirm={onConfirmProposed}
-            onCancel={onCancelProposed}
-          />
+        {undoBar ? (
+          <View
+            style={[
+              styles.undoBar,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <Feather
+              name="check-circle"
+              size={16}
+              color={colors.primary}
+              style={styles.undoIcon}
+            />
+            <Text
+              style={[styles.undoText, { color: colors.text }]}
+              numberOfLines={2}
+            >
+              {undoBar.message}
+            </Text>
+            {undoBar.onUndo ? (
+              <Pressable
+                onPress={onUndoPress}
+                hitSlop={8}
+                style={[styles.undoButton, { borderColor: colors.primary }]}
+              >
+                <Text style={[styles.undoButtonText, { color: colors.primary }]}>
+                  Undo
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
         {lastAction ? (
           <Pressable
@@ -845,7 +1098,7 @@ export default function CoachScreen() {
     isStreaming,
     typer.displayed,
     lastAction,
-    lastProposedAction,
+    undoBar,
     applyingAction,
     lastSuggestedReplies,
     isEvolving,
@@ -1802,6 +2055,34 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 12,
     gap: 10,
+  },
+  undoBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  undoIcon: {
+    marginTop: 1,
+  },
+  undoText: {
+    flex: 1,
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  undoButton: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 14,
+  },
+  undoButtonText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
   },
   actionCard: {
     flexDirection: "row",
