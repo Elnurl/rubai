@@ -202,6 +202,15 @@ export default function RoadmapScreen() {
           </Text>
         </View>
 
+        <Text
+          style={[
+            styles.eyebrow,
+            { color: colors.primary, fontFamily: "Inter_600SemiBold" },
+          ]}
+        >
+          {activeRoadmap.totalWeeks}-WEEK ARC
+        </Text>
+
         <View style={styles.phases}>
           {activeRoadmap.phases.map((phase, i) => {
             const status =
@@ -216,7 +225,6 @@ export default function RoadmapScreen() {
                 phase={phase}
                 index={i}
                 status={status}
-                isLast={i === activeRoadmap.phases.length - 1}
                 updated={updatedPhaseIds.has(phase.id)}
               />
             );
@@ -322,7 +330,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   phases: {
-    gap: 0,
+    gap: 12,
   },
   risksCard: {
     padding: 18,
