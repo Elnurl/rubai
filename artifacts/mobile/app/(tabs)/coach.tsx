@@ -42,7 +42,8 @@ import {
   type CoachActionSuggestion,
   type ProposedCoachAction,
 } from "@workspace/api-client-react";
-import { streamCoachReply } from "@/lib/coachStream";
+import { streamCoachReply, type CoachStreamFinal } from "@/lib/coachStream";
+import { useTypewriter } from "@/lib/useTypewriter";
 import type { CoachMemory } from "@workspace/api-client-react";
 import type { ChatSession } from "@/types/atlas";
 
@@ -122,13 +123,13 @@ export default function CoachScreen() {
   const [pendingAttachment, setPendingAttachment] =
     useState<PendingAttachment | null>(null);
   const [transcribing, setTranscribing] = useState(false);
-  // Streaming state: `streamingText` accumulates reply tokens as they
-  // arrive over SSE so the user sees the assistant typing in real time.
-  // `isStreaming` is true from request start until the `final` SSE
-  // event lands, even before the first delta — so the typing indicator
-  // shows immediately. Both reset to null/false once the message is
-  // committed to history.
-  const [streamingText, setStreamingText] = useState<string | null>(null);
+  // Streaming state. `isStreaming` is true from request start until the
+  // `final` SSE event lands, even before the first delta — so the typing
+  // indicator shows immediately. The typewriter smooths the bursty SSE
+  // deltas into a steady word-by-word reveal (a fronting proxy can buffer
+  // the stream and deliver big chunks, which would otherwise make the
+  // reply pop in all at once). `typer.displayed` is what we render.
+  const typer = useTypewriter();
   const [isStreaming, setIsStreaming] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const lastSpokenIndexRef = useRef<number>(-1);
@@ -326,6 +327,12 @@ export default function CoachScreen() {
       // streaming UX win for short image-grounded replies.
       const useStreaming = !attachment?.base64;
 
+      // Hoisted so the shared catch below can tell a user-initiated cancel
+      // (session switch / new-chat / unmount aborts the controller) from a
+      // genuine connection error, even though the controller itself is
+      // block-scoped to the streaming branch.
+      let activeController: AbortController | null = null;
+
       try {
         if (useStreaming) {
           // Cancel any leftover in-flight stream from a prior turn
@@ -333,34 +340,48 @@ export default function CoachScreen() {
           // but be defensive against double-tap races).
           streamAbortRef.current?.abort();
           const controller = new AbortController();
+          activeController = controller;
           streamAbortRef.current = controller;
           setIsStreaming(true);
-          setStreamingText("");
-          let finalSeen = false;
-          let pendingCommit: Promise<void> | null = null;
+          typer.reset();
+          let finalRes: CoachStreamFinal | null = null;
+          let accumulated = "";
           try {
             await streamCoachReply(
               { data: requestData },
               {
                 onDelta: (chunk) => {
-                  setStreamingText((prev) => (prev ?? "") + chunk);
+                  // Feed the full accumulated reply to the typewriter; it
+                  // reveals it at a steady cadence regardless of how the
+                  // SSE bytes were chunked over the wire.
+                  accumulated += chunk;
+                  typer.push(accumulated);
                 },
                 onFinal: (res) => {
-                  finalSeen = true;
-                  // Track the commit promise so the catch-clause sees
-                  // any history-write failure and we always end up
-                  // resetting the streaming UI in `finally`.
-                  pendingCommit = commitFinal(res);
+                  finalRes = res;
                 },
               },
               controller.signal,
             );
-            if (pendingCommit) await pendingCommit;
-            if (!finalSeen) {
+            if (!finalRes) {
               throw new Error("Coach stream ended without a final reply.");
             }
+            // Point the typewriter at the canonical final reply and let it
+            // finish typing out before we swap the live bubble for the
+            // committed history message — both show identical text, so the
+            // hand-off is seamless with no pop-in.
+            const final: CoachStreamFinal = finalRes;
+            typer.push(final.reply || accumulated);
+            await typer.flush();
+            // The network finished before flush, so abort() no longer
+            // cancels anything. If the user switched session / started a
+            // new chat during the type-out window, skip the commit so we
+            // don't append a late reply to a session they navigated away
+            // from.
+            if (controller.signal.aborted) return;
+            await commitFinal(final);
           } finally {
-            setStreamingText(null);
+            typer.reset();
             setIsStreaming(false);
             if (streamAbortRef.current === controller) {
               streamAbortRef.current = null;
@@ -377,7 +398,7 @@ export default function CoachScreen() {
           });
         }
       } catch (err) {
-        setStreamingText(null);
+        typer.reset();
         setIsStreaming(false);
         // Silent cancel: a deliberate session switch / new-chat / unmount
         // aborts the in-flight stream; surfacing a "connection interrupted"
@@ -385,10 +406,11 @@ export default function CoachScreen() {
         // signal that's now aborted) as user-initiated cancellation.
         const aborted =
           (err instanceof Error && err.name === "AbortError") ||
-          // streamCoachReply may wrap, so also check the controller signal.
-          // The controller is only allocated on the streaming path; for the
-          // image-turn path we fall through and DO show the error message.
-          false;
+          // streamCoachReply may wrap the AbortError in a different shape,
+          // so also trust the controller signal. The controller is only
+          // allocated on the streaming path; for the image-turn path
+          // activeController stays null and we DO show the error message.
+          !!activeController?.signal.aborted;
         if (aborted) return;
         const errMsg: ChatMessage = {
           role: "assistant",
@@ -722,9 +744,9 @@ export default function CoachScreen() {
     // a live ChatBubble that updates with each delta. If we haven't
     // received the first delta yet (or this is a non-streaming vision
     // turn via coach.isPending), fall back to the thinking indicator.
-    if (isStreaming && streamingText && streamingText.length > 0) {
+    if (isStreaming && typer.displayed.length > 0) {
       return (
-        <ChatBubble role="assistant" content={streamingText} />
+        <ChatBubble role="assistant" content={typer.displayed} />
       );
     }
     if (coach.isPending || isStreaming) {
@@ -821,7 +843,7 @@ export default function CoachScreen() {
   }, [
     coach.isPending,
     isStreaming,
-    streamingText,
+    typer.displayed,
     lastAction,
     lastProposedAction,
     applyingAction,
