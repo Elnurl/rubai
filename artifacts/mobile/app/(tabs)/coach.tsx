@@ -702,8 +702,11 @@ export default function CoachScreen() {
           case "renameGoal": {
             if (action.newTitle) {
               const newTitle = action.newTitle;
-              const prevTitle =
-                activeGoal?.profile?.customGoalTitle ?? null;
+              // Capture the EXACT prior value (may be undefined for a
+              // non-custom goal) so Undo restores it precisely instead of
+              // leaving the renamed title in place.
+              const prevTitle: string | undefined =
+                activeGoal?.profile?.customGoalTitle;
               await updateActiveGoal((g) => ({
                 ...g,
                 profile: { ...g.profile, customGoalTitle: newTitle },
@@ -712,10 +715,7 @@ export default function CoachScreen() {
               undoFn = async () => {
                 await updateActiveGoal((g) => ({
                   ...g,
-                  profile: {
-                    ...g.profile,
-                    customGoalTitle: prevTitle ?? g.profile.customGoalTitle,
-                  },
+                  profile: { ...g.profile, customGoalTitle: prevTitle },
                 }));
               };
               applied = true;
