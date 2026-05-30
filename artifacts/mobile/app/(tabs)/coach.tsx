@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -86,6 +87,8 @@ function calendarOutcomeMessage(
 }
 
 type PendingAttachment = {
+  /** "image" for photos/camera; "file" for documents. */
+  kind: "image" | "file";
   filename: string;
   /** A short label we show in the input (e.g. "photo · 1.2MB"). */
   label: string;
@@ -95,6 +98,9 @@ type PendingAttachment = {
   /** MIME type of the picked image, e.g. "image/jpeg" or "image/png".
    *  Combined with `base64` to build a data URL for the vision model. */
   mimeType?: string;
+  /** Text content for text-based files. Passed to the coach so it can
+   *  read and reason about the document (txt, md, csv, json, etc.). */
+  fileContent?: string;
 };
 
 export default function CoachScreen() {
@@ -159,6 +165,7 @@ export default function CoachScreen() {
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
   const [pendingAttachment, setPendingAttachment] =
     useState<PendingAttachment | null>(null);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   // Streaming state. `isStreaming` is true from request start until the
   // `final` SSE event lands, even before the first delta — so the typing
@@ -309,7 +316,13 @@ export default function CoachScreen() {
           : {}),
         ...(activeCurrentPhase ? { currentPhase: activeCurrentPhase } : {}),
         ...(activeCoachMemory ? { coachMemory: activeCoachMemory } : {}),
-        ...(attachment ? { attachmentNote: attachment.filename } : {}),
+        ...(attachment
+          ? {
+              attachmentNote: attachment.fileContent
+                ? `File: ${attachment.filename}\n\n${attachment.fileContent.slice(0, 6000)}`
+                : attachment.filename,
+            }
+          : {}),
         ...(attachment?.base64 && attachment.mimeType
           ? {
               attachmentImage: {
@@ -931,6 +944,7 @@ export default function CoachScreen() {
       // by default after compression.
       const mimeType = asset.mimeType || "image/jpeg";
       setPendingAttachment({
+        kind: "image",
         filename,
         label,
         base64: asset.base64 ?? undefined,
@@ -997,26 +1011,53 @@ export default function CoachScreen() {
     }
   }, [handlePickedAsset, pickFromLibrary]);
 
-  // Tapping "+" opens a tiny chooser. On iOS/Android we use the native
-  // Alert sheet (cheapest cross-platform action sheet) so the user picks
-  // Camera vs Library; on web we go straight to the file picker since
-  // there's no native camera UI to invoke.
-  const onAttachmentPress = useCallback(() => {
-    if (Platform.OS === "web") {
-      void pickFromLibrary();
-      return;
+  // Pick a document (txt, md, csv, json, pdf, docx, etc.) using the OS
+  // file picker. For text-based files we read the content and include it
+  // as `attachmentNote` so the coach can reason about it. Binary files
+  // (PDF, Word, etc.) are attached by name only.
+  const pickDocument = useCallback(async () => {
+    setAttachMenuOpen(false);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "*/*",
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      const { name, size, mimeType, uri } = asset;
+      const sizeKb = size ? Math.round(size / 1024) : null;
+      const label = sizeKb ? `${name} · ${formatSize(sizeKb)}` : name;
+
+      // For text-based formats, read the content so the coach can see it.
+      let fileContent: string | undefined;
+      const isText =
+        (mimeType &&
+          (mimeType.startsWith("text/") ||
+            mimeType === "application/json" ||
+            mimeType === "application/xml")) ||
+        /\.(txt|md|markdown|csv|json|xml|yaml|yml|log|js|ts|py|sh)$/i.test(
+          name,
+        );
+      if (isText) {
+        try {
+          const res = await fetch(uri);
+          fileContent = await res.text();
+        } catch {
+          // Can't read — fall back to name-only attachment
+        }
+      }
+
+      setPendingAttachment({ kind: "file", filename: name, label, fileContent });
+    } catch {
+      // User cancelled or permission denied — silently ignore
     }
-    Alert.alert(
-      "Attach an image",
-      "Snap a photo of what you're working on, or pick one from your library.",
-      [
-        { text: "Camera", onPress: () => void pickFromCamera() },
-        { text: "Photo Library", onPress: () => void pickFromLibrary() },
-        { text: "Cancel", style: "cancel" },
-      ],
-      { cancelable: true },
-    );
-  }, [pickFromCamera, pickFromLibrary]);
+  }, []);
+
+  // Tapping "+" opens a bottom sheet with Files and Photos options.
+  const onAttachmentPress = useCallback(() => {
+    setAttachMenuOpen(true);
+  }, []);
 
   // Footer below the chat list: typing indicator, then per-turn suggestions
   // and action card so they always appear right under the latest assistant
@@ -1357,7 +1398,11 @@ export default function CoachScreen() {
               { borderColor: colors.border, backgroundColor: colors.card },
             ]}
           >
-            <Feather name="paperclip" size={13} color={colors.mutedForeground} />
+            <Feather
+              name={pendingAttachment?.kind === "file" ? "file-text" : "image"}
+              size={13}
+              color={colors.mutedForeground}
+            />
             <Text
               numberOfLines={1}
               style={[
@@ -1484,6 +1529,98 @@ export default function CoachScreen() {
       onPickSession={onPickSession}
       onDeleteSession={onDeleteSession}
     />
+
+    {/* Attach-menu bottom sheet — Files vs Photos */}
+    <Modal
+      visible={attachMenuOpen}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setAttachMenuOpen(false)}
+    >
+      <Pressable
+        style={styles.attachMenuOverlay}
+        onPress={() => setAttachMenuOpen(false)}
+      />
+      <View
+        style={[
+          styles.attachMenuSheet,
+          { backgroundColor: colors.card, borderColor: colors.border },
+        ]}
+      >
+        {/* Files */}
+        <Pressable
+          style={styles.attachMenuRow}
+          onPress={() => void pickDocument()}
+        >
+          <View
+            style={[
+              styles.attachMenuIcon,
+              { backgroundColor: colors.primary + "18" },
+            ]}
+          >
+            <Feather name="file-text" size={20} color={colors.primary} />
+          </View>
+          <View>
+            <Text
+              style={[
+                styles.attachMenuLabel,
+                { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
+              ]}
+            >
+              Files
+            </Text>
+            <Text
+              style={[
+                styles.attachMenuSub,
+                { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
+              ]}
+            >
+              PDF, Word, text, CSV…
+            </Text>
+          </View>
+        </Pressable>
+
+        {/* Divider */}
+        <View style={[styles.attachMenuDivider, { backgroundColor: colors.border }]} />
+
+        {/* Photos */}
+        <Pressable
+          style={styles.attachMenuRow}
+          onPress={() => {
+            setAttachMenuOpen(false);
+            void pickFromLibrary();
+          }}
+        >
+          <View
+            style={[
+              styles.attachMenuIcon,
+              { backgroundColor: colors.primary + "18" },
+            ]}
+          >
+            <Feather name="image" size={20} color={colors.primary} />
+          </View>
+          <View>
+            <Text
+              style={[
+                styles.attachMenuLabel,
+                { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
+              ]}
+            >
+              Photos
+            </Text>
+            <Text
+              style={[
+                styles.attachMenuSub,
+                { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
+              ]}
+            >
+              Pick from your library
+            </Text>
+          </View>
+        </Pressable>
+      </View>
+    </Modal>
+
     </View>
   );
 }
@@ -2263,5 +2400,41 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
+  },
+  attachMenuOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  attachMenuSheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderTopWidth: 1,
+    paddingTop: 8,
+    paddingBottom: 36,
+  },
+  attachMenuRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+  },
+  attachMenuIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  attachMenuLabel: {
+    fontSize: 15,
+    marginBottom: 2,
+  },
+  attachMenuSub: {
+    fontSize: 12.5,
+  },
+  attachMenuDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 24,
   },
 });
