@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "rubai - AI Goal Coach",
-    "slug": "mobile",
+    "slug": "rubai",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -30,6 +30,7 @@
       "favicon": "./assets/images/icon.png"
     },
     "plugins": [
+      "expo-dev-client",
       [
         "expo-router",
         {
