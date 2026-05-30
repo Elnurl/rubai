@@ -1,31 +1,26 @@
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
-import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ActiveGoalChip } from "@/components/ActiveGoalChip";
 import { AdaptiveEngineCard } from "@/components/AdaptiveEngineCard";
 import { AskCoachPill } from "@/components/AskCoachPill";
-import { CoachQuickBar } from "@/components/CoachQuickBar";
 import { EmptyState } from "@/components/EmptyState";
 import { PhaseCard } from "@/components/PhaseCard";
 import { SectionHeader } from "@/components/SectionHeader";
-import { TodayAnchorsCard } from "@/components/TodayAnchorsCard";
 import { profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { useEvolveRoadmap } from "@/hooks/useEvolveRoadmap";
 import { useAtlas } from "@/providers/AtlasProvider";
-import { todayISO } from "@/lib/storage";
 
 export default function RoadmapScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 8;
-  const bottomTab = isWeb ? 100 : 110;
-  const [quickBarHeight, setQuickBarHeight] = useState(0);
-  const router = useRouter();
+  const bottomTab = isWeb ? 84 : 90 + insets.bottom;
+
   const {
     activeRoadmap,
     activeProfile,
@@ -33,27 +28,15 @@ export default function RoadmapScreen() {
     activeRoadmapEvolutions,
     activeLastEvolvedAt,
     activeBehavioralProfile,
-    activeDailyPlan,
-    activeTaskHistory,
   } = useAtlas();
   const { evolve, isEvolving } = useEvolveRoadmap();
 
-  const today = todayISO();
-  const planIsForToday = activeDailyPlan?.plan.date === today;
-  const todaysTasks = planIsForToday ? (activeDailyPlan?.plan.tasks ?? []) : [];
-  const todaysCompletions = useMemo(() => {
-    const map = new Map<string, boolean>();
-    for (const e of activeTaskHistory) {
-      if (e.date === today) map.set(e.taskId, e.completed);
-    }
-    return map;
-  }, [activeTaskHistory, today]);
   const [evolveError, setEvolveError] = useState<string | null>(null);
   const [lastNoChangeAt, setLastNoChangeAt] = useState<string | null>(null);
+  const [strategyOpen, setStrategyOpen] = useState(false);
+  const [risksOpen, setRisksOpen] = useState(false);
 
   const latestEvolution = activeRoadmapEvolutions[0] ?? null;
-  // Phases that the most recent evolution flagged as added or modified, so we
-  // can highlight them in the list below.
   const updatedPhaseIds = useMemo(() => {
     if (!latestEvolution) return new Set<string>();
     return new Set(
@@ -63,7 +46,6 @@ export default function RoadmapScreen() {
     );
   }, [latestEvolution]);
 
-  // Need at least one reflection AND a learned profile before evolution makes sense.
   const canEvolve = Boolean(activeRoadmap && activeBehavioralProfile);
 
   const onEvolve = async () => {
@@ -100,15 +82,12 @@ export default function RoadmapScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: topPad, paddingBottom: bottomTab + quickBarHeight },
+          { paddingTop: topPad, paddingBottom: bottomTab },
         ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerRow}>
           <AskCoachPill />
-          {/* Mirrors the Today screen: lets the user switch which goal's
-              roadmap they're viewing without bouncing back to Goals. The
-              chip auto-hides when there's fewer than 2 goals. */}
           <ActiveGoalChip />
         </View>
 
@@ -120,25 +99,11 @@ export default function RoadmapScreen() {
         >
           ROADMAP
         </Text>
-        <View style={styles.hero}>
-          <SectionHeader
-            title={activeRoadmap.headline}
-            subtitle={`Week ${activeCurrentWeek} of ${activeRoadmap.totalWeeks}${goalLabel ? ` · ${goalLabel}` : ""}`}
-          />
-        </View>
 
-        {todaysTasks.length > 0 && (
-          <TodayAnchorsCard
-            tasks={todaysTasks}
-            completions={todaysCompletions}
-            onPressTask={(task) =>
-              router.push({
-                pathname: "/(tabs)/coach",
-                params: { prefill: `Help me adjust "${task.title}"` },
-              })
-            }
-          />
-        )}
+        <SectionHeader
+          title={activeRoadmap.headline}
+          subtitle={`Week ${activeCurrentWeek} of ${activeRoadmap.totalWeeks}${goalLabel ? ` · ${goalLabel}` : ""}`}
+        />
 
         <Text
           style={[
@@ -223,9 +188,10 @@ export default function RoadmapScreen() {
           </View>
         )}
 
+        {/* STRATEGY — collapsible */}
         <View
           style={[
-            styles.strategyCard,
+            styles.collapsibleCard,
             {
               backgroundColor: colors.card,
               borderColor: colors.border,
@@ -233,31 +199,45 @@ export default function RoadmapScreen() {
             },
           ]}
         >
-          <View style={styles.strategyHeader}>
-            <Feather name="compass" size={16} color={colors.accent} />
+          <Pressable
+            onPress={() => setStrategyOpen((v) => !v)}
+            style={styles.collapsibleHeader}
+            accessibilityRole="button"
+          >
+            <View style={styles.collapsibleLeft}>
+              <Feather name="compass" size={15} color={colors.accent} />
+              <Text
+                style={[
+                  styles.collapsibleLabel,
+                  { color: colors.accent, fontFamily: "Inter_600SemiBold" },
+                ]}
+              >
+                STRATEGY
+              </Text>
+            </View>
+            <Feather
+              name={strategyOpen ? "chevron-up" : "chevron-down"}
+              size={16}
+              color={colors.mutedForeground}
+            />
+          </Pressable>
+          {strategyOpen && (
             <Text
               style={[
-                styles.strategyLabel,
-                { color: colors.accent, fontFamily: "Inter_600SemiBold" },
+                styles.collapsibleBody,
+                { color: colors.foreground, fontFamily: "Inter_400Regular" },
               ]}
             >
-              STRATEGY
+              {activeRoadmap.strategy}
             </Text>
-          </View>
-          <Text
-            style={[
-              styles.strategyText,
-              { color: colors.foreground, fontFamily: "Inter_400Regular" },
-            ]}
-          >
-            {activeRoadmap.strategy}
-          </Text>
+          )}
         </View>
 
+        {/* RISKS TO WATCH — collapsible */}
         {activeRoadmap.riskAnalysis.length > 0 && (
           <View
             style={[
-              styles.risksCard,
+              styles.collapsibleCard,
               {
                 backgroundColor: colors.card,
                 borderColor: colors.border,
@@ -265,40 +245,48 @@ export default function RoadmapScreen() {
               },
             ]}
           >
-            <View style={styles.strategyHeader}>
-              <Feather name="alert-triangle" size={16} color={colors.destructive} />
-              <Text
-                style={[
-                  styles.strategyLabel,
-                  { color: colors.destructive, fontFamily: "Inter_600SemiBold" },
-                ]}
-              >
-                RISKS TO WATCH
-              </Text>
-            </View>
-            <View style={styles.risks}>
-              {activeRoadmap.riskAnalysis.map((risk, i) => (
-                <View key={i} style={styles.riskRow}>
-                  <View style={[styles.riskDot, { backgroundColor: colors.destructive }]} />
-                  <Text
-                    style={[
-                      styles.riskText,
-                      { color: colors.foreground, fontFamily: "Inter_400Regular" },
-                    ]}
-                  >
-                    {risk}
-                  </Text>
-                </View>
-              ))}
-            </View>
+            <Pressable
+              onPress={() => setRisksOpen((v) => !v)}
+              style={styles.collapsibleHeader}
+              accessibilityRole="button"
+            >
+              <View style={styles.collapsibleLeft}>
+                <Feather name="alert-triangle" size={15} color={colors.destructive} />
+                <Text
+                  style={[
+                    styles.collapsibleLabel,
+                    { color: colors.destructive, fontFamily: "Inter_600SemiBold" },
+                  ]}
+                >
+                  RISKS TO WATCH
+                </Text>
+              </View>
+              <Feather
+                name={risksOpen ? "chevron-up" : "chevron-down"}
+                size={16}
+                color={colors.mutedForeground}
+              />
+            </Pressable>
+            {risksOpen && (
+              <View style={styles.riskList}>
+                {activeRoadmap.riskAnalysis.map((risk, i) => (
+                  <View key={i} style={styles.riskRow}>
+                    <View style={[styles.riskDot, { backgroundColor: colors.destructive }]} />
+                    <Text
+                      style={[
+                        styles.riskText,
+                        { color: colors.foreground, fontFamily: "Inter_400Regular" },
+                      ]}
+                    >
+                      {risk}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         )}
       </ScrollView>
-
-      <CoachQuickBar
-        placeholder="Adjust roadmap, reschedule, or ask why..."
-        onHeight={setQuickBarHeight}
-      />
     </View>
   );
 }
@@ -306,8 +294,8 @@ export default function RoadmapScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: {
-    paddingHorizontal: 22,
-    gap: 20,
+    paddingHorizontal: 20,
+    gap: 16,
   },
   headerRow: {
     flexDirection: "row",
@@ -316,34 +304,12 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     gap: 12,
   },
-  hero: {
-    gap: 10,
-  },
   eyebrow: {
-    fontSize: 11,
+    fontSize: 10,
     letterSpacing: 1.6,
   },
-  summary: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  strategyCard: {
-    padding: 18,
-    borderWidth: 1,
+  phases: {
     gap: 10,
-  },
-  strategyHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  strategyLabel: {
-    fontSize: 11,
-    letterSpacing: 1.4,
-  },
-  strategyText: {
-    fontSize: 14.5,
-    lineHeight: 21,
   },
   banner: {
     flexDirection: "row",
@@ -354,19 +320,38 @@ const styles = StyleSheet.create({
   },
   bannerText: {
     flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12.5,
+    lineHeight: 17,
   },
-  phases: {
-    gap: 12,
-  },
-  risksCard: {
-    padding: 18,
+  collapsibleCard: {
     borderWidth: 1,
-    gap: 12,
+    overflow: "hidden",
   },
-  risks: {
-    gap: 10,
+  collapsibleHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 14,
+  },
+  collapsibleLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  collapsibleLabel: {
+    fontSize: 10,
+    letterSpacing: 1.4,
+  },
+  collapsibleBody: {
+    fontSize: 13.5,
+    lineHeight: 20,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+  },
+  riskList: {
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
   },
   riskRow: {
     flexDirection: "row",
@@ -374,14 +359,14 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   riskDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     marginTop: 8,
   },
   riskText: {
     flex: 1,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13.5,
+    lineHeight: 19,
   },
 });

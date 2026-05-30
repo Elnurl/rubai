@@ -7,7 +7,6 @@ import Animated, { FadeIn } from "react-native-reanimated";
 
 import { AtlasButton } from "@/components/AtlasButton";
 import { AskCoachPill } from "@/components/AskCoachPill";
-import { CoachQuickBar } from "@/components/CoachQuickBar";
 import { EmptyState } from "@/components/EmptyState";
 import { GoalListItem } from "@/components/GoalListItem";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -22,7 +21,6 @@ export default function GoalsScreen() {
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 8;
   const bottomTab = isWeb ? 100 : 110;
-  const [quickBarHeight, setQuickBarHeight] = React.useState(0);
 
   const {
     goals,
@@ -68,7 +66,7 @@ export default function GoalsScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: topPad, paddingBottom: bottomTab + quickBarHeight },
+          { paddingTop: topPad, paddingBottom: bottomTab },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -196,10 +194,6 @@ export default function GoalsScreen() {
         )}
       </ScrollView>
 
-      <CoachQuickBar
-        placeholder="Add a goal or ask rubai to design one..."
-        onHeight={setQuickBarHeight}
-      />
     </View>
   );
 }

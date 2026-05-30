@@ -256,8 +256,8 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    fontSize: 16.5,
-    lineHeight: 22,
+    fontSize: 15.5,
+    lineHeight: 21,
     letterSpacing: -0.2,
   },
   statusRow: {
@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
   },
   weeks: {
-    fontSize: 12.5,
+    fontSize: 11.5,
     letterSpacing: 0.3,
   },
   body: {
@@ -304,8 +304,8 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   focus: {
-    fontSize: 14.5,
-    lineHeight: 21,
+    fontSize: 13.5,
+    lineHeight: 20,
   },
   milestones: {
     gap: 16,
@@ -327,12 +327,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   milestoneTitle: {
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 19,
   },
   milestoneDescription: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 17,
   },
   weekTag: {
     flexDirection: "row",
