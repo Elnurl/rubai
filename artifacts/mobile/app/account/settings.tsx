@@ -27,7 +27,7 @@ export default function SettingsScreen() {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { account, updateAccount, syncStatus, syncMessage } = useAtlas();
+  const { account, updateAccount, syncStatus, syncMessage, activeCoachMemory } = useAtlas();
 
   const comingSoon = (label: string) => {
     if (Platform.OS === "web") {
@@ -91,9 +91,13 @@ export default function SettingsScreen() {
           <Row
             icon="cloud"
             title="Coach Memory"
-            subtitle="Securely backed up to rubai Cloud"
+            subtitle={
+              activeCoachMemory
+                ? `${activeCoachMemory.facts.length} fact${activeCoachMemory.facts.length === 1 ? "" : "s"} remembered`
+                : "No memory yet"
+            }
             chevron
-            onPress={() => comingSoon("Coach Memory")}
+            onPress={() => router.push("/account/coach-memory")}
           />
           <Divider />
           <Row
