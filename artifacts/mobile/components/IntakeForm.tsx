@@ -34,8 +34,10 @@ function otherEntryText(s: string): string {
 }
 
 function buildOtherEntry(text: string): string {
-  const trimmed = text.trim();
-  return trimmed.length > 0 ? `${OTHER_VALUE_PREFIX}${trimmed}` : OTHER_LABEL;
+  // Do NOT trim here — trimming removes trailing spaces while the user is still
+  // typing, which makes it impossible to type multi-word answers (the space gets
+  // eaten before the next character can be entered). Validation trims separately.
+  return text.length > 0 ? `${OTHER_VALUE_PREFIX}${text}` : OTHER_LABEL;
 }
 
 function splitMulti(value: string): string[] {
@@ -62,9 +64,11 @@ function toAnswers(map: AnswerMap): IntakeAnswer[] {
 function isMeaningfulAnswer(value: string): boolean {
   const items = splitMulti(value);
   if (items.length === 0) return false;
-  // A bare "Other" with no description does not count as answered.
+  // A bare "Other" with no description, or an "Other: " entry whose text is
+  // only whitespace, does not count as answered.
   for (const item of items) {
-    if (item === OTHER_LABEL) continue;
+    if (/^Other:?\s*$/.test(item)) continue;
+    if (item.startsWith(OTHER_VALUE_PREFIX) && item.slice(OTHER_VALUE_PREFIX.length).trim().length === 0) continue;
     return true;
   }
   return false;

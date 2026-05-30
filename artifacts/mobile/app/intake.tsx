@@ -201,14 +201,17 @@ export default function IntakeScreen() {
           >
             INTAKE FORM
           </Text>
-          <Text
-            style={[
-              styles.title,
-              { color: colors.foreground, fontFamily: "Inter_700Bold" },
-            ]}
-          >
-            {pendingDraft.goalTitle}
-          </Text>
+          {/* Show the user's goal as a chat bubble, not a large heading. */}
+          <View style={[styles.userBubble, { backgroundColor: colors.primary + "18", borderColor: colors.primary + "30" }]}>
+            <Text
+              style={[
+                styles.bubbleText,
+                { color: colors.foreground, fontFamily: "Inter_400Regular" },
+              ]}
+            >
+              {pendingDraft.goalTitle}
+            </Text>
+          </View>
           {pendingDraft.introMessage ? (
             <Animated.Text
               entering={FadeIn.duration(400)}
@@ -385,10 +388,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 2,
   },
-  title: {
-    fontSize: 26,
-    lineHeight: 32,
-    letterSpacing: -0.6,
+  userBubble: {
+    alignSelf: "flex-end",
+    borderWidth: 1,
+    borderRadius: 16,
+    borderBottomRightRadius: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    maxWidth: "90%",
+  },
+  bubbleText: {
+    fontSize: 14.5,
+    lineHeight: 21,
   },
   intro: {
     fontSize: 14.5,
