@@ -1686,10 +1686,14 @@ router.post("/generate-title", async (req, res) => {
     res.status(400).json({ error: "userInput is required." });
     return;
   }
+  // When AI is unavailable, fall back to the first 4 words of the raw input
+  // (rather than 60 chars of raw text, which just shows a truncated description).
+  const wordFallback = trimmed.split(/\s+/).slice(0, 4).join(" ");
+
   try {
     // /generate-title intentionally soft-fails: any error (including refusal,
-    // parse, or validation failure) falls back to the trimmed user input so
-    // the create-goal flow never hard-blocks. We still go through
+    // parse, or validation failure) falls back to the first few words of the
+    // user input so the create-goal flow never hard-blocks. We still go through
     // strictJsonCompletion so we get the single retry on parse/validation
     // failure for free, which improves the success rate before falling back.
     const parsedJson = await strictJsonCompletion(
@@ -1706,17 +1710,19 @@ router.post("/generate-title", async (req, res) => {
             content: `You convert a user's raw goal description into a SHORT, brand-neutral display title for their goal record.
 
 Rules:
-- 2 to 5 words. Title Case.
+- 2 to 5 words. NO more than 5 words.
+- Write in the SAME LANGUAGE as the user's input. If the input is in Azerbaijani, the title must be in Azerbaijani. If in Russian, in Russian. If in English, in English. Never translate.
+- Title Case (capitalise each word as appropriate for the detected language).
 - No punctuation, no emojis, no quotes, no trailing period.
 - Capture the *outcome*, not the process. ("Break Daily Trigger Loops", not "Try to Quit Bad Habits".)
-- Use the user's actual intent — if they said "lose 20 lbs", the title is "Lose 20 Pounds", not "Get In Shape".
-- If the input is gibberish or ambiguous, fall back to a generic title like "New Personal Goal".
+- Use the user's actual intent — if they said "lose 20 lbs", the title is "Lose 20 Pounds" (or the equivalent in the user's language).
+- If the input is gibberish or ambiguous, fall back to a 2-3 word generic title in the same language.
 - Goal category hint: ${goalType}. (Custom means the user wrote it themselves.)
 - Never refer to the assistant or the app. Just the goal.`,
           },
           {
             role: "user",
-            content: `User input: "${trimmed}"${intent ? `\nExtra context: ${intent}` : ""}\n\nReturn the refined title.`,
+            content: `User input: "${trimmed}"${intent ? `\nExtra context: ${intent}` : ""}\n\nReturn the refined title (2-5 words, in the same language as the input).`,
           },
         ],
       },
@@ -1725,13 +1731,13 @@ Rules:
     const title =
       typeof parsedJson.title === "string" && parsedJson.title.trim().length > 0
         ? parsedJson.title.trim().slice(0, 60)
-        : trimmed.slice(0, 60);
+        : wordFallback;
     res.json({ title });
   } catch (err) {
     req.log.error({ err }, "generate-title request failed");
-    // Soft-fail with the user input itself so the create-goal flow doesn't
-    // hard-block when the AI is degraded.
-    res.json({ title: trimmed.slice(0, 60) });
+    // Soft-fail with the first few words of the input (not 60 chars of raw
+    // description) so the goals list doesn't show a truncated paragraph.
+    res.json({ title: wordFallback });
   }
 });
 

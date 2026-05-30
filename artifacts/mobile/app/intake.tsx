@@ -138,11 +138,14 @@ export default function IntakeScreen() {
       // Use the AI-refined title as the display name on the new goal record.
       // Keep the raw user input intact via goalStatement (set by intake-submit)
       // so behavioural prompts can still reference how the user phrased it.
+      // If generate-title failed/returned null, use the first 4 words of the
+      // raw description as a fallback — never show a full paragraph as a title.
+      const rawFallback = rawCustomInput.trim().split(/\s+/).slice(0, 4).join(" ");
       const finalCustomTitle =
         isCustom && refinedTitle && refinedTitle.length > 0
           ? refinedTitle
           : isCustom
-            ? pendingDraft.customGoalTitle
+            ? (rawFallback || pendingDraft.customGoalTitle)
             : undefined;
 
       const profile = {
