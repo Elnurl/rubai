@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   Modal,
   Platform,
   Pressable,
@@ -47,6 +48,11 @@ import {
   type CoachActionSuggestion,
   type ProposedCoachAction,
 } from "@workspace/api-client-react";
+import {
+  encodeImageAttachment,
+  encodeFileAttachment,
+  stripAttachmentMeta,
+} from "@/lib/attachmentEncoding";
 import { streamCoachReply, type CoachStreamFinal } from "@/lib/coachStream";
 import { useTypewriter } from "@/lib/useTypewriter";
 import type { CoachMemory } from "@workspace/api-client-react";
@@ -101,6 +107,8 @@ type PendingAttachment = {
   /** Text content for text-based files. Passed to the coach so it can
    *  read and reason about the document (txt, md, csv, json, etc.). */
   fileContent?: string;
+  /** Local file URI used for thumbnail display in the chat bubble. */
+  uri?: string;
 };
 
 export default function CoachScreen() {
@@ -258,9 +266,12 @@ export default function CoachScreen() {
       const pinnedSessionId = activeCoachSessionId;
       if (!pinnedGoalId || !pinnedSessionId) return;
 
-      const visibleContent = attachment
-        ? `${message}\n📎 ${attachment.label}`
-        : message;
+      const visibleContent =
+        attachment?.kind === "image" && attachment.uri
+          ? encodeImageAttachment(attachment.uri, message)
+          : attachment?.kind === "file"
+            ? encodeFileAttachment(attachment.filename, message)
+            : message;
       const userMsg: ChatMessage = { role: "user", content: visibleContent };
       await appendCoachMessageToSession(pinnedGoalId, pinnedSessionId, userMsg);
 
@@ -304,7 +315,9 @@ export default function CoachScreen() {
         roadmap: activeRoadmap,
         todayPlan: activeDailyPlan?.plan,
         behavioral: activeBehavioral,
-        history: activeCoachHistory.slice(-10),
+        history: activeCoachHistory
+          .slice(-10)
+          .map((m) => ({ ...m, content: stripAttachmentMeta(m.content) })),
         message,
         modelChoice,
         ...(calendarContext ? { calendarContext } : {}),
@@ -949,6 +962,7 @@ export default function CoachScreen() {
         label,
         base64: asset.base64 ?? undefined,
         mimeType,
+        uri: asset.uri,
       });
     },
     [],
@@ -1048,7 +1062,7 @@ export default function CoachScreen() {
         }
       }
 
-      setPendingAttachment({ kind: "file", filename: name, label, fileContent });
+      setPendingAttachment({ kind: "file", filename: name, label, fileContent, uri });
     } catch {
       // User cancelled or permission denied — silently ignore
     }
@@ -1392,34 +1406,56 @@ export default function CoachScreen() {
         </View>
 
         {pendingAttachment ? (
-          <View
-            style={[
-              styles.attachmentRow,
-              { borderColor: colors.border, backgroundColor: colors.card },
-            ]}
-          >
-            <Feather
-              name={pendingAttachment?.kind === "file" ? "file-text" : "image"}
-              size={13}
-              color={colors.mutedForeground}
-            />
-            <Text
-              numberOfLines={1}
+          pendingAttachment.kind === "image" && pendingAttachment.uri ? (
+            /* Image: show thumbnail preview with X button */
+            <View style={styles.attachmentThumbWrap}>
+              <Image
+                source={{ uri: pendingAttachment.uri }}
+                style={[
+                  styles.attachmentThumb,
+                  { borderColor: colors.border },
+                ]}
+                resizeMode="cover"
+              />
+              <Pressable
+                onPress={() => setPendingAttachment(null)}
+                hitSlop={6}
+                testID="remove-attachment"
+                style={[
+                  styles.attachmentThumbX,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                ]}
+              >
+                <Feather name="x" size={12} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
+          ) : (
+            /* File: show icon + name chip */
+            <View
               style={[
-                styles.attachmentText,
-                { color: colors.foreground, fontFamily: "Inter_500Medium" },
+                styles.attachmentRow,
+                { borderColor: colors.border, backgroundColor: colors.card },
               ]}
             >
-              {pendingAttachment.label}
-            </Text>
-            <Pressable
-              onPress={() => setPendingAttachment(null)}
-              hitSlop={6}
-              testID="remove-attachment"
-            >
-              <Feather name="x" size={14} color={colors.mutedForeground} />
-            </Pressable>
-          </View>
+              <Feather name="file-text" size={13} color={colors.mutedForeground} />
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.attachmentText,
+                  { color: colors.foreground, fontFamily: "Inter_500Medium" },
+                ]}
+              >
+                {pendingAttachment.label}
+              </Text>
+              <Pressable
+                onPress={() => setPendingAttachment(null)}
+                hitSlop={6}
+                testID="remove-attachment"
+              >
+                <Feather name="x" size={14} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
+          )
         ) : null}
 
         <View
@@ -1547,10 +1583,13 @@ export default function CoachScreen() {
           { backgroundColor: colors.card, borderColor: colors.border },
         ]}
       >
-        {/* Files */}
+        {/* Camera */}
         <Pressable
           style={styles.attachMenuRow}
-          onPress={() => void pickDocument()}
+          onPress={() => {
+            setAttachMenuOpen(false);
+            void pickFromCamera();
+          }}
         >
           <View
             style={[
@@ -1558,7 +1597,7 @@ export default function CoachScreen() {
               { backgroundColor: colors.primary + "18" },
             ]}
           >
-            <Feather name="file-text" size={20} color={colors.primary} />
+            <Feather name="camera" size={20} color={colors.primary} />
           </View>
           <View>
             <Text
@@ -1567,7 +1606,7 @@ export default function CoachScreen() {
                 { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
               ]}
             >
-              Files
+              Camera
             </Text>
             <Text
               style={[
@@ -1575,7 +1614,7 @@ export default function CoachScreen() {
                 { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
               ]}
             >
-              PDF, Word, text, CSV…
+              Take a photo right now
             </Text>
           </View>
         </Pressable>
@@ -1615,6 +1654,42 @@ export default function CoachScreen() {
               ]}
             >
               Pick from your library
+            </Text>
+          </View>
+        </Pressable>
+
+        {/* Divider */}
+        <View style={[styles.attachMenuDivider, { backgroundColor: colors.border }]} />
+
+        {/* Files */}
+        <Pressable
+          style={styles.attachMenuRow}
+          onPress={() => void pickDocument()}
+        >
+          <View
+            style={[
+              styles.attachMenuIcon,
+              { backgroundColor: colors.primary + "18" },
+            ]}
+          >
+            <Feather name="paperclip" size={20} color={colors.primary} />
+          </View>
+          <View>
+            <Text
+              style={[
+                styles.attachMenuLabel,
+                { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
+              ]}
+            >
+              Files
+            </Text>
+            <Text
+              style={[
+                styles.attachMenuSub,
+                { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
+              ]}
+            >
+              PDF, Word, text, CSV…
             </Text>
           </View>
         </Pressable>
@@ -2331,6 +2406,28 @@ const styles = StyleSheet.create({
   suggestionText: {
     fontSize: 12.5,
     letterSpacing: 0.2,
+  },
+  attachmentThumbWrap: {
+    alignSelf: "flex-end",
+    marginHorizontal: 8,
+    marginBottom: 4,
+  },
+  attachmentThumb: {
+    width: 90,
+    height: 68,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  attachmentThumbX: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center",
   },
   attachmentRow: {
     flexDirection: "row",

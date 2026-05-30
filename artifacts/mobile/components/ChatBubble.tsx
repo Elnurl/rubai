@@ -1,10 +1,11 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 
 import { BrandDot } from "@/components/BrandDot";
 import { useColors } from "@/hooks/useColors";
+import { decodeAttachment } from "@/lib/attachmentEncoding";
 
 type Props = {
   role: "user" | "assistant";
@@ -17,6 +18,11 @@ type Props = {
 export function ChatBubble({ role, content, onSpeak, isSpeaking }: Props) {
   const colors = useColors();
   const isUser = role === "user";
+
+  // Parse optional attachment header embedded in user messages.
+  const decoded = isUser ? decodeAttachment(content) : null;
+  const displayText = decoded ? decoded.message : content;
+  const attachMeta = decoded?.meta ?? null;
 
   return (
     <Animated.View
@@ -42,17 +48,59 @@ export function ChatBubble({ role, content, onSpeak, isSpeaking }: Props) {
             : null,
         ]}
       >
-        <Text
-          style={[
-            styles.text,
-            {
-              color: isUser ? colors.primaryForeground : colors.foreground,
-              fontFamily: "Inter_400Regular",
-            },
-          ]}
-        >
-          {content}
-        </Text>
+        {/* Image thumbnail — shown when user attached a photo/camera shot */}
+        {attachMeta?.kind === "IMG" ? (
+          <Image
+            source={{ uri: attachMeta.uri }}
+            style={styles.thumbnail}
+            resizeMode="cover"
+          />
+        ) : null}
+
+        {/* File pill — shown when user attached a document */}
+        {attachMeta?.kind === "FILE" ? (
+          <View
+            style={[
+              styles.filePill,
+              { backgroundColor: "rgba(255,255,255,0.18)" },
+            ]}
+          >
+            <Feather
+              name="file-text"
+              size={13}
+              color={colors.primaryForeground}
+            />
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.filePillText,
+                {
+                  color: colors.primaryForeground,
+                  fontFamily: "Inter_500Medium",
+                },
+              ]}
+            >
+              {attachMeta.filename}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Message body */}
+        {displayText.length > 0 ? (
+          <Text
+            style={[
+              styles.text,
+              {
+                color: isUser ? colors.primaryForeground : colors.foreground,
+                fontFamily: "Inter_400Regular",
+                marginTop: attachMeta ? 8 : 0,
+              },
+            ]}
+          >
+            {displayText}
+          </Text>
+        ) : null}
+
         {!isUser && onSpeak ? (
           <Pressable
             onPress={onSpeak}
@@ -89,14 +137,11 @@ const styles = StyleSheet.create({
   },
   userBubble: {
     maxWidth: "78%",
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 14,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 18,
   },
-  // ChatGPT-style: assistant replies render as plain text — no border, no
-  // background fill, no rounded card. Only the BrandDot avatar on the left
-  // identifies the speaker. Padding is minimal so the text aligns flush.
   assistantBubble: {
     flex: 1,
     paddingVertical: 4,
@@ -105,6 +150,24 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 15,
     lineHeight: 22,
+  },
+  thumbnail: {
+    width: 200,
+    height: 150,
+    borderRadius: 10,
+  },
+  filePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    alignSelf: "flex-start",
+  },
+  filePillText: {
+    fontSize: 12.5,
+    maxWidth: 160,
   },
   speakerButton: {
     alignSelf: "flex-end",
