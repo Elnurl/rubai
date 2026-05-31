@@ -66,6 +66,7 @@
     "expo-device": "~8.0.10",
     "expo-document-picker": "^56.0.4",
     "expo-notifications": "~0.32.17",
-    "expo-speech": "^14.0.8"
+    "expo-speech": "^14.0.8",
+    "react-native-purchases": "^10.2.0"
   }
 }
