@@ -27,6 +27,14 @@ import {
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import colors from "@/constants/colors";
 import { AtlasProvider, useAtlas } from "@/providers/AtlasProvider";
+import { initializeRevenueCat, SubscriptionProvider } from "@/lib/revenuecat";
+import { Alert } from "react-native";
+
+try {
+  initializeRevenueCat();
+} catch (err: unknown) {
+  Alert.alert("RevenueCat Unavailable", err instanceof Error ? err.message : "Unknown error");
+}
 
 function resolveApiBaseUrl(): string | null {
   // 1. Explicit env var baked in at bundle time (set by the dev workflow).
@@ -335,9 +343,11 @@ export default function RootLayout() {
               <GestureHandlerRootView style={{ flex: 1 }}>
                 <KeyboardProvider>
                   <AtlasProvider>
-                    <AuthGate>
-                      <RootLayoutNav />
-                    </AuthGate>
+                    <SubscriptionProvider>
+                      <AuthGate>
+                        <RootLayoutNav />
+                      </AuthGate>
+                    </SubscriptionProvider>
                   </AtlasProvider>
                 </KeyboardProvider>
               </GestureHandlerRootView>

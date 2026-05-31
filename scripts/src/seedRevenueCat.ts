@@ -25,7 +25,7 @@ import {
   type CreateProductData,
 } from "@replit/revenuecat-sdk";
 
-const PROJECT_NAME = "RubAI - AI Goal Coach";
+const PROJECT_NAME = "Horizon"; // existing project in RevenueCat
 const APP_STORE_APP_NAME = "RubAI iOS";
 const APP_STORE_BUNDLE_ID = "com.elnur11.rubai";
 const PLAY_STORE_APP_NAME = "RubAI Android";
@@ -89,8 +89,8 @@ const PLANS: PlanConfig[] = [
 ];
 
 async function seedRevenueCat() {
-  const apiKey = process.env.REVENUECAT_API_KEY;
-  if (!apiKey) throw new Error("REVENUECAT_API_KEY is not set");
+  const apiKey = process.env.REVENUECAT_V2_SECRET_KEY;
+  if (!apiKey) throw new Error("REVENUECAT_V2_SECRET_KEY is not set");
 
   const client = createClient({
     baseUrl: "https://api.revenuecat.com/v2",

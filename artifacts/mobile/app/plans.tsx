@@ -2,6 +2,8 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -13,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
+import { useSubscription, RC_OFFERING_PRO, RC_OFFERING_PREMIUM } from "@/lib/revenuecat";
 import { TIER_INFO, type SubscriptionTier } from "@/types/atlas";
 
 const TIER_ORDER: SubscriptionTier[] = ["free", "pro", "premium"];
@@ -33,11 +36,17 @@ const TIER_FEATURES: Record<SubscriptionTier, string[]> = {
   ],
   premium: [
     "Up to 25 goals across life areas",
-    "Adaptive AI re-evaluation",
-    "Deep behavioral analysis",
+    "Full Behavioral Orchestration AI",
+    "Multi-model adaptive coaching",
     "Priority model access",
     "Everything in Pro",
   ],
+};
+
+const TIER_OFFERING: Record<SubscriptionTier, string | null> = {
+  free: null,
+  pro: RC_OFFERING_PRO,
+  premium: RC_OFFERING_PREMIUM,
 };
 
 function isKnownTier(t: string): t is SubscriptionTier {
@@ -50,22 +59,84 @@ export default function PlansScreen() {
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   const { tier, updateSubscription } = useAtlas();
-  const currentTier: SubscriptionTier = isKnownTier(tier) ? tier : "free";
-  const [busy, setBusy] = useState<SubscriptionTier | null>(null);
+  const {
+    activeTier,
+    proOffering,
+    premiumOffering,
+    isLoading: rcLoading,
+    purchase,
+    restore,
+    isPurchasing,
+    isRestoring,
+  } = useSubscription();
 
-  const onPick = async (next: SubscriptionTier) => {
-    if (next === currentTier) {
+  const currentTier: SubscriptionTier = isKnownTier(activeTier) ? activeTier : "free";
+  const [confirmTier, setConfirmTier] = useState<SubscriptionTier | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const getPackageForTier = (t: SubscriptionTier) => {
+    if (t === "pro") return proOffering?.availablePackages[0] ?? null;
+    if (t === "premium") return premiumOffering?.availablePackages[0] ?? null;
+    return null;
+  };
+
+  const getPriceForTier = (t: SubscriptionTier): string => {
+    const pkg = getPackageForTier(t);
+    if (pkg) return pkg.product.priceString + " / month";
+    return TIER_INFO[t].price;
+  };
+
+  const onPick = (t: SubscriptionTier) => {
+    if (t === currentTier) {
       router.back();
       return;
     }
-    setBusy(next);
-    try {
-      await updateSubscription(next);
+    if (t === "free") {
       router.back();
+      return;
+    }
+    setErrorMsg(null);
+    setConfirmTier(t);
+  };
+
+  const onConfirmPurchase = async () => {
+    if (!confirmTier) return;
+    const pkg = getPackageForTier(confirmTier);
+    if (!pkg) {
+      setErrorMsg("Product not available. Please try again.");
+      setConfirmTier(null);
+      return;
+    }
+    setBusy(true);
+    setConfirmTier(null);
+    try {
+      await purchase(pkg);
+      await updateSubscription(confirmTier);
+      router.back();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Purchase failed.";
+      if (!msg.toLowerCase().includes("cancel")) {
+        setErrorMsg(msg);
+      }
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
+
+  const onRestore = async () => {
+    setBusy(true);
+    setErrorMsg(null);
+    try {
+      await restore();
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Restore failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const isBusy = busy || isPurchasing || isRestoring;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -87,20 +158,12 @@ export default function PlansScreen() {
           accessibilityLabel="Go back"
         >
           <Feather name="chevron-left" size={22} color={colors.foreground} />
-          <Text
-            style={[
-              styles.backText,
-              { color: colors.foreground, fontFamily: "Inter_500Medium" },
-            ]}
-          >
+          <Text style={[styles.backText, { color: colors.foreground, fontFamily: "Inter_500Medium" }]}>
             Back
           </Text>
         </Pressable>
         <Text
-          style={[
-            styles.headerTitle,
-            { color: colors.foreground, fontFamily: "Inter_700Bold" },
-          ]}
+          style={[styles.headerTitle, { color: colors.foreground, fontFamily: "Inter_700Bold" }]}
           maxFontSizeMultiplier={1.3}
         >
           Choose your plan
@@ -115,22 +178,24 @@ export default function PlansScreen() {
         ]}
       >
         <Text
-          style={[
-            styles.intro,
-            { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-          ]}
+          style={[styles.intro, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}
           maxFontSizeMultiplier={1.4}
         >
-          Pick the plan that matches how many goals you want rubai to coach you
-          through. You can switch anytime.
+          Pick the plan that matches how many goals you want rubai to coach you through. You can switch anytime.
         </Text>
+
+        {errorMsg ? (
+          <View style={[styles.errorBox, { backgroundColor: colors.card, borderColor: "#ef4444" }]}>
+            <Text style={[styles.errorText, { fontFamily: "Inter_400Regular" }]}>{errorMsg}</Text>
+          </View>
+        ) : null}
 
         {TIER_ORDER.map((t) => {
           const info = TIER_INFO[t];
           const features = TIER_FEATURES[t];
           const isCurrent = t === currentTier;
           const isHighlight = t === "pro";
-          const isBusy = busy === t;
+          const price = rcLoading && t !== "free" ? "Loading…" : getPriceForTier(t);
 
           return (
             <View
@@ -148,22 +213,13 @@ export default function PlansScreen() {
               <View style={styles.cardHead}>
                 <View style={styles.cardHeadLeft}>
                   <Text
-                    style={[
-                      styles.tierLabel,
-                      { color: colors.foreground, fontFamily: "Inter_700Bold" },
-                    ]}
+                    style={[styles.tierLabel, { color: colors.foreground, fontFamily: "Inter_700Bold" }]}
                     maxFontSizeMultiplier={1.3}
                   >
                     {info.label}
                   </Text>
                   <Text
-                    style={[
-                      styles.tagline,
-                      {
-                        color: colors.mutedForeground,
-                        fontFamily: "Inter_400Regular",
-                      },
-                    ]}
+                    style={[styles.tagline, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}
                     maxFontSizeMultiplier={1.4}
                   >
                     {info.tagline}
@@ -171,29 +227,15 @@ export default function PlansScreen() {
                 </View>
                 <View style={styles.cardHeadRight}>
                   <Text
-                    style={[
-                      styles.price,
-                      { color: colors.foreground, fontFamily: "Inter_700Bold" },
-                    ]}
+                    style={[styles.price, { color: colors.foreground, fontFamily: "Inter_700Bold" }]}
                     maxFontSizeMultiplier={1.3}
                   >
-                    {info.price}
+                    {price}
                   </Text>
                   {isHighlight ? (
-                    <View
-                      style={[
-                        styles.badge,
-                        { backgroundColor: colors.primary },
-                      ]}
-                    >
+                    <View style={[styles.badge, { backgroundColor: colors.primary }]}>
                       <Text
-                        style={[
-                          styles.badgeText,
-                          {
-                            color: colors.primaryForeground,
-                            fontFamily: "Inter_700Bold",
-                          },
-                        ]}
+                        style={[styles.badgeText, { color: colors.primaryForeground, fontFamily: "Inter_700Bold" }]}
                       >
                         POPULAR
                       </Text>
@@ -207,13 +249,7 @@ export default function PlansScreen() {
                   <View key={f} style={styles.featureRow}>
                     <Feather name="check" size={16} color={colors.primary} />
                     <Text
-                      style={[
-                        styles.featureText,
-                        {
-                          color: colors.foreground,
-                          fontFamily: "Inter_400Regular",
-                        },
-                      ]}
+                      style={[styles.featureText, { color: colors.foreground, fontFamily: "Inter_400Regular" }]}
                       maxFontSizeMultiplier={1.4}
                     >
                       {f}
@@ -223,8 +259,8 @@ export default function PlansScreen() {
               </View>
 
               <Pressable
-                onPress={() => void onPick(t)}
-                disabled={busy !== null}
+                onPress={() => onPick(t)}
+                disabled={isBusy || rcLoading}
                 style={({ pressed }) => [
                   styles.cta,
                   {
@@ -232,48 +268,90 @@ export default function PlansScreen() {
                     borderColor: isCurrent ? colors.border : colors.primary,
                     borderWidth: isCurrent ? 1 : 0,
                     borderRadius: colors.radius,
-                    opacity: pressed || (busy !== null && !isBusy) ? 0.85 : 1,
+                    opacity: pressed || (isBusy && t !== currentTier) ? 0.7 : 1,
                   },
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel={
-                  isCurrent ? "Current plan" : `Choose ${info.label}`
-                }
+                accessibilityLabel={isCurrent ? "Current plan" : `Choose ${info.label}`}
               >
-                <Text
-                  style={[
-                    styles.ctaText,
-                    {
-                      color: isCurrent
-                        ? colors.foreground
-                        : colors.primaryForeground,
-                      fontFamily: "Inter_600SemiBold",
-                    },
-                  ]}
-                  maxFontSizeMultiplier={1.3}
-                >
-                  {isCurrent
-                    ? "Current plan"
-                    : isBusy
-                      ? "Switching…"
-                      : `Choose ${info.label}`}
-                </Text>
+                {isBusy && t !== "free" && t === currentTier ? (
+                  <ActivityIndicator size="small" color={colors.primaryForeground} />
+                ) : (
+                  <Text
+                    style={[
+                      styles.ctaText,
+                      {
+                        color: isCurrent ? colors.foreground : colors.primaryForeground,
+                        fontFamily: "Inter_600SemiBold",
+                      },
+                    ]}
+                    maxFontSizeMultiplier={1.3}
+                  >
+                    {isCurrent ? "Current plan" : t === "free" ? "Downgrade to Free" : `Choose ${info.label}`}
+                  </Text>
+                )}
               </Pressable>
             </View>
           );
         })}
 
-        <Text
-          style={[
-            styles.disclaimer,
-            { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-          ]}
-          maxFontSizeMultiplier={1.4}
+        <Pressable
+          onPress={onRestore}
+          disabled={isBusy}
+          style={styles.restoreBtn}
+          accessibilityRole="button"
         >
-          Plan switching is currently a preview. No payment is taken — your
-          selection just updates rubai's UI for this session.
-        </Text>
+          <Text style={[styles.restoreText, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
+            {isRestoring ? "Restoring…" : "Restore purchases"}
+          </Text>
+        </Pressable>
       </ScrollView>
+
+      <Modal
+        visible={confirmTier !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmTier(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: colors.card, borderRadius: colors.radius }]}>
+            <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: "Inter_700Bold" }]}>
+              Confirm Purchase
+            </Text>
+            {confirmTier ? (
+              <Text style={[styles.modalBody, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
+                You are about to purchase{" "}
+                <Text style={{ fontFamily: "Inter_600SemiBold", color: colors.foreground }}>
+                  RubAI {TIER_INFO[confirmTier]?.label}
+                </Text>{" "}
+                for{" "}
+                <Text style={{ fontFamily: "Inter_600SemiBold", color: colors.foreground }}>
+                  {getPriceForTier(confirmTier)}
+                </Text>
+                {"\n\n"}This is a test purchase and no real payment will be taken.
+              </Text>
+            ) : null}
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={() => setConfirmTier(null)}
+                style={[styles.modalBtn, { borderColor: colors.border, borderWidth: 1, borderRadius: colors.radius }]}
+              >
+                <Text style={[styles.modalBtnText, { color: colors.foreground, fontFamily: "Inter_500Medium" }]}>
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={onConfirmPurchase}
+                style={[styles.modalBtn, { backgroundColor: colors.primary, borderRadius: colors.radius }]}
+              >
+                <Text style={[styles.modalBtnText, { color: colors.primaryForeground, fontFamily: "Inter_600SemiBold" }]}>
+                  Purchase
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -301,6 +379,8 @@ const styles = StyleSheet.create({
   headerSpacer: { width: 72 },
   container: { padding: 20, gap: 16 },
   intro: { fontSize: 14, lineHeight: 20, marginBottom: 4 },
+  errorBox: { padding: 12, borderWidth: 1, borderRadius: 8 },
+  errorText: { fontSize: 13, color: "#ef4444", lineHeight: 18 },
   card: { padding: 18, gap: 14 },
   cardHead: {
     flexDirection: "row",
@@ -313,11 +393,7 @@ const styles = StyleSheet.create({
   tierLabel: { fontSize: 22 },
   tagline: { fontSize: 13, lineHeight: 18 },
   price: { fontSize: 18 },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   badgeText: { fontSize: 10, letterSpacing: 0.5 },
   features: { gap: 8 },
   featureRow: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -330,11 +406,25 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   ctaText: { fontSize: 15 },
-  disclaimer: {
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 8,
-    textAlign: "center",
-    paddingHorizontal: 12,
+  restoreBtn: { alignItems: "center", paddingVertical: 12, marginTop: 4 },
+  restoreText: { fontSize: 13 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
   },
+  modalBox: { width: "100%", maxWidth: 360, padding: 24, gap: 16 },
+  modalTitle: { fontSize: 18 },
+  modalBody: { fontSize: 14, lineHeight: 21 },
+  modalActions: { flexDirection: "row", gap: 12 },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+  },
+  modalBtnText: { fontSize: 15 },
 });

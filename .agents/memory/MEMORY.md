@@ -1,0 +1,1 @@
+- [RevenueCat Setup](revenuecat-setup.md) — RC inteqrasiya olmadan REVENUECAT_V2_SECRET_KEY (sk_ prefix) + createClient ilə işləyir; test key (test_ prefix) yalnız client-side üçündür.
