@@ -199,6 +199,19 @@ Rules:
 - Keep replies under 70 words.`;
 };
 
+// POST /atlas/session-start
+// Lightweight endpoint — logs a session_started behavioral event and triggers
+// an async state recompute. Called fire-and-forget from the coach tab on focus.
+router.post("/session-start", async (req, res) => {
+  if (typeof req.userId === "number") {
+    logBehavioralEvent(req.userId, "session_started", {
+      hourOfDay: new Date().getHours(),
+    });
+    recomputeBehavioralStateAsync(req.userId);
+  }
+  res.status(204).end();
+});
+
 router.post("/onboarding-chat", async (req, res) => {
   const parsed = atlasOnboardingChatBody.safeParse(req.body);
   if (!parsed.success) {

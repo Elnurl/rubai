@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -197,6 +197,14 @@ export default function CoachScreen() {
       undoTimerRef.current = null;
     };
   }, []);
+
+  // Log session_started behavioral event each time the coach tab gains focus.
+  // Fire-and-forget — never blocks UI or throws.
+  useFocusEffect(
+    useCallback(() => {
+      customFetch("/api/atlas/session-start", { method: "POST" }).catch(() => {});
+    }, []),
+  );
 
   useEffect(() => {
     if (activeCoachHistory.length === 0 && activeProfile && activeRoadmap) {

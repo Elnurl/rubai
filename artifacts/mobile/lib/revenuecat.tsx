@@ -1,8 +1,10 @@
-import React, { createContext, useContext } from "react";
+import React, { createContext, useContext, useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import Purchases, { type PurchasesPackage } from "react-native-purchases";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
+import { useUser } from "@clerk/expo";
+import { customFetch } from "@workspace/api-client-react";
 
 const REVENUECAT_TEST_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY;
 const REVENUECAT_IOS_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY;
@@ -39,7 +41,19 @@ function deriveActiveTier(entitlements: Record<string, unknown>): ActiveTier {
   return "free";
 }
 
+async function callSyncTier(): Promise<{ tier: ActiveTier }> {
+  return customFetch<{ tier: ActiveTier }>("/api/me/sync-tier", {
+    method: "POST",
+  });
+}
+
 function useSubscriptionContext() {
+  const { user } = useUser();
+  const userId = user?.id ?? null;
+
+  // Track which userId we've already called logIn for to avoid re-running.
+  const loggedInUserId = useRef<string | null>(null);
+
   const customerInfoQuery = useQuery({
     queryKey: ["revenuecat", "customer-info"],
     queryFn: () => Purchases.getCustomerInfo(),
@@ -64,17 +78,49 @@ function useSubscriptionContext() {
     staleTime: 300_000,
   });
 
+  const syncTierMutation = useMutation({
+    mutationFn: callSyncTier,
+  });
+
+  // When a Clerk user becomes available, identify them in RevenueCat so
+  // server-side entitlement lookups can use the Clerk user ID. Then sync
+  // the verified tier into our DB (fire-and-forget — errors are swallowed
+  // so they never block the UI).
+  useEffect(() => {
+    if (!userId) return;
+    if (loggedInUserId.current === userId) return;
+
+    loggedInUserId.current = userId;
+
+    Purchases.logIn(userId)
+      .then(() => syncTierMutation.mutate())
+      .catch(() => {
+        // logIn failures are non-fatal — RC still works with anonymous ID.
+        // Attempt sync anyway in case the anonymous session already has
+        // entitlements mapped.
+        syncTierMutation.mutate();
+      });
+    // syncTierMutation is stable (useMutation ref is stable).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
   const purchaseMutation = useMutation({
     mutationFn: async (pkg: PurchasesPackage) => {
       const { customerInfo } = await Purchases.purchasePackage(pkg);
       return customerInfo;
     },
-    onSuccess: () => customerInfoQuery.refetch(),
+    onSuccess: () => {
+      customerInfoQuery.refetch();
+      syncTierMutation.mutate();
+    },
   });
 
   const restoreMutation = useMutation({
     mutationFn: () => Purchases.restorePurchases(),
-    onSuccess: () => customerInfoQuery.refetch(),
+    onSuccess: () => {
+      customerInfoQuery.refetch();
+      syncTierMutation.mutate();
+    },
   });
 
   const activeEntitlements = customerInfoQuery.data?.entitlements.active ?? {};
@@ -91,6 +137,7 @@ function useSubscriptionContext() {
     isPurchasing: purchaseMutation.isPending,
     isRestoring: restoreMutation.isPending,
     refetchCustomerInfo: customerInfoQuery.refetch,
+    syncTierWithServer: syncTierMutation.mutate,
   };
 }
 

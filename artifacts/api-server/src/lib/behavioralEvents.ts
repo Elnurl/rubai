@@ -5,6 +5,7 @@ export type BehavioralEventType =
   | "task_completed"
   | "task_skipped"
   | "task_created"
+  | "session_started"
   | "coach_opened"
   | "goal_viewed";
 

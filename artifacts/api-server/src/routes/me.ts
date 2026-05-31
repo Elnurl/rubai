@@ -13,7 +13,60 @@ import {
   logBehavioralEvent,
   type BehavioralEventType,
 } from "../lib/behavioralEvents";
-import { recomputeBehavioralStateAsync } from "../lib/behavioralAnalytics";
+import {
+  recomputeBehavioralStateAsync,
+  getBehavioralState,
+} from "../lib/behavioralAnalytics";
+
+// ── RevenueCat tier sync ───────────────────────────────────────────────────
+
+type ActiveTier = "free" | "pro" | "premium";
+
+interface RcEntitlement {
+  expires_date: string | null;
+  product_identifier?: string;
+}
+
+interface RcSubscriberResponse {
+  subscriber?: {
+    entitlements?: Record<string, RcEntitlement>;
+  };
+}
+
+async function fetchRcTier(clerkUserId: string): Promise<ActiveTier> {
+  const secretKey = process.env.REVENUECAT_V2_SECRET_KEY;
+  if (!secretKey) throw new Error("REVENUECAT_V2_SECRET_KEY not configured");
+
+  const res = await fetch(
+    `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(clerkUserId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+      },
+    },
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`RC API error ${res.status}: ${text.slice(0, 200)}`);
+  }
+
+  const data = (await res.json()) as RcSubscriberResponse;
+  const entitlements = data.subscriber?.entitlements ?? {};
+  const now = Date.now();
+
+  function isActive(e: RcEntitlement): boolean {
+    if (e.expires_date === null) return true;
+    if (!e.expires_date) return false;
+    return new Date(e.expires_date).getTime() > now;
+  }
+
+  if (entitlements["premium"] && isActive(entitlements["premium"]!))
+    return "premium";
+  if (entitlements["pro"] && isActive(entitlements["pro"]!)) return "pro";
+  return "free";
+}
 
 // ── Task-history diff helper ───────────────────────────────────────────────
 // Extracts a flat Map of `${goalId}:${taskId}:${date}` → completed boolean
@@ -86,6 +139,64 @@ function diffAndLogTaskEvents(
 const router: IRouter = Router();
 
 router.use(requireAuth);
+
+// POST /me/sync-tier
+// Verifies the user's active RevenueCat entitlements via the RC REST API
+// (server-side secret key) and updates users.tier in the DB accordingly.
+// The mobile calls this after purchase, restore, and on boot after logIn.
+router.post("/me/sync-tier", async (req, res): Promise<void> => {
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, req.userId!));
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  let tier: ActiveTier;
+  try {
+    tier = await fetchRcTier(user.clerkUserId);
+  } catch (err) {
+    req.log.warn({ err }, "RC tier fetch failed — keeping existing tier");
+    res.status(502).json({ error: "Failed to reach RevenueCat" });
+    return;
+  }
+
+  await db
+    .update(usersTable)
+    .set({ tier })
+    .where(eq(usersTable.id, user.id));
+
+  req.log.info({ userId: user.id, tier }, "Tier synced from RevenueCat");
+  res.json({ tier });
+});
+
+// GET /me/behavioral-state
+// Returns the pre-computed behavioral state for the authenticated user.
+// Used by the mobile insights screen to show live energy / procrastination /
+// flow-state data derived from real behavioral events.
+router.get("/me/behavioral-state", async (req, res): Promise<void> => {
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, req.userId!));
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  const state = await getBehavioralState(user.id);
+  res.json({
+    energyLevel: state.energyLevel,
+    moodScore: state.moodScore,
+    cognitiveLoad: state.cognitiveLoad,
+    procrastinationRisk: state.procrastinationRisk,
+    flowDetected: state.flowDetected,
+    peakHours: state.peakHours,
+    motivationType: state.motivationType,
+    updatedAt: state.updatedAt,
+  });
+});
 
 router.get("/me", async (req, res): Promise<void> => {
   const [user] = await db

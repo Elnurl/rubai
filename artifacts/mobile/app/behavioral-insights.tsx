@@ -1,6 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { customFetch } from "@workspace/api-client-react";
 import {
   Platform,
   Pressable,
@@ -61,6 +63,24 @@ export default function BehavioralInsightsScreen() {
   } = useAtlas();
   const refreshProfile = useAtlasBehavioralProfile();
   const [adoptedAt, setAdoptedAt] = React.useState<number | null>(null);
+
+  // Live behavioral state from server (computed from real behavioral events).
+  const liveStateQuery = useQuery({
+    queryKey: ["behavioral-state"],
+    queryFn: () =>
+      customFetch<{
+        energyLevel: number;
+        moodScore: number;
+        cognitiveLoad: number;
+        procrastinationRisk: "low" | "medium" | "high";
+        flowDetected: boolean;
+        peakHours: number[];
+        motivationType: string;
+        updatedAt: string;
+      }>("/api/me/behavioral-state"),
+    staleTime: 60_000,
+  });
+  const live = liveStateQuery.data;
 
   const {
     intensitySeries,
@@ -437,6 +457,56 @@ export default function BehavioralInsightsScreen() {
             </Pressable>
           </View>
         </View>
+
+        {/* Live Behavioral State */}
+        {live && (
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderRadius: colors.radius,
+                marginBottom: 0,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.cardTitle,
+                { color: colors.foreground, fontFamily: "Inter_700Bold", marginBottom: 12 },
+              ]}
+            >
+              Live State
+            </Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+              <LiveChip
+                label="Energy"
+                value={`${Math.round(live.energyLevel * 100)}%`}
+                color={live.energyLevel >= 0.6 ? "#34d399" : live.energyLevel >= 0.35 ? "#fbbf24" : "#f87171"}
+                colors={colors}
+              />
+              <LiveChip
+                label="Procrastination"
+                value={live.procrastinationRisk}
+                color={live.procrastinationRisk === "low" ? "#34d399" : live.procrastinationRisk === "medium" ? "#fbbf24" : "#f87171"}
+                colors={colors}
+              />
+              <LiveChip
+                label="Flow"
+                value={live.flowDetected ? "Active ⚡" : "Not detected"}
+                color={live.flowDetected ? "#34d399" : colors.mutedForeground}
+                colors={colors}
+              />
+              <LiveChip
+                label="Drive"
+                value={live.motivationType.replace("_", " ")}
+                color={colors.primary}
+                colors={colors}
+              />
+            </View>
+          </View>
+        )}
 
         {/* Focus Pulse */}
         <FocusPulseCard />
@@ -815,6 +885,55 @@ function SubStat({ label, value }: { label: string; value: string }) {
           subStatStyles.value,
           { color: colors.foreground, fontFamily: "Inter_700Bold" },
         ]}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function LiveChip({
+  label,
+  value,
+  color,
+  colors,
+}: {
+  label: string;
+  value: string;
+  color: string;
+  colors: ReturnType<typeof useColors>;
+}) {
+  return (
+    <View
+      style={{
+        flexDirection: "column",
+        gap: 3,
+        backgroundColor: colors.muted,
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        minWidth: "44%",
+        flex: 1,
+      }}
+    >
+      <Text
+        style={{
+          fontSize: 10,
+          color: colors.mutedForeground,
+          fontFamily: "Inter_500Medium",
+          textTransform: "uppercase",
+          letterSpacing: 0.5,
+        }}
+      >
+        {label}
+      </Text>
+      <Text
+        style={{
+          fontSize: 14,
+          color,
+          fontFamily: "Inter_700Bold",
+          textTransform: "capitalize",
+        }}
       >
         {value}
       </Text>
