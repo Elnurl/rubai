@@ -56,6 +56,7 @@ externalPort = 4200
 
 [userenv.shared]
 VITE_CLERK_PUBLISHABLE_KEY = "pk_test_c2V0dGxlZC1nYXJmaXNoLTMxLmNsZXJrLmFjY291bnRzLmRldiQ"
+expo_token = "GDq6KMRrBDKZ2g9-yr9gKJVGr6NT2vtpdtm1oo9r"
 
 [nix]
 channel = "stable-25_05"
