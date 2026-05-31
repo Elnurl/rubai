@@ -1,1 +1,3 @@
 - [RevenueCat Setup](revenuecat-setup.md) — RC inteqrasiya olmadan REVENUECAT_V2_SECRET_KEY (sk_ prefix) + createClient ilə işləyir; test key (test_ prefix) yalnız client-side üçündür.
+- [Behavioral Orchestration](behavioral-orchestration.md) — tier-gated AI model selection + behavioral state shaping; Free=MODEL_FAST, Pro=MODEL_SMART+energy/procrastination, Premium=full multi-signal.
+- [DB migration pattern](db-migration-pattern.md) — no drizzle-migrate CLI; add schema file + export from index.ts + run raw psql SQL + pnpm run typecheck:libs to rebuild.

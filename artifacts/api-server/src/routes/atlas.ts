@@ -7,6 +7,15 @@ import { toFile } from "openai/uploads";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { db, usersTable } from "@workspace/db";
+import { logBehavioralEvent } from "../lib/behavioralEvents";
+import {
+  getBehavioralState,
+  recomputeBehavioralStateAsync,
+} from "../lib/behavioralAnalytics";
+import {
+  buildOrchestrationConfig,
+  type SubscriptionTier,
+} from "../lib/behavioralOrchestration";
 import { trackedCreate, trackedStream } from "../lib/aiUsage";
 import {
   parseAndValidate,
@@ -940,6 +949,33 @@ router.post("/coach", async (req, res) => {
       ]
     : userMessageText;
 
+  // ── Behavioral Orchestration ──────────────────────────────────────────────
+  // Fetch the user's tier + pre-computed behavioral state, then derive
+  // an OrchestrationConfig (model, tone, depth, focus, addendum).
+  // Both queries are fire-forget safe: on failure we fall back to defaults.
+  const [userRecord] = await db
+    .select({ tier: usersTable.tier })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.userId!))
+    .limit(1)
+    .catch(() => [{ tier: "free" as string }]);
+
+  const tier = (userRecord?.tier ?? "free") as SubscriptionTier;
+  const behavioralStateCoach = await getBehavioralState(req.userId!).catch(
+    () => ({
+      userId: req.userId!,
+      energyLevel: 0.5,
+      moodScore: 0.0,
+      cognitiveLoad: 0.5,
+      procrastinationRisk: "low" as const,
+      flowDetected: false,
+      peakHours: [],
+      motivationType: "balanced",
+      updatedAt: new Date(),
+    }),
+  );
+  const orchConfig = buildOrchestrationConfig(behavioralStateCoach, tier);
+
   try {
     const contextBlock = buildCoachContext({
       profile: {
@@ -999,19 +1035,14 @@ ${contextBlock}${
             )
             .catch(() => "")
         : ""
-    }`;
+    }${orchConfig.behavioralAddendum ? `\n\n${orchConfig.behavioralAddendum}` : ""}`;
 
     const parsedJson = await strictJsonCompletion(
       req,
       {
-        // Vision turns need a multimodal model; gpt-4o supports both
-        // image_url content and json_schema response_format.
-        model: pickCoachModel({
-          choice: modelChoice,
-          userMessageLength: message.length,
-          historyTurns: history.length,
-          hasImage,
-        }),
+        // Vision turns always use the vision model regardless of tier.
+        // Otherwise the orchestration config owns model selection.
+        model: hasImage ? MODEL_VISION : orchConfig.model,
         max_completion_tokens: 1200,
         response_format: zodResponseFormat(coachResponseValidator, "coach_reply"),
         messages: [
@@ -1030,6 +1061,15 @@ ${contextBlock}${
       todayPlan,
     );
     res.json(normalized);
+
+    // Fire-and-forget: log event + trigger behavioral state recompute.
+    // These must come AFTER the response so they never delay the user.
+    if (typeof req.userId === "number") {
+      logBehavioralEvent(req.userId, "message_sent", {
+        messageLength: message.length,
+      });
+      recomputeBehavioralStateAsync(req.userId);
+    }
   } catch (err) {
     if (err instanceof StrictJsonError && err.kind === "refusal") {
       req.log.warn({ details: err.details }, "coach refusal from model");
@@ -1411,6 +1451,33 @@ router.post("/coach/stream", async (req, res) => {
       ]
     : userMessageText;
 
+  // ── Behavioral Orchestration (stream) ────────────────────────────────────
+  const [userRecordStream] = await db
+    .select({ tier: usersTable.tier })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.userId!))
+    .limit(1)
+    .catch(() => [{ tier: "free" as string }]);
+
+  const tierStream = (userRecordStream?.tier ?? "free") as SubscriptionTier;
+  const behavioralStateStream = await getBehavioralState(req.userId!).catch(
+    () => ({
+      userId: req.userId!,
+      energyLevel: 0.5,
+      moodScore: 0.0,
+      cognitiveLoad: 0.5,
+      procrastinationRisk: "low" as const,
+      flowDetected: false,
+      peakHours: [],
+      motivationType: "balanced",
+      updatedAt: new Date(),
+    }),
+  );
+  const orchConfigStream = buildOrchestrationConfig(
+    behavioralStateStream,
+    tierStream,
+  );
+
   const contextBlock = buildCoachContext({
     profile: {
       goalType: profile.goalType,
@@ -1463,7 +1530,7 @@ ${contextBlock}${
           )
           .catch(() => "")
       : ""
-  }`;
+  }${orchConfigStream.behavioralAddendum ? `\n\n${orchConfigStream.behavioralAddendum}` : ""}`;
 
   // SSE headers. `X-Accel-Buffering: no` disables nginx-style proxy
   // buffering so chunks reach the client in real time even behind a
@@ -1497,15 +1564,19 @@ ${contextBlock}${
   let streamedReply = "";
   let refusalAccumulated = "";
 
+  // Fire-and-forget behavioral event logging — before the stream starts so
+  // it's captured even if the client disconnects mid-stream.
+  if (typeof req.userId === "number") {
+    logBehavioralEvent(req.userId, "message_sent", {
+      messageLength: message.length,
+    });
+    recomputeBehavioralStateAsync(req.userId);
+  }
+
   try {
     const stream = trackedStream(req, {
       stream: true,
-      model: pickCoachModel({
-        choice: modelChoice,
-        userMessageLength: message.length,
-        historyTurns: history.length,
-        hasImage,
-      }),
+      model: hasImage ? MODEL_VISION : orchConfigStream.model,
       max_completion_tokens: 1200,
       response_format: zodResponseFormat(coachResponseValidator, "coach_reply"),
       messages: [
