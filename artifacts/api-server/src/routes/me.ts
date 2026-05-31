@@ -9,6 +9,79 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
 import { indexUserGoalsAsync } from "../lib/embeddingsIndexer";
+import {
+  logBehavioralEvent,
+  type BehavioralEventType,
+} from "../lib/behavioralEvents";
+import { recomputeBehavioralStateAsync } from "../lib/behavioralAnalytics";
+
+// ── Task-history diff helper ───────────────────────────────────────────────
+// Extracts a flat Map of `${goalId}:${taskId}:${date}` → completed boolean
+// from a raw goals JSONB array so we can diff old vs new on every PUT.
+type TaskKey = string;
+type CompletionMap = Map<
+  TaskKey,
+  { completed: boolean; taskTitle: string; taskId: string }
+>;
+
+function buildCompletionMap(goals: unknown): CompletionMap {
+  const map: CompletionMap = new Map();
+  if (!Array.isArray(goals)) return map;
+  for (const goal of goals) {
+    if (!goal || typeof goal !== "object") continue;
+    const g = goal as Record<string, unknown>;
+    const goalId = typeof g.id === "string" ? g.id : "";
+    const history = Array.isArray(g.taskHistory) ? g.taskHistory : [];
+    for (const entry of history) {
+      if (!entry || typeof entry !== "object") continue;
+      const e = entry as Record<string, unknown>;
+      const taskId = typeof e.taskId === "string" ? e.taskId : "";
+      const date = typeof e.date === "string" ? e.date : "";
+      const completed = e.completed === true;
+      const taskTitle = typeof e.taskTitle === "string" ? e.taskTitle : "";
+      if (taskId && date) {
+        map.set(`${goalId}:${taskId}:${date}`, {
+          completed,
+          taskTitle,
+          taskId,
+        });
+      }
+    }
+  }
+  return map;
+}
+
+function diffAndLogTaskEvents(
+  userId: number,
+  oldGoals: unknown,
+  newGoals: unknown,
+): void {
+  const oldMap = buildCompletionMap(oldGoals);
+  const newMap = buildCompletionMap(newGoals);
+  let changed = false;
+
+  for (const [key, newVal] of newMap) {
+    const oldVal = oldMap.get(key);
+    // Only log when completion status changed (not first-time creates, which
+    // are just stub entries with completed: false from the mobile side).
+    if (oldVal === undefined) continue;
+    if (oldVal.completed === newVal.completed) continue;
+
+    const eventType: BehavioralEventType = newVal.completed
+      ? "task_completed"
+      : "task_skipped";
+
+    logBehavioralEvent(userId, eventType, {
+      taskId: newVal.taskId,
+      taskTitle: newVal.taskTitle,
+    });
+    changed = true;
+  }
+
+  if (changed) {
+    recomputeBehavioralStateAsync(userId);
+  }
+}
 
 const router: IRouter = Router();
 
@@ -145,6 +218,14 @@ router.put("/me/state", async (req, res): Promise<void> => {
   // Atomic compare-and-swap: only update when version matches expectedVersion.
   // If expectedVersion > 0, we never insert — the row must already exist.
   if (expectedVersion > 0) {
+    // Read the current row first so we can:
+    //   (a) diff task history to emit behavioral events on success
+    //   (b) return it immediately on CAS failure without a second round-trip
+    const [currentRow] = await db
+      .select()
+      .from(userStateTable)
+      .where(eq(userStateTable.userId, user.id));
+
     const [updated] = await db
       .update(userStateTable)
       .set({
@@ -160,28 +241,25 @@ router.put("/me/state", async (req, res): Promise<void> => {
       .returning();
 
     if (updated) {
-      // Fire-and-forget RAG indexing. The indexer is internally
-      // idempotent and only re-embeds chunks whose text changed, so
-      // calling on every successful PUT is cheap.
+      // Fire-and-forget RAG indexing.
       indexUserGoalsAsync(req, user.id, updated.goals);
+      // Fire-and-forget behavioral event diff: detect task_completed /
+      // task_skipped transitions and trigger state recompute.
+      diffAndLogTaskEvents(user.id, currentRow?.goals ?? [], goals);
       res.json(buildSuccess(updated));
       return;
     }
 
-    // CAS failed — fetch the latest row (or null if no row) and 409.
-    const [current] = await db
-      .select()
-      .from(userStateTable)
-      .where(eq(userStateTable.userId, user.id));
+    // CAS failed — return the pre-fetched current row (no extra round-trip).
     req.log.info(
       {
         userId: user.id,
         expectedVersion,
-        currentVersion: current?.version ?? null,
+        currentVersion: currentRow?.version ?? null,
       },
       "Version conflict on /me/state PUT (update CAS failed)",
     );
-    res.status(409).json(buildConflict(current ?? null));
+    res.status(409).json(buildConflict(currentRow ?? null));
     return;
   }
 
