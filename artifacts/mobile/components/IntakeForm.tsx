@@ -439,10 +439,19 @@ function OtherInput({
   onChange: (v: string) => void;
 }) {
   const colors = useColors();
+  // Keep a local copy so the parent's splitMulti → trim round-trip cannot
+  // strip trailing spaces while the user is still typing between words.
+  const [localValue, setLocalValue] = useState(value);
+
+  const handleChange = (t: string) => {
+    setLocalValue(t);
+    onChange(t);
+  };
+
   return (
     <TextInput
-      value={value}
-      onChangeText={onChange}
+      value={localValue}
+      onChangeText={handleChange}
       placeholder="Describe your own answer"
       placeholderTextColor={colors.mutedForeground}
       multiline
