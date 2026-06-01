@@ -97,6 +97,10 @@ export default function SignInScreen() {
   const [oauthLoading, setOauthLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // Two-factor step — shown when Clerk returns needs_second_factor
+  const [twoFactorStep, setTwoFactorStep] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+
   // Hydrate "remember me" choice + last-used email from local storage on
   // first mount. Defaults: flag = true (remember), email = empty.
   useEffect(() => {
@@ -173,27 +177,19 @@ export default function SignInScreen() {
         return;
       }
 
-      // The dedicated verify screen has been removed along with the
-      // 6-digit step. Replit-managed Clerk doesn't support MFA today, so
-      // if Clerk ever returns `needs_second_factor` (external TOTP/SMS)
-      // we surface a clear error instead of routing to a deleted screen.
+      // Account requires TOTP / SMS second factor — switch to the code
+      // input step instead of dead-ending the user with an error.
       if (signIn.status === "needs_second_factor") {
-        debug("needs_second_factor — verify screen removed");
-        setSubmitError(
-          "Your account requires two-factor verification, which isn't available in this build. Please contact support.",
-        );
+        debug("needs_second_factor — showing 2FA step");
+        setTwoFactorStep(true);
         return;
       }
 
-      // The "needs_client_trust" 6-digit email verification has been
-      // removed for now. If Clerk still requires it (instance is in a
-      // strict-trust mode) the only way past it is via the dashboard
-      // setting — we surface a clear error rather than dead-routing.
+      // needs_client_trust means Clerk wants an extra email OTP on this
+      // device — treat it the same way as needs_second_factor.
       if (signIn.status === "needs_client_trust") {
-        debug("needs_client_trust — verification removed");
-        setSubmitError(
-          "Sign-in needs an extra verification step that's currently disabled in this build. Please contact support.",
-        );
+        debug("needs_client_trust — showing 2FA step");
+        setTwoFactorStep(true);
         return;
       }
 
@@ -252,6 +248,50 @@ export default function SignInScreen() {
       setOauthLoading(false);
     }
   }, [startSSOFlow, router]);
+
+  // Submit the 2FA verification code.
+  // Clerk exposes attemptSecondFactor on the SignIn resource for TOTP/SMS;
+  // after success we reuse the same finalize() path as normal sign-in.
+  const handleTwoFactor = useCallback(async () => {
+    if (!signIn) return;
+    setSubmitError(null);
+    setSubmitting(true);
+    try {
+      // Determine the strategy from what Clerk told us it supports.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const si = signIn as any;
+      const supported: Array<{ strategy: string }> =
+        si.supportedSecondFactors ?? [];
+      const strategy =
+        supported.find((f) => f.strategy === "totp")?.strategy ??
+        supported.find((f) => f.strategy === "phone_code")?.strategy ??
+        supported.find((f) => f.strategy === "email_code")?.strategy ??
+        "totp";
+      debug("2FA attempt with strategy", strategy);
+      const result = await si.attemptSecondFactor({
+        strategy,
+        code: twoFactorCode.trim(),
+      });
+      debug("2FA result status", result?.status);
+      if (result?.status === "complete") {
+        await si.finalize({
+          navigate: ({ session }: { session?: { currentTask?: unknown } }) => {
+            if (session?.currentTask) return;
+            router.replace("/");
+          },
+        });
+        return;
+      }
+      setSubmitError(
+        `Verification didn't complete (${result?.status ?? "unknown"}). Please try again.`,
+      );
+    } catch (err) {
+      debug("2FA threw", err);
+      setSubmitError(friendlyAuthError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }, [signIn, twoFactorCode, router]);
 
   const isFetching = fetchStatus === "fetching" || submitting;
   const disabled = !emailAddress || !password || isFetching;
@@ -313,141 +353,217 @@ export default function SignInScreen() {
             )}
           </Pressable>
 
-          <View style={styles.dividerRow}>
-            <View style={styles.divider} />
-            <Text style={styles.dividerText} maxFontSizeMultiplier={1.2}>
-              or
-            </Text>
-            <View style={styles.divider} />
-          </View>
-
-          <Text style={styles.label} maxFontSizeMultiplier={1.3}>
-            Email
-          </Text>
-          <TextInput
-            style={styles.input}
-            value={emailAddress}
-            onChangeText={setEmailAddress}
-            placeholder="you@example.com"
-            placeholderTextColor={BRAND.muted}
-            autoCapitalize="none"
-            autoComplete="email"
-            keyboardType="email-address"
-            returnKeyType="next"
-            editable={!isFetching}
-          />
-          {errors?.fields?.identifier?.message && (
-            <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
-              {errors.fields.identifier.message}
-            </Text>
-          )}
-
-          <View style={styles.passwordHeaderRow}>
-            <Text style={styles.label} maxFontSizeMultiplier={1.3}>
-              Password
-            </Text>
-            <Link href="/(auth)/forgot-password" asChild>
-              <Pressable hitSlop={8} accessibilityRole="link">
-                <Text style={styles.forgotText} maxFontSizeMultiplier={1.3}>
-                  Forgot?
+          {twoFactorStep ? (
+            /* ── Two-factor verification step ── */
+            <>
+              <View style={styles.twoFactorInfo}>
+                <Text style={styles.twoFactorTitle} maxFontSizeMultiplier={1.3}>
+                  Two-factor verification
                 </Text>
-              </Pressable>
-            </Link>
-          </View>
-          <View style={styles.passwordRow}>
-            <TextInput
-              style={[styles.input, styles.passwordInput]}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Your password"
-              placeholderTextColor={BRAND.muted}
-              secureTextEntry={!showPassword}
-              autoComplete="password"
-              returnKeyType="go"
-              onSubmitEditing={handleSubmit}
-              editable={!isFetching}
-            />
-            <Pressable
-              onPress={() => setShowPassword((v) => !v)}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel={showPassword ? "Hide password" : "Show password"}
-              style={styles.eyeBtn}
-            >
-              <Feather
-                name={showPassword ? "eye-off" : "eye"}
-                size={18}
-                color={BRAND.muted}
-              />
-            </Pressable>
-          </View>
-          {errors?.fields?.password?.message && (
-            <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
-              {errors.fields.password.message}
-            </Text>
-          )}
+                <Text style={styles.twoFactorSubtitle} maxFontSizeMultiplier={1.3}>
+                  Enter the code from your authenticator app or SMS.
+                </Text>
+              </View>
 
-          <Pressable
-            onPress={() => setRememberMe((v) => !v)}
-            style={styles.rememberRow}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: rememberMe }}
-            hitSlop={6}
-          >
-            <View
-              style={[
-                styles.checkbox,
-                rememberMe && styles.checkboxChecked,
-              ]}
-            >
-              {rememberMe && (
-                <Feather name="check" size={14} color="#FAF6EE" />
-              )}
-            </View>
-            <Text style={styles.rememberText} maxFontSizeMultiplier={1.3}>
-              Remember me on this device
-            </Text>
-          </Pressable>
-
-          {submitError && (
-            <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
-              {submitError}
-            </Text>
-          )}
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.primaryBtn,
-              disabled && styles.primaryBtnDisabled,
-              pressed && !disabled && Platform.OS === "ios" && { opacity: 0.9 },
-            ]}
-            android_ripple={{ color: "#FFFFFF22" }}
-            onPress={handleSubmit}
-            disabled={disabled}
-            accessibilityRole="button"
-            accessibilityState={{ disabled }}
-          >
-            {isFetching ? (
-              <ActivityIndicator color="#FAF6EE" />
-            ) : (
-              <Text style={styles.primaryBtnText} maxFontSizeMultiplier={1.3}>
-                Sign in
+              <Text style={styles.label} maxFontSizeMultiplier={1.3}>
+                Verification code
               </Text>
-            )}
-          </Pressable>
+              <TextInput
+                style={styles.input}
+                value={twoFactorCode}
+                onChangeText={setTwoFactorCode}
+                placeholder="000000"
+                placeholderTextColor={BRAND.muted}
+                keyboardType="number-pad"
+                returnKeyType="go"
+                maxLength={8}
+                autoFocus
+                onSubmitEditing={handleTwoFactor}
+                editable={!isFetching}
+              />
 
-          <View style={styles.linkRow}>
-            <Text style={styles.linkRowText} maxFontSizeMultiplier={1.3}>
-              Don&apos;t have an account?
-            </Text>
-            <Link href="/(auth)/sign-up" asChild>
-              <Pressable hitSlop={8} accessibilityRole="link">
-                <Text style={styles.linkText} maxFontSizeMultiplier={1.3}>
-                  Sign up
+              {submitError && (
+                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
+                  {submitError}
+                </Text>
+              )}
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.primaryBtn,
+                  (!twoFactorCode.trim() || isFetching) && styles.primaryBtnDisabled,
+                  pressed && !!twoFactorCode.trim() && !isFetching && Platform.OS === "ios" && { opacity: 0.9 },
+                ]}
+                android_ripple={{ color: "#FFFFFF22" }}
+                onPress={handleTwoFactor}
+                disabled={!twoFactorCode.trim() || isFetching}
+                accessibilityRole="button"
+              >
+                {isFetching ? (
+                  <ActivityIndicator color="#FAF6EE" />
+                ) : (
+                  <Text style={styles.primaryBtnText} maxFontSizeMultiplier={1.3}>
+                    Verify
+                  </Text>
+                )}
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  setTwoFactorStep(false);
+                  setTwoFactorCode("");
+                  setSubmitError(null);
+                }}
+                style={styles.backRow}
+                hitSlop={8}
+                accessibilityRole="button"
+              >
+                <Feather name="arrow-left" size={14} color={BRAND.primary} />
+                <Text style={styles.backText} maxFontSizeMultiplier={1.3}>
+                  Back to sign in
                 </Text>
               </Pressable>
-            </Link>
-          </View>
+            </>
+          ) : (
+            /* ── Normal email / password form ── */
+            <>
+              <View style={styles.dividerRow}>
+                <View style={styles.divider} />
+                <Text style={styles.dividerText} maxFontSizeMultiplier={1.2}>
+                  or
+                </Text>
+                <View style={styles.divider} />
+              </View>
+
+              <Text style={styles.label} maxFontSizeMultiplier={1.3}>
+                Email
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={emailAddress}
+                onChangeText={setEmailAddress}
+                placeholder="you@example.com"
+                placeholderTextColor={BRAND.muted}
+                autoCapitalize="none"
+                autoComplete="email"
+                keyboardType="email-address"
+                returnKeyType="next"
+                editable={!isFetching}
+              />
+              {errors?.fields?.identifier?.message && (
+                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
+                  {errors.fields.identifier.message}
+                </Text>
+              )}
+
+              <View style={styles.passwordHeaderRow}>
+                <Text style={styles.label} maxFontSizeMultiplier={1.3}>
+                  Password
+                </Text>
+                <Link href="/(auth)/forgot-password" asChild>
+                  <Pressable hitSlop={8} accessibilityRole="link">
+                    <Text style={styles.forgotText} maxFontSizeMultiplier={1.3}>
+                      Forgot?
+                    </Text>
+                  </Pressable>
+                </Link>
+              </View>
+              <View style={styles.passwordRow}>
+                <TextInput
+                  style={[styles.input, styles.passwordInput]}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Your password"
+                  placeholderTextColor={BRAND.muted}
+                  secureTextEntry={!showPassword}
+                  autoComplete="password"
+                  returnKeyType="go"
+                  onSubmitEditing={handleSubmit}
+                  editable={!isFetching}
+                />
+                <Pressable
+                  onPress={() => setShowPassword((v) => !v)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                  style={styles.eyeBtn}
+                >
+                  <Feather
+                    name={showPassword ? "eye-off" : "eye"}
+                    size={18}
+                    color={BRAND.muted}
+                  />
+                </Pressable>
+              </View>
+              {errors?.fields?.password?.message && (
+                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
+                  {errors.fields.password.message}
+                </Text>
+              )}
+
+              <Pressable
+                onPress={() => setRememberMe((v) => !v)}
+                style={styles.rememberRow}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: rememberMe }}
+                hitSlop={6}
+              >
+                <View
+                  style={[
+                    styles.checkbox,
+                    rememberMe && styles.checkboxChecked,
+                  ]}
+                >
+                  {rememberMe && (
+                    <Feather name="check" size={14} color="#FAF6EE" />
+                  )}
+                </View>
+                <Text style={styles.rememberText} maxFontSizeMultiplier={1.3}>
+                  Remember me on this device
+                </Text>
+              </Pressable>
+
+              {submitError && (
+                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
+                  {submitError}
+                </Text>
+              )}
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.primaryBtn,
+                  disabled && styles.primaryBtnDisabled,
+                  pressed && !disabled && Platform.OS === "ios" && { opacity: 0.9 },
+                ]}
+                android_ripple={{ color: "#FFFFFF22" }}
+                onPress={handleSubmit}
+                disabled={disabled}
+                accessibilityRole="button"
+                accessibilityState={{ disabled }}
+              >
+                {isFetching ? (
+                  <ActivityIndicator color="#FAF6EE" />
+                ) : (
+                  <Text style={styles.primaryBtnText} maxFontSizeMultiplier={1.3}>
+                    Sign in
+                  </Text>
+                )}
+              </Pressable>
+
+              <View style={styles.linkRow}>
+                <Text style={styles.linkRowText} maxFontSizeMultiplier={1.3}>
+                  Don&apos;t have an account?
+                </Text>
+                <Link href="/(auth)/sign-up" asChild>
+                  <Pressable hitSlop={8} accessibilityRole="link">
+                    <Text style={styles.linkText} maxFontSizeMultiplier={1.3}>
+                      Sign up
+                    </Text>
+                  </Pressable>
+                </Link>
+              </View>
+            </>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -628,6 +744,35 @@ const styles = StyleSheet.create({
   },
   linkText: {
     fontFamily: "Inter_600SemiBold",
+    color: BRAND.primary,
+    fontSize: 14,
+  },
+  twoFactorInfo: {
+    marginTop: 4,
+    marginBottom: 20,
+    gap: 6,
+  },
+  twoFactorTitle: {
+    fontFamily: "Inter_700Bold",
+    color: BRAND.fg,
+    fontSize: 20,
+  },
+  twoFactorSubtitle: {
+    fontFamily: "Inter_400Regular",
+    color: BRAND.muted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  backRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 16,
+    paddingVertical: 4,
+  },
+  backText: {
+    fontFamily: "Inter_500Medium",
     color: BRAND.primary,
     fontSize: 14,
   },
