@@ -2,3 +2,4 @@
 - [Behavioral Orchestration](behavioral-orchestration.md) — tier-gated AI model selection + behavioral state shaping; Free=MODEL_FAST, Pro=MODEL_SMART+energy/procrastination, Premium=full multi-signal.
 - [DB migration pattern](db-migration-pattern.md) — no drizzle-migrate CLI; add schema file + export from index.ts + run raw psql SQL + pnpm run typecheck:libs to rebuild.
 - [Clerk v3 Future API sign-in methods](clerk-v3-future-api.md) — @clerk/expo@3.2.5 uses Future API; attemptSecondFactor/prepareSecondFactor don't exist at runtime.
+- [Expo vector-icons font loading](expo-vector-icons-fonts.md) — use .font spread in useFonts; loading local TTF copies causes web/Android simulation box glyphs due to asset mismatch.
