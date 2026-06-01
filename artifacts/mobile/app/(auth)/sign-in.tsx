@@ -102,6 +102,8 @@ export default function SignInScreen() {
   const [twoFactorCode, setTwoFactorCode] = useState("");
   // Which status triggered the 2FA step (affects which Clerk method to call)
   const [twoFactorKind, setTwoFactorKind] = useState<"second_factor" | "client_trust">("second_factor");
+  // The actual Clerk strategy being used for second factor
+  const [twoFactorStrategy, setTwoFactorStrategy] = useState<string>("email_code");
   // Separate loading flag so Clerk's fetchStatus doesn't lock the code input
   const [twoFactorSubmitting, setTwoFactorSubmitting] = useState(false);
 
@@ -181,40 +183,63 @@ export default function SignInScreen() {
         return;
       }
 
-      // Account requires TOTP / SMS second factor — switch to the code
-      // input step. No email is sent for TOTP; code comes from the
-      // authenticator app.
       if (signIn.status === "needs_second_factor") {
-        debug("needs_second_factor — showing 2FA step");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const si = signIn as any;
+        const supported: Array<{ strategy: string; emailAddressId?: string }> =
+          si.supportedSecondFactors ?? [];
+        debug("needs_second_factor supported strategies", supported.map((f) => f.strategy));
+
+        // Pick best available strategy: prefer totp/phone, fall back to email
+        const picked =
+          supported.find((f) => f.strategy === "totp") ??
+          supported.find((f) => f.strategy === "phone_code") ??
+          supported.find((f) => f.strategy === "email_code");
+        const strategy = picked?.strategy ?? "email_code";
+        setTwoFactorStrategy(strategy);
         setTwoFactorKind("second_factor");
+
+        // For email_code MFA send the email now; for phone_code send SMS now.
+        // Clerk v3 Future API: sendMFAEmailCode / sendMFAPhoneCode.
+        if (strategy === "email_code") {
+          try {
+            const { error: sendErr } = await si.sendMFAEmailCode();
+            if (sendErr) debug("sendMFAEmailCode error", sendErr);
+            else debug("needs_second_factor — MFA email sent");
+          } catch (prepErr) {
+            debug("sendMFAEmailCode threw", prepErr);
+            // Non-fatal — show input anyway
+          }
+        } else if (strategy === "phone_code") {
+          try {
+            const { error: sendErr } = await si.sendMFAPhoneCode();
+            if (sendErr) debug("sendMFAPhoneCode error", sendErr);
+            else debug("needs_second_factor — MFA SMS sent");
+          } catch (prepErr) {
+            debug("sendMFAPhoneCode threw", prepErr);
+            // Non-fatal
+          }
+        }
+
         setTwoFactorStep(true);
         return;
       }
 
       // needs_client_trust means Clerk wants an email OTP to trust this
-      // device. We must call prepareFirstFactor to actually send the email,
-      // then show the code input.
+      // device. Clerk v3 Future API: sendEmailCode() dispatches the email.
       if (signIn.status === "needs_client_trust") {
-        debug("needs_client_trust — preparing email code");
+        debug("needs_client_trust — sending email code");
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const si = signIn as any;
-          // Find the email address id on the sign-in resource so Clerk
-          // knows where to send the code.
-          const emailAddrId: string | undefined =
-            si.supportedFirstFactors?.find(
-              (f: { strategy: string; emailAddressId?: string }) =>
-                f.strategy === "email_code",
-            )?.emailAddressId;
-          await si.prepareFirstFactor({
-            strategy: "email_code",
-            ...(emailAddrId ? { emailAddressId: emailAddrId } : {}),
-          });
-          debug("needs_client_trust — email code sent");
+          const { error: sendErr } = await si.sendEmailCode();
+          if (sendErr) debug("sendEmailCode error", sendErr);
+          else debug("needs_client_trust — email code sent");
         } catch (prepErr) {
-          debug("prepareFirstFactor failed", prepErr);
-          // Non-fatal: show the input anyway — maybe Clerk sent it already.
+          debug("sendEmailCode threw", prepErr);
+          // Non-fatal: show the input anyway
         }
+        setTwoFactorStrategy("email_code");
         setTwoFactorKind("client_trust");
         setTwoFactorStep(true);
         return;
@@ -277,60 +302,59 @@ export default function SignInScreen() {
   }, [startSSOFlow, router]);
 
   // Submit the 2FA verification code.
-  // Clerk exposes attemptSecondFactor on the SignIn resource for TOTP/SMS;
-  // after success we reuse the same finalize() path as normal sign-in.
+  // Clerk v3 Future API uses strategy-specific verify methods that all
+  // return { error } — null error means success, then call finalize().
   const handleTwoFactor = useCallback(async () => {
     if (!signIn) return;
     setSubmitError(null);
     setTwoFactorSubmitting(true);
     try {
-      // Determine the strategy from what Clerk told us it supports.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const si = signIn as any;
+      const code = twoFactorCode.trim();
+      let verifyError: unknown = null;
 
-      let result: { status?: string };
       if (twoFactorKind === "client_trust") {
-        // Email OTP device-trust flow — use attemptFirstFactor
-        debug("2FA client_trust attempt with email_code");
-        result = await si.attemptFirstFactor({
-          strategy: "email_code",
-          code: twoFactorCode.trim(),
-        });
+        // Device-trust email OTP → verifyEmailCode (first-factor path)
+        debug("2FA client_trust verifyEmailCode");
+        const { error } = await si.verifyEmailCode({ code });
+        verifyError = error;
+      } else if (twoFactorStrategy === "totp") {
+        debug("2FA verifyTOTP");
+        const { error } = await si.verifyTOTP({ code });
+        verifyError = error;
+      } else if (twoFactorStrategy === "phone_code") {
+        debug("2FA verifyMFAPhoneCode");
+        const { error } = await si.verifyMFAPhoneCode({ code });
+        verifyError = error;
       } else {
-        // TOTP / SMS second-factor flow
-        const supported: Array<{ strategy: string }> =
-          si.supportedSecondFactors ?? [];
-        const strategy =
-          supported.find((f) => f.strategy === "totp")?.strategy ??
-          supported.find((f) => f.strategy === "phone_code")?.strategy ??
-          supported.find((f) => f.strategy === "email_code")?.strategy ??
-          "totp";
-        debug("2FA attempt with strategy", strategy);
-        result = await si.attemptSecondFactor({
-          strategy,
-          code: twoFactorCode.trim(),
-        });
+        // email_code MFA (default)
+        debug("2FA verifyMFAEmailCode");
+        const { error } = await si.verifyMFAEmailCode({ code });
+        verifyError = error;
       }
-      debug("2FA result status", result?.status);
-      if (result?.status === "complete") {
-        await si.finalize({
-          navigate: ({ session }: { session?: { currentTask?: unknown } }) => {
-            if (session?.currentTask) return;
-            router.replace("/");
-          },
-        });
+
+      if (verifyError) {
+        debug("2FA verify error", verifyError);
+        setSubmitError(friendlyAuthError(verifyError));
         return;
       }
-      setSubmitError(
-        `Verification didn't complete (${result?.status ?? "unknown"}). Please try again.`,
-      );
+
+      // Verification succeeded — finalize the session
+      debug("2FA verify ok — finalizing");
+      await si.finalize({
+        navigate: ({ session }: { session?: { currentTask?: unknown } }) => {
+          if (session?.currentTask) return;
+          router.replace("/");
+        },
+      });
     } catch (err) {
       debug("2FA threw", err);
       setSubmitError(friendlyAuthError(err));
     } finally {
       setTwoFactorSubmitting(false);
     }
-  }, [signIn, twoFactorCode, twoFactorKind, router]);
+  }, [signIn, twoFactorCode, twoFactorKind, twoFactorStrategy, router]);
 
   const isFetching = fetchStatus === "fetching" || submitting;
   const disabled = !emailAddress || !password || isFetching;
@@ -397,14 +421,16 @@ export default function SignInScreen() {
             <>
               <View style={styles.twoFactorInfo}>
                 <Text style={styles.twoFactorTitle} maxFontSizeMultiplier={1.3}>
-                  {twoFactorKind === "client_trust"
+                  {twoFactorKind === "client_trust" || twoFactorStrategy === "email_code"
                     ? "Check your email"
                     : "Two-factor verification"}
                 </Text>
                 <Text style={styles.twoFactorSubtitle} maxFontSizeMultiplier={1.3}>
-                  {twoFactorKind === "client_trust"
-                    ? "We sent a 6-digit code to your email address. Enter it below."
-                    : "Enter the 6-digit code from your authenticator app (e.g. Google Authenticator, Authy)."}
+                  {twoFactorKind === "client_trust" || twoFactorStrategy === "email_code"
+                    ? "We sent a 6-digit code to your email address. Enter it below to sign in."
+                    : twoFactorStrategy === "phone_code"
+                      ? "Enter the 6-digit code sent to your phone number."
+                      : "Enter the 6-digit code from your authenticator app (e.g. Google Authenticator, Authy)."}
                 </Text>
               </View>
 
