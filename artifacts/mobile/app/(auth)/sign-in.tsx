@@ -97,9 +97,13 @@ export default function SignInScreen() {
   const [oauthLoading, setOauthLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Two-factor step — shown when Clerk returns needs_second_factor
+  // Two-factor step — shown when Clerk returns needs_second_factor / needs_client_trust
   const [twoFactorStep, setTwoFactorStep] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState("");
+  // Which status triggered the 2FA step (affects which Clerk method to call)
+  const [twoFactorKind, setTwoFactorKind] = useState<"second_factor" | "client_trust">("second_factor");
+  // Separate loading flag so Clerk's fetchStatus doesn't lock the code input
+  const [twoFactorSubmitting, setTwoFactorSubmitting] = useState(false);
 
   // Hydrate "remember me" choice + last-used email from local storage on
   // first mount. Defaults: flag = true (remember), email = empty.
@@ -178,17 +182,40 @@ export default function SignInScreen() {
       }
 
       // Account requires TOTP / SMS second factor — switch to the code
-      // input step instead of dead-ending the user with an error.
+      // input step. No email is sent for TOTP; code comes from the
+      // authenticator app.
       if (signIn.status === "needs_second_factor") {
         debug("needs_second_factor — showing 2FA step");
+        setTwoFactorKind("second_factor");
         setTwoFactorStep(true);
         return;
       }
 
-      // needs_client_trust means Clerk wants an extra email OTP on this
-      // device — treat it the same way as needs_second_factor.
+      // needs_client_trust means Clerk wants an email OTP to trust this
+      // device. We must call prepareFirstFactor to actually send the email,
+      // then show the code input.
       if (signIn.status === "needs_client_trust") {
-        debug("needs_client_trust — showing 2FA step");
+        debug("needs_client_trust — preparing email code");
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const si = signIn as any;
+          // Find the email address id on the sign-in resource so Clerk
+          // knows where to send the code.
+          const emailAddrId: string | undefined =
+            si.supportedFirstFactors?.find(
+              (f: { strategy: string; emailAddressId?: string }) =>
+                f.strategy === "email_code",
+            )?.emailAddressId;
+          await si.prepareFirstFactor({
+            strategy: "email_code",
+            ...(emailAddrId ? { emailAddressId: emailAddrId } : {}),
+          });
+          debug("needs_client_trust — email code sent");
+        } catch (prepErr) {
+          debug("prepareFirstFactor failed", prepErr);
+          // Non-fatal: show the input anyway — maybe Clerk sent it already.
+        }
+        setTwoFactorKind("client_trust");
         setTwoFactorStep(true);
         return;
       }
@@ -255,23 +282,35 @@ export default function SignInScreen() {
   const handleTwoFactor = useCallback(async () => {
     if (!signIn) return;
     setSubmitError(null);
-    setSubmitting(true);
+    setTwoFactorSubmitting(true);
     try {
       // Determine the strategy from what Clerk told us it supports.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const si = signIn as any;
-      const supported: Array<{ strategy: string }> =
-        si.supportedSecondFactors ?? [];
-      const strategy =
-        supported.find((f) => f.strategy === "totp")?.strategy ??
-        supported.find((f) => f.strategy === "phone_code")?.strategy ??
-        supported.find((f) => f.strategy === "email_code")?.strategy ??
-        "totp";
-      debug("2FA attempt with strategy", strategy);
-      const result = await si.attemptSecondFactor({
-        strategy,
-        code: twoFactorCode.trim(),
-      });
+
+      let result: { status?: string };
+      if (twoFactorKind === "client_trust") {
+        // Email OTP device-trust flow — use attemptFirstFactor
+        debug("2FA client_trust attempt with email_code");
+        result = await si.attemptFirstFactor({
+          strategy: "email_code",
+          code: twoFactorCode.trim(),
+        });
+      } else {
+        // TOTP / SMS second-factor flow
+        const supported: Array<{ strategy: string }> =
+          si.supportedSecondFactors ?? [];
+        const strategy =
+          supported.find((f) => f.strategy === "totp")?.strategy ??
+          supported.find((f) => f.strategy === "phone_code")?.strategy ??
+          supported.find((f) => f.strategy === "email_code")?.strategy ??
+          "totp";
+        debug("2FA attempt with strategy", strategy);
+        result = await si.attemptSecondFactor({
+          strategy,
+          code: twoFactorCode.trim(),
+        });
+      }
       debug("2FA result status", result?.status);
       if (result?.status === "complete") {
         await si.finalize({
@@ -289,9 +328,9 @@ export default function SignInScreen() {
       debug("2FA threw", err);
       setSubmitError(friendlyAuthError(err));
     } finally {
-      setSubmitting(false);
+      setTwoFactorSubmitting(false);
     }
-  }, [signIn, twoFactorCode, router]);
+  }, [signIn, twoFactorCode, twoFactorKind, router]);
 
   const isFetching = fetchStatus === "fetching" || submitting;
   const disabled = !emailAddress || !password || isFetching;
@@ -358,10 +397,14 @@ export default function SignInScreen() {
             <>
               <View style={styles.twoFactorInfo}>
                 <Text style={styles.twoFactorTitle} maxFontSizeMultiplier={1.3}>
-                  Two-factor verification
+                  {twoFactorKind === "client_trust"
+                    ? "Check your email"
+                    : "Two-factor verification"}
                 </Text>
                 <Text style={styles.twoFactorSubtitle} maxFontSizeMultiplier={1.3}>
-                  Enter the code from your authenticator app or SMS.
+                  {twoFactorKind === "client_trust"
+                    ? "We sent a 6-digit code to your email address. Enter it below."
+                    : "Enter the 6-digit code from your authenticator app (e.g. Google Authenticator, Authy)."}
                 </Text>
               </View>
 
@@ -379,7 +422,7 @@ export default function SignInScreen() {
                 maxLength={8}
                 autoFocus
                 onSubmitEditing={handleTwoFactor}
-                editable={!isFetching}
+                editable={!twoFactorSubmitting}
               />
 
               {submitError && (
@@ -391,15 +434,15 @@ export default function SignInScreen() {
               <Pressable
                 style={({ pressed }) => [
                   styles.primaryBtn,
-                  (!twoFactorCode.trim() || isFetching) && styles.primaryBtnDisabled,
-                  pressed && !!twoFactorCode.trim() && !isFetching && Platform.OS === "ios" && { opacity: 0.9 },
+                  (!twoFactorCode.trim() || twoFactorSubmitting) && styles.primaryBtnDisabled,
+                  pressed && !!twoFactorCode.trim() && !twoFactorSubmitting && Platform.OS === "ios" && { opacity: 0.9 },
                 ]}
                 android_ripple={{ color: "#FFFFFF22" }}
                 onPress={handleTwoFactor}
-                disabled={!twoFactorCode.trim() || isFetching}
+                disabled={!twoFactorCode.trim() || twoFactorSubmitting}
                 accessibilityRole="button"
               >
-                {isFetching ? (
+                {twoFactorSubmitting ? (
                   <ActivityIndicator color="#FAF6EE" />
                 ) : (
                   <Text style={styles.primaryBtnText} maxFontSizeMultiplier={1.3}>
