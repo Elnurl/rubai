@@ -304,9 +304,9 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
-    Feather: require("../assets/fonts/Feather.ttf"),
-    Ionicons: require("../assets/fonts/Ionicons.ttf"),
-    MaterialIcons: require("../assets/fonts/MaterialIcons.ttf"),
+    feather: require("../assets/fonts/Feather.ttf"),
+    ionicons: require("../assets/fonts/Ionicons.ttf"),
+    material: require("../assets/fonts/MaterialIcons.ttf"),
   });
 
   useEffect(() => {
