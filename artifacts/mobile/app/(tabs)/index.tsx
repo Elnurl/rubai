@@ -97,6 +97,7 @@ export default function TodayScreen() {
           ? { learnedProfile: activeBehavioralProfile }
           : {}),
         ...(calendarContext ? { calendarContext } : {}),
+        ...(account.preferredLanguage ? { preferredLanguage: account.preferredLanguage } : {}),
       },
     });
     await setActiveDailyPlan(plan);

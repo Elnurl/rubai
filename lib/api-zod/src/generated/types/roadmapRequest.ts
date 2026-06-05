@@ -9,4 +9,6 @@ import type { UserProfile } from "./userProfile";
 
 export interface RoadmapRequest {
   profile: UserProfile;
+  /** User's preferred language for AI-generated content. */
+  preferredLanguage?: string;
 }

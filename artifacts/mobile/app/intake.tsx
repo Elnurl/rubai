@@ -39,6 +39,7 @@ export default function IntakeScreen() {
     attachPendingQuestions,
     attachPendingProfile,
     updatePendingAnswers,
+    account,
   } = useAtlas();
 
   const fetchQuestions = useAtlasIntakeQuestions();
@@ -66,6 +67,7 @@ export default function IntakeScreen() {
         data: {
           goalType: pendingDraft.goalType,
           goalTitle: pendingDraft.goalTitle,
+          ...(account.preferredLanguage ? { preferredLanguage: account.preferredLanguage } : {}),
         },
       })
       .then((res) => {
@@ -130,6 +132,7 @@ export default function IntakeScreen() {
             goalTitle: pendingDraft.goalTitle,
             questions: pendingDraft.questions,
             answers: pendingDraft.answers,
+            ...(account.preferredLanguage ? { preferredLanguage: account.preferredLanguage } : {}),
           },
         }),
         titlePromise,

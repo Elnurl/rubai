@@ -14,4 +14,6 @@ export interface IntakeSubmitRequest {
   goalTitle: string;
   questions: IntakeQuestion[];
   answers: IntakeAnswer[];
+  /** User's preferred language for AI-generated content. */
+  preferredLanguage?: string;
 }

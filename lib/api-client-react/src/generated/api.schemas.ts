@@ -203,6 +203,8 @@ export interface IntakeQuestionsRequest {
   goalType: GoalType;
   /** User-supplied free-form goal description. */
   goalTitle: string;
+  /** User's preferred language for AI-generated content (e.g. "Azerbaijani", "English", "Russian"). When provided, overrides language detection from goal title. */
+  preferredLanguage?: string;
 }
 
 export interface IntakeQuestionsResponse {
@@ -222,6 +224,8 @@ export interface IntakeSubmitRequest {
   goalTitle: string;
   questions: IntakeQuestion[];
   answers: IntakeAnswer[];
+  /** User's preferred language for AI-generated content. */
+  preferredLanguage?: string;
 }
 
 export interface IntakeSubmitResponse {
@@ -245,6 +249,8 @@ export interface OnboardingChatResponse {
 
 export interface RoadmapRequest {
   profile: UserProfile;
+  /** User's preferred language for AI-generated content. */
+  preferredLanguage?: string;
 }
 
 export interface RoadmapMilestone {
@@ -344,6 +350,8 @@ export interface DailyPlanRequest {
   currentWeek: number;
   /** Optional summary of the user's calendar events for today. Used to schedule plan around existing meetings. */
   calendarContext?: string;
+  /** User's preferred language for AI-generated content. */
+  preferredLanguage?: string;
 }
 
 export type DailyTaskPriority =

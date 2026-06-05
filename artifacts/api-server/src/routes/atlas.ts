@@ -321,7 +321,10 @@ router.post("/roadmap", async (req, res) => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { profile } = parsed.data;
+  const { profile, preferredLanguage } = parsed.data;
+  const langRule = preferredLanguage
+    ? `- LANGUAGE RULE: Write ALL text (headline, strategy, riskAnalysis, phase titles, focus text, milestone titles and descriptions) in ${preferredLanguage}. Never switch to another language.`
+    : `- LANGUAGE RULE: Write ALL text (headline, strategy, riskAnalysis, phase titles, focus text, milestone titles and descriptions) in the same language as the user's goal. Match the language of the user's profile data exactly.`;
 
   try {
     const data = await strictJsonCompletion(
@@ -345,7 +348,7 @@ Constraints:
 - riskAnalysis: 2-4 short bullet strings identifying realistic obstacles for THIS user.
 - Adapt difficulty to the stated current level, available time, and consistency.
 - No emojis. No markdown.
-- LANGUAGE RULE: Write ALL text (headline, strategy, riskAnalysis, phase titles, focus text, milestone titles and descriptions) in the same language as the user's goal. Match the language of the user's profile data exactly.`,
+${langRule}`,
           },
           {
             role: "user",
@@ -373,7 +376,7 @@ router.post("/daily-plan", async (req, res) => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { profile, roadmap, behavioral, learnedProfile, date, currentWeek, calendarContext } = parsed.data;
+  const { profile, roadmap, behavioral, learnedProfile, date, currentWeek, calendarContext, preferredLanguage: dailyPlanLang } = parsed.data;
   const learnedSummary = summarizeLearnedProfile(learnedProfile);
   const calendarBlock =
     calendarContext && calendarContext.trim().length > 0
@@ -423,7 +426,7 @@ Rules:
 - focusOfTheDay: 5-9 word headline.
 - coachNote: 1-2 sentence personal nudge from rabai referencing the user's recent behaviour or learned profile.
 - No emojis. No markdown.
-- LANGUAGE RULE: Write ALL text (task titles, focusOfTheDay, coachNote) in the same language as the user's profile and goal data.`,
+- LANGUAGE RULE: ${dailyPlanLang ? `Write ALL text (task titles, focusOfTheDay, coachNote) in ${dailyPlanLang}. Never switch to another language.` : `Write ALL text (task titles, focusOfTheDay, coachNote) in the same language as the user's profile and goal data.`}`,
           },
           {
             role: "user",
@@ -1831,8 +1834,11 @@ router.post("/intake-questions", async (req, res) => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { goalType, goalTitle } = parsed.data;
+  const { goalType, goalTitle, preferredLanguage: iqLang } = parsed.data;
   const label = resolveGoalLabel(goalType, goalType === "custom" ? goalTitle : undefined);
+  const iqLangRule = iqLang
+    ? `- LANGUAGE RULE: Write ALL output (every question label, helper, placeholder, option, and introMessage) in ${iqLang}. Never mix languages or switch to another language.`
+    : `- LANGUAGE RULE: Detect the language of the goalTitle and write ALL output (every question label, helper, placeholder, option, and introMessage) in that exact same language. If the goal is written in Azerbaijani, respond in Azerbaijani. If in Russian, respond in Russian. If in English, respond in English. Never mix languages.`;
 
   try {
     const data = await strictJsonCompletion(
@@ -1859,7 +1865,7 @@ Rules:
 - options must be a non-empty array for single_select / multi_select. Use an empty array for other types.
 - unit is required for "number" questions ("minutes", "weeks", "USD", etc). Use an empty string for other types.
 - introMessage is one warm sentence (under 25 words) introducing what comes next. No emojis, no markdown.
-- LANGUAGE RULE: Detect the language of the goalTitle and write ALL output (every question label, helper, placeholder, option, and introMessage) in that exact same language. If the goal is written in Azerbaijani, respond in Azerbaijani. If in Russian, respond in Russian. If in English, respond in English. Never mix languages.`,
+${iqLangRule}`,
           },
           {
             role: "user",
@@ -1887,7 +1893,7 @@ router.post("/intake-submit", async (req, res) => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { goalType, goalTitle, questions, answers } = parsed.data;
+  const { goalType, goalTitle, questions, answers, preferredLanguage: isLang } = parsed.data;
   const label = resolveGoalLabel(goalType, goalType === "custom" ? goalTitle : undefined);
 
   const formatAnswer = (raw: string, type: string): string => {
@@ -1936,7 +1942,7 @@ Rules:
 - notes is a one-paragraph synthesis (max 60 words) summarising the user, capturing any unique custom details they provided via "Other:" entries.
 - followUp is one short, warm sentence rabai wants to say before generating the roadmap. No emojis, no markdown.
 - Goal category: ${label}.
-- LANGUAGE RULE: Write ALL text fields (notes, followUp, constraints, goalStatement) in the same language as the user's goal and answers. Match the user's language exactly.`,
+- LANGUAGE RULE: ${isLang ? `Write ALL text fields (notes, followUp, constraints, goalStatement) in ${isLang}. Never switch to another language.` : `Write ALL text fields (notes, followUp, constraints, goalStatement) in the same language as the user's goal and answers. Match the user's language exactly.`}`,
           },
           {
             role: "user",

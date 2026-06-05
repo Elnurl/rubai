@@ -35,6 +35,7 @@ export default function GeneratingScreen() {
     canAddMoreGoals,
     goalLimit,
     subscription,
+    account,
   } = useAtlas();
   const generate = useAtlasGenerateRoadmap();
   const [stepIndex, setStepIndex] = React.useState(0);
@@ -114,7 +115,12 @@ export default function GeneratingScreen() {
         // expensive/external AI call has succeeded — that way a network or
         // server failure cannot leave behind an "orphan" goal that wastes
         // the user's tier slot.
-        const roadmap = await generate.mutateAsync({ data: { profile } });
+        const roadmap = await generate.mutateAsync({
+          data: {
+            profile,
+            ...(account.preferredLanguage ? { preferredLanguage: account.preferredLanguage } : {}),
+          },
+        });
 
         // If a previous failed attempt left an orphan goal lying around
         // (created locally before this safer ordering existed), reuse it

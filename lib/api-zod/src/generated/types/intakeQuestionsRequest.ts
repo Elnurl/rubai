@@ -11,4 +11,6 @@ export interface IntakeQuestionsRequest {
   goalType: GoalType;
   /** User-supplied free-form goal description. */
   goalTitle: string;
+  /** User's preferred language for AI-generated content (e.g. "Azerbaijani", "English", "Russian"). When provided, overrides language detection from goal title. */
+  preferredLanguage?: string;
 }

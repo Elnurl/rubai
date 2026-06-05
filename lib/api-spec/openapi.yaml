@@ -872,6 +872,9 @@ components:
         goalTitle:
           type: string
           description: User-supplied free-form goal description.
+        preferredLanguage:
+          type: string
+          description: User's preferred language for AI-generated content (e.g. "Azerbaijani", "English", "Russian"). When provided, overrides language detection from goal title.
       required: [goalType, goalTitle]
 
     IntakeQuestionsResponse:
@@ -911,6 +914,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/IntakeAnswer"
+        preferredLanguage:
+          type: string
+          description: User's preferred language for AI-generated content.
       required: [goalType, goalTitle, questions, answers]
 
     IntakeSubmitResponse:
@@ -955,6 +961,9 @@ components:
       properties:
         profile:
           $ref: "#/components/schemas/UserProfile"
+        preferredLanguage:
+          type: string
+          description: User's preferred language for AI-generated content.
       required: [profile]
 
     RoadmapMilestone:
@@ -1066,6 +1075,9 @@ components:
         calendarContext:
           type: string
           description: Optional summary of the user's calendar events for today. Used to schedule plan around existing meetings.
+        preferredLanguage:
+          type: string
+          description: User's preferred language for AI-generated content.
       required: [profile, roadmap, behavioral, date, currentWeek]
 
     DailyTask:

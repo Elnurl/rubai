@@ -197,6 +197,12 @@ export const AtlasIntakeQuestionsBody = zod.object({
     "custom",
   ]),
   goalTitle: zod.string().describe("User-supplied free-form goal description."),
+  preferredLanguage: zod
+    .string()
+    .optional()
+    .describe(
+      'User\'s preferred language for AI-generated content (e.g. \"Azerbaijani\", \"English\", \"Russian\"). When provided, overrides language detection from goal title.',
+    ),
 });
 
 export const AtlasIntakeQuestionsResponse = zod.object({
@@ -286,6 +292,10 @@ export const AtlasIntakeSubmitBody = zod.object({
         ),
     }),
   ),
+  preferredLanguage: zod
+    .string()
+    .optional()
+    .describe("User's preferred language for AI-generated content."),
 });
 
 export const AtlasIntakeSubmitResponse = zod.object({
@@ -351,6 +361,10 @@ export const AtlasGenerateRoadmapBody = zod.object({
     targetTimelineWeeks: zod.number(),
     notes: zod.string(),
   }),
+  preferredLanguage: zod
+    .string()
+    .optional()
+    .describe("User's preferred language for AI-generated content."),
 });
 
 export const AtlasGenerateRoadmapResponse = zod.object({
@@ -519,6 +533,10 @@ export const AtlasGenerateDailyPlanBody = zod.object({
     .describe(
       "Optional summary of the user's calendar events for today. Used to schedule plan around existing meetings.",
     ),
+  preferredLanguage: zod
+    .string()
+    .optional()
+    .describe("User's preferred language for AI-generated content."),
 });
 
 export const AtlasGenerateDailyPlanResponse = zod.object({
