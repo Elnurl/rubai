@@ -47,20 +47,20 @@ export function SectionHeader({ eyebrow, title, subtitle }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    gap: 6,
+    gap: 3,
   },
   eyebrow: {
-    fontSize: 11,
-    letterSpacing: 1.6,
+    fontSize: 10,
+    letterSpacing: 1.4,
     textTransform: "uppercase",
   },
   title: {
-    fontSize: 28,
-    letterSpacing: -0.6,
-    lineHeight: 32,
+    fontSize: 20,
+    letterSpacing: -0.3,
+    lineHeight: 25,
   },
   subtitle: {
-    fontSize: 14.5,
-    lineHeight: 21,
+    fontSize: 12.5,
+    lineHeight: 18,
   },
 });

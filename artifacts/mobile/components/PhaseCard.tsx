@@ -243,22 +243,22 @@ export function PhaseCard({ phase, index, status, updated = false }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    padding: 18,
-    gap: 10,
+    padding: 13,
+    gap: 8,
   },
   header: {
-    gap: 8,
+    gap: 6,
   },
   titleRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
+    gap: 8,
   },
   title: {
     flex: 1,
-    fontSize: 15.5,
-    lineHeight: 21,
-    letterSpacing: -0.2,
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: -0.1,
   },
   statusRow: {
     flexDirection: "row",
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   body: {
-    gap: 14,
+    gap: 10,
     paddingTop: 2,
   },
   divider: {
@@ -304,15 +304,15 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   focus: {
-    fontSize: 13.5,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 17,
   },
   milestones: {
-    gap: 16,
+    gap: 10,
   },
   milestoneRow: {
     flexDirection: "row",
-    gap: 12,
+    gap: 10,
     alignItems: "flex-start",
   },
   milestoneRing: {
@@ -327,12 +327,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   milestoneTitle: {
-    fontSize: 14,
-    lineHeight: 19,
+    fontSize: 12,
+    lineHeight: 16,
   },
   milestoneDescription: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 11,
+    lineHeight: 15,
   },
   weekTag: {
     flexDirection: "row",

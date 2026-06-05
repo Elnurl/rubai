@@ -85,8 +85,8 @@ function ClassicTabLayout() {
         headerShown: false,
         tabBarLabelStyle: {
           fontFamily: "Inter_600SemiBold",
-          fontSize: 10.5,
-          letterSpacing: 0.3,
+          fontSize: 10,
+          letterSpacing: 0.2,
         },
         tabBarStyle: {
           position: "absolute",
@@ -94,8 +94,8 @@ function ClassicTabLayout() {
           borderTopWidth: isWeb ? 1 : 0,
           borderTopColor: colors.border,
           elevation: 0,
-          height: isWeb ? 84 : 70,
-          paddingTop: 6,
+          height: isWeb ? 70 : 58,
+          paddingTop: 4,
         },
         tabBarBackground: () =>
           isIOS ? (
@@ -121,9 +121,9 @@ function ClassicTabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon focused={focused}>
               {isIOS ? (
-                <SymbolView name="sun.max" tintColor={color} size={24} />
+                <SymbolView name="sun.max" tintColor={color} size={20} />
               ) : (
-                <Feather name="sun" size={22} color={color} />
+                <Feather name="sun" size={18} color={color} />
               )}
             </AnimatedTabIcon>
           ),
@@ -136,9 +136,9 @@ function ClassicTabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon focused={focused}>
               {isIOS ? (
-                <SymbolView name="map" tintColor={color} size={24} />
+                <SymbolView name="map" tintColor={color} size={20} />
               ) : (
-                <Feather name="map" size={22} color={color} />
+                <Feather name="map" size={18} color={color} />
               )}
             </AnimatedTabIcon>
           ),
@@ -170,7 +170,7 @@ function ClassicTabLayout() {
               >
                 <Ionicons
                   name="sparkles"
-                  size={24}
+                  size={20}
                   color={colors.primaryForeground}
                 />
               </Pressable>
@@ -185,9 +185,9 @@ function ClassicTabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon focused={focused}>
               {isIOS ? (
-                <SymbolView name="list.bullet" tintColor={color} size={24} />
+                <SymbolView name="list.bullet" tintColor={color} size={20} />
               ) : (
-                <Feather name="list" size={22} color={color} />
+                <Feather name="list" size={18} color={color} />
               )}
             </AnimatedTabIcon>
           ),
@@ -200,9 +200,9 @@ function ClassicTabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon focused={focused}>
               {isIOS ? (
-                <SymbolView name="person.crop.circle" tintColor={color} size={24} />
+                <SymbolView name="person.crop.circle" tintColor={color} size={20} />
               ) : (
-                <Feather name="user" size={22} color={color} />
+                <Feather name="user" size={18} color={color} />
               )}
             </AnimatedTabIcon>
           ),
@@ -219,9 +219,9 @@ const tabStyles = StyleSheet.create({
     justifyContent: "flex-start",
   },
   centerButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 2,

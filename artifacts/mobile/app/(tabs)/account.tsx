@@ -30,7 +30,7 @@ export default function AccountScreen() {
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 8;
-  const bottomTab = isWeb ? 100 : 110;
+  const bottomTab = isWeb ? 84 : 90;
   const systemScheme = useColorScheme();
 
   const {
@@ -453,7 +453,7 @@ function NavRow({
         <View
           style={[styles.rowIcon, { backgroundColor: colors.primary + "14" }]}
         >
-          <Feather name={icon} size={15} color={colors.primary} />
+          <Feather name={icon} size={13} color={colors.primary} />
         </View>
         <View style={{ flex: 1, gap: 2 }}>
           <Text
@@ -461,7 +461,7 @@ function NavRow({
             style={{
               color: colors.foreground,
               fontFamily: "Inter_600SemiBold",
-              fontSize: 14.5,
+              fontSize: 13,
               letterSpacing: -0.1,
             }}
           >
@@ -473,8 +473,8 @@ function NavRow({
               style={{
                 color: colors.mutedForeground,
                 fontFamily: "Inter_400Regular",
-                fontSize: 12,
-                lineHeight: 16,
+                fontSize: 11,
+                lineHeight: 15,
               }}
             >
               {subtitle}
@@ -483,7 +483,7 @@ function NavRow({
         </View>
         <Feather
           name="chevron-right"
-          size={18}
+          size={15}
           color={colors.mutedForeground}
         />
       </View>
@@ -494,8 +494,8 @@ function NavRow({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: {
-    paddingHorizontal: 22,
-    gap: 14,
+    paddingHorizontal: 16,
+    gap: 10,
   },
   headerRow: {
     flexDirection: "row",
@@ -540,15 +540,15 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    minHeight: 64,
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    minHeight: 52,
   },
   rowIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
   },

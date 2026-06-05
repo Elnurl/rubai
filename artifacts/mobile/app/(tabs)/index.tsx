@@ -41,7 +41,7 @@ export default function TodayScreen() {
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 8;
-  const bottomTab = isWeb ? 100 : 110;
+  const bottomTab = isWeb ? 84 : 90;
 
   const {
     activeGoalId,
@@ -459,8 +459,8 @@ export default function TodayScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: {
-    paddingHorizontal: 22,
-    gap: 22,
+    paddingHorizontal: 16,
+    gap: 14,
   },
   headerRow: {
     flexDirection: "row",
@@ -496,25 +496,25 @@ const styles = StyleSheet.create({
   },
   coachNote: {
     flexDirection: "row",
-    gap: 12,
-    padding: 16,
+    gap: 10,
+    padding: 11,
     borderWidth: 1,
     alignItems: "flex-start",
   },
   coachAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
   },
   coachAvatarText: {
-    fontSize: 14,
+    fontSize: 11,
   },
   coachNoteText: {
     flex: 1,
-    fontSize: 14.5,
-    lineHeight: 21,
+    fontSize: 12.5,
+    lineHeight: 18,
   },
   progress: {
     gap: 8,
@@ -544,7 +544,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   taskList: {
-    gap: 12,
+    gap: 8,
   },
   loading: {
     paddingVertical: 32,

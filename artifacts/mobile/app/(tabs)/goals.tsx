@@ -20,7 +20,7 @@ export default function GoalsScreen() {
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 8;
-  const bottomTab = isWeb ? 100 : 110;
+  const bottomTab = isWeb ? 84 : 90;
 
   const {
     goals,

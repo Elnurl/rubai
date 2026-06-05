@@ -117,7 +117,7 @@ export default function CoachScreen() {
   const router = useRouter();
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 8;
-  const bottomPad = isWeb ? 100 : insets.bottom + 90;
+  const bottomPad = isWeb ? 84 : insets.bottom + 72;
 
   const {
     activeProfile,

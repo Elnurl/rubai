@@ -40,7 +40,7 @@ export default function RoadmapScreen() {
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 8;
-  const bottomTab = isWeb ? 84 : 90 + insets.bottom;
+  const bottomTab = isWeb ? 74 : 70 + insets.bottom;
 
   const {
     activeRoadmap,
