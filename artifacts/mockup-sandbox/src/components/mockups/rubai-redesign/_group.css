@@ -1,0 +1,11 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+.rubai-root {
+  font-family: 'Inter', sans-serif;
+  background: #FAF6EE;
+  width: 390px;
+  min-height: 844px;
+  overflow-y: auto;
+  position: relative;
+  color: #1B1812;
+}
