@@ -1948,7 +1948,7 @@ const sidebarStyles = StyleSheet.create({
     paddingBottom: 12,
   },
   eyebrow: { fontSize: 10, letterSpacing: 1.2 },
-  title: { fontSize: 22, marginTop: 2 },
+  title: { fontSize: 18, marginTop: 2 },
   iconBtn: {
     width: 32,
     height: 32,
@@ -2277,8 +2277,8 @@ function formatSize(kb: number): string {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   header: {
-    paddingHorizontal: 22,
-    paddingBottom: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
   },
   headerInner: {
     flexDirection: "row",
@@ -2372,7 +2372,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   actionLabel: {
-    fontSize: 14,
+    fontSize: 12.5,
   },
   actionRationale: {
     fontSize: 12,
@@ -2395,10 +2395,10 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
   },
   inputBar: {
-    paddingHorizontal: 14,
-    paddingTop: 10,
+    paddingHorizontal: 12,
+    paddingTop: 8,
     borderTopWidth: 1,
-    gap: 10,
+    gap: 8,
   },
   suggestions: {
     flexDirection: "row",
@@ -2457,9 +2457,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingLeft: 6,
     paddingRight: 6,
-    paddingVertical: 4,
+    paddingVertical: 3,
     gap: 6,
-    minHeight: 44,
+    minHeight: 38,
   },
   sparkBadge: {
     width: 32,
@@ -2487,10 +2487,10 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontSize: 15,
-    paddingTop: 13,
+    fontSize: 13,
+    paddingTop: 10,
     paddingBottom: 0,
-    maxHeight: 120,
+    maxHeight: 110,
   },
   micButton: {
     width: 36,
@@ -2532,7 +2532,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   attachMenuLabel: {
-    fontSize: 15,
+    fontSize: 13,
     marginBottom: 2,
   },
   attachMenuSub: {
