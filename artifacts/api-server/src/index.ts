@@ -1,30 +1,53 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startPushScheduler } from "./lib/pushScheduler";
+import { runMigrations } from "@workspace/db";
 
-const rawPort = process.env["PORT"];
+// ── Required env-var guard ─────────────────────────────────────────────────
+// Fail fast at startup with a clear message rather than a cryptic runtime
+// error buried in a route handler.
+const REQUIRED_ENV: string[] = [
+  "PORT",
+  "DATABASE_URL",
+  "CLERK_SECRET_KEY",
+  "SESSION_SECRET",
+  "REVENUECAT_V2_SECRET_KEY",
+];
 
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
+const missingEnv = REQUIRED_ENV.filter((k) => !process.env[k]);
+if (missingEnv.length > 0) {
+  logger.error(
+    { missing: missingEnv },
+    "Missing required environment variables — refusing to start",
   );
+  process.exit(1);
 }
 
+const rawPort = process.env["PORT"]!;
 const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
+// ── Run DB migrations then start HTTP ─────────────────────────────────────
+(async () => {
+  try {
+    logger.info("Running database migrations…");
+    await runMigrations();
+    logger.info("Database migrations complete");
+  } catch (err) {
+    logger.error({ err }, "Database migration failed — refusing to start");
     process.exit(1);
   }
 
-  logger.info({ port }, "Server listening");
-  // Boot the daily push scheduler once the HTTP server is up. The
-  // scheduler is in-process and idempotent; it will silently no-op until
-  // users have registered tokens.
-  startPushScheduler();
-});
+  app.listen(port, (err) => {
+    if (err) {
+      logger.error({ err }, "Error listening on port");
+      process.exit(1);
+    }
+
+    logger.info({ port }, "Server listening");
+    startPushScheduler();
+  });
+})();

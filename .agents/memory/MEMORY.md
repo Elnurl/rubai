@@ -3,3 +3,5 @@
 - [DB migration pattern](db-migration-pattern.md) — no drizzle-migrate CLI; add schema file + export from index.ts + run raw psql SQL + pnpm run typecheck:libs to rebuild.
 - [Clerk v3 Future API sign-in methods](clerk-v3-future-api.md) — @clerk/expo@3.2.5 uses Future API; attemptSecondFactor/prepareSecondFactor don't exist at runtime.
 - [Expo vector-icons font loading](expo-vector-icons-fonts.md) — use .font spread in useFonts; loading local TTF copies causes web/Android simulation box glyphs due to asset mismatch.
+- [Drizzle migrations in ESM bundle](drizzle-esm-migration-path.md) — import.meta.url in esbuild bundle resolves to dist/index.mjs; use ./drizzle (not ../drizzle) as the fallback migrations path.
+- [Migration bootstrap on existing DB](drizzle-migration-bootstrap.md) — if tables pre-exist without __drizzle_migrations entry, compute SHA256 of the SQL file and INSERT the hash manually to unblock startup.

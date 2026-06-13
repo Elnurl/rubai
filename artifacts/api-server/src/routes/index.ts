@@ -4,12 +4,15 @@ import atlasRouter from "./atlas";
 import googleCalendarRouter from "./googleCalendar";
 import legalRouter from "./legal";
 import meRouter from "./me";
+import webhooksRouter from "./webhooks";
 import { requireAuth } from "../middlewares/requireAuth";
 import { aiRateLimiter } from "../middlewares/rateLimit";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+// Webhooks mount BEFORE requireAuth — RevenueCat posts without user auth.
+router.use(webhooksRouter);
 // Legal routes mount BEFORE meRouter because meRouter installs requireAuth
 // as a router-level middleware that, due to Express middleware ordering,
 // would otherwise reject unauthenticated requests for /legal/current and
