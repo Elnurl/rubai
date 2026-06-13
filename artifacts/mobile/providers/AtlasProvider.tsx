@@ -63,6 +63,7 @@ import {
 } from "@/types/atlas";
 import { evaluateNewAwards } from "@/lib/awards";
 import { AwardToast } from "@/components/AwardToast";
+import { TierChangeToast } from "@/components/TierChangeToast";
 import { AtlasThemeContext } from "@/providers/AtlasContext";
 
 const EMPTY_BEHAVIORAL: BehavioralSnapshot = {
@@ -104,6 +105,8 @@ type AtlasContextValue = AtlasState & {
   activeEarnedAwards: EarnedAward[];
   pendingAwardToast: EarnedAward | null;
   dismissAwardToast: () => void;
+  pendingTierChangeToast: TierChangeToastPayload | null;
+  dismissTierChangeToast: () => void;
   activeBehavioral: BehavioralSnapshot;
   activeCurrentWeek: number;
   activeCurrentPhase: CurrentPhaseSnapshot | null;
@@ -191,6 +194,8 @@ type AtlasContextValue = AtlasState & {
   signOut: () => Promise<void>;
   dismissSyncMessage: () => void;
 };
+
+export type TierChangeToastPayload = { fromTier: string; toTier: string };
 
 export class GoalLimitError extends Error {
   constructor(public limit: number) {
@@ -402,6 +407,12 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       setPendingAwardToast(null);
     }
   }, []);
+  const [pendingTierChangeToast, setPendingTierChangeToast] =
+    useState<TierChangeToastPayload | null>(null);
+  const dismissTierChangeToast = useCallback(() => {
+    setPendingTierChangeToast(null);
+  }, []);
+
   const [tier, setTier] = useState<string>(DEFAULT_SUBSCRIPTION.tier);
   const [account, setAccount] = useState<AccountPrefs>(DEFAULT_ACCOUNT);
   const [pendingDraft, setPendingDraftState] = useState<IntakeDraft | null>(null);
@@ -902,9 +913,13 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
           if (ownerRef.current !== owner) return;
           if (localTierOverrideRef.current !== null) return;
           if (res.tier === serverTierRef.current) return;
+          const prevTier = tierRef.current;
           serverTierRef.current = res.tier;
           setTier(res.tier);
           void writeCacheSnapshot(owner);
+          if (prevTier !== res.tier) {
+            setPendingTierChangeToast({ fromTier: prevTier, toTier: res.tier });
+          }
           if (__DEV__) console.log("[atlas] tier updated on foreground:", res.tier);
         })
         .catch(() => {
@@ -943,9 +958,14 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
         .then((res) => {
           if (ownerRef.current !== owner) return;
           if (localTierOverrideRef.current !== null) return;
+          if (res.tier === serverTierRef.current) return;
+          const prevTier = tierRef.current;
           serverTierRef.current = res.tier;
           setTier(res.tier);
           void writeCacheSnapshot(owner);
+          if (prevTier !== res.tier) {
+            setPendingTierChangeToast({ fromTier: prevTier, toTier: res.tier });
+          }
           if (__DEV__) console.log("[atlas] tier updated via push:", res.tier);
         })
         .catch(() => {
@@ -1637,6 +1657,8 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     activeEarnedAwards: activeGoal?.earnedAwards ?? [],
     pendingAwardToast,
     dismissAwardToast,
+    pendingTierChangeToast,
+    dismissTierChangeToast,
     activeBehavioral,
     activeCurrentWeek,
     activeCurrentPhase,
@@ -1682,6 +1704,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       <AtlasContext.Provider value={value}>
         {children}
         <AwardToast />
+        <TierChangeToast />
       </AtlasContext.Provider>
     </AtlasThemeContext.Provider>
   );
