@@ -13,6 +13,9 @@
  *   5. EXPIRATION resets tier to "free"
  *   6. Duplicate webhook delivery (same transaction_id) is idempotent
  *   7. Fallback tier derivation from product_id when entitlement_ids is absent
+ *   8. PRODUCT_CHANGE sets tier from entitlement_ids
+ *   9. UNCANCELLATION re-grants the correct tier after a user un-cancels
+ *  10. NON_RENEWING_PURCHASE sets tier appropriately for one-time purchases
  */
 
 import {
@@ -480,6 +483,165 @@ describe("POST /api/webhooks/revenuecat — fallback tier from product_id", () =
 
     expect(res.status).toBe(200);
     expect(capturedTierUpdate).toBe("free");
+  });
+});
+
+describe("POST /api/webhooks/revenuecat — PRODUCT_CHANGE tier assignment", () => {
+  it("sets tier to 'pro' on PRODUCT_CHANGE with pro entitlement", async () => {
+    mockFindFirst.mockResolvedValue(MOCK_USER);
+
+    const res = await post(
+      buildBody({
+        type: "PRODUCT_CHANGE",
+        app_user_id: "user_abc123",
+        product_id: "rubai_pro_monthly",
+        transaction_id: "txn_pc_pro",
+        entitlement_ids: ["pro"],
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedTierUpdate).toBe("pro");
+  });
+
+  it("sets tier to 'premium' on PRODUCT_CHANGE when upgrading to premium", async () => {
+    mockFindFirst.mockResolvedValue({ ...MOCK_USER, tier: "pro" });
+
+    const res = await post(
+      buildBody({
+        type: "PRODUCT_CHANGE",
+        app_user_id: "user_abc123",
+        product_id: "rubai_premium_annual",
+        transaction_id: "txn_pc_upgrade",
+        entitlement_ids: ["premium"],
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedTierUpdate).toBe("premium");
+  });
+
+  it("falls back to product_id tier derivation on PRODUCT_CHANGE when entitlement_ids is absent", async () => {
+    mockFindFirst.mockResolvedValue(MOCK_USER);
+
+    const res = await post(
+      buildBody({
+        type: "PRODUCT_CHANGE",
+        app_user_id: "user_abc123",
+        product_id: "rubai_pro_annual",
+        transaction_id: "txn_pc_fallback",
+        // No entitlement_ids
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedTierUpdate).toBe("pro");
+  });
+});
+
+describe("POST /api/webhooks/revenuecat — UNCANCELLATION tier re-grant", () => {
+  it("re-grants 'pro' tier on UNCANCELLATION with pro entitlement", async () => {
+    mockFindFirst.mockResolvedValue({ ...MOCK_USER, tier: "free" });
+
+    const res = await post(
+      buildBody({
+        type: "UNCANCELLATION",
+        app_user_id: "user_abc123",
+        product_id: "rubai_pro_monthly",
+        transaction_id: "txn_uncancel_pro",
+        entitlement_ids: ["pro"],
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedTierUpdate).toBe("pro");
+  });
+
+  it("re-grants 'premium' tier on UNCANCELLATION with premium entitlement", async () => {
+    mockFindFirst.mockResolvedValue({ ...MOCK_USER, tier: "free" });
+
+    const res = await post(
+      buildBody({
+        type: "UNCANCELLATION",
+        app_user_id: "user_abc123",
+        product_id: "rubai_premium_annual",
+        transaction_id: "txn_uncancel_prem",
+        entitlement_ids: ["premium"],
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedTierUpdate).toBe("premium");
+  });
+
+  it("falls back to product_id tier on UNCANCELLATION when entitlement_ids is absent", async () => {
+    mockFindFirst.mockResolvedValue({ ...MOCK_USER, tier: "free" });
+
+    const res = await post(
+      buildBody({
+        type: "UNCANCELLATION",
+        app_user_id: "user_abc123",
+        product_id: "rubai_premium_monthly",
+        transaction_id: "txn_uncancel_fallback",
+        // No entitlement_ids
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedTierUpdate).toBe("premium");
+  });
+});
+
+describe("POST /api/webhooks/revenuecat — NON_RENEWING_PURCHASE tier assignment", () => {
+  it("sets tier to 'pro' on NON_RENEWING_PURCHASE with pro entitlement", async () => {
+    mockFindFirst.mockResolvedValue(MOCK_USER);
+
+    const res = await post(
+      buildBody({
+        type: "NON_RENEWING_PURCHASE",
+        app_user_id: "user_abc123",
+        product_id: "rubai_pro_lifetime",
+        transaction_id: "txn_nrp_pro",
+        entitlement_ids: ["pro"],
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedTierUpdate).toBe("pro");
+  });
+
+  it("sets tier to 'premium' on NON_RENEWING_PURCHASE with premium entitlement", async () => {
+    mockFindFirst.mockResolvedValue(MOCK_USER);
+
+    const res = await post(
+      buildBody({
+        type: "NON_RENEWING_PURCHASE",
+        app_user_id: "user_abc123",
+        product_id: "rubai_premium_lifetime",
+        transaction_id: "txn_nrp_prem",
+        entitlement_ids: ["premium"],
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedTierUpdate).toBe("premium");
+  });
+
+  it("falls back to product_id tier on NON_RENEWING_PURCHASE when entitlement_ids is absent", async () => {
+    mockFindFirst.mockResolvedValue(MOCK_USER);
+
+    const res = await post(
+      buildBody({
+        type: "NON_RENEWING_PURCHASE",
+        app_user_id: "user_abc123",
+        product_id: "rubai_pro_lifetime",
+        transaction_id: "txn_nrp_fallback",
+        // No entitlement_ids
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedTierUpdate).toBe("pro");
   });
 });
 
