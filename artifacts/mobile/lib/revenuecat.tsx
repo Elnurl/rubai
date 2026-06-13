@@ -35,9 +35,23 @@ function getRevenueCatApiKey(): string {
   throw new Error("Unsupported platform for RevenueCat");
 }
 
+const RC_LOG_LEVEL_MAP: Record<string, (typeof Purchases.LOG_LEVEL)[keyof typeof Purchases.LOG_LEVEL]> = {
+  DEBUG: Purchases.LOG_LEVEL.DEBUG,
+  INFO: Purchases.LOG_LEVEL.INFO,
+  WARN: Purchases.LOG_LEVEL.WARN,
+  ERROR: Purchases.LOG_LEVEL.ERROR,
+};
+
 export function initializeRevenueCat() {
   const apiKey = getRevenueCatApiKey();
-  Purchases.setLogLevel(__DEV__ ? Purchases.LOG_LEVEL.DEBUG : Purchases.LOG_LEVEL.WARN);
+  const envLevel = process.env.EXPO_PUBLIC_RC_LOG_LEVEL?.toUpperCase();
+  const logLevel =
+    envLevel && envLevel in RC_LOG_LEVEL_MAP
+      ? RC_LOG_LEVEL_MAP[envLevel]
+      : __DEV__
+        ? Purchases.LOG_LEVEL.DEBUG
+        : Purchases.LOG_LEVEL.WARN;
+  Purchases.setLogLevel(logLevel);
   Purchases.configure({ apiKey });
 }
 
