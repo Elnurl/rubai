@@ -43,6 +43,18 @@ interface RcWebhookBody {
 
 router.post("/webhooks/revenuecat", async (req, res) => {
   const webhookSecret = process.env["REVENUECAT_WEBHOOK_SECRET"];
+  const isProduction = process.env["NODE_ENV"] === "production";
+
+  if (isProduction && !webhookSecret) {
+    // Startup guard in index.ts should have prevented this, but defend in
+    // depth: never process unauthenticated tier changes in production.
+    req.log?.error(
+      "REVENUECAT_WEBHOOK_SECRET is unset in production — rejecting request",
+    );
+    res.status(500).json({ error: "Webhook authentication not configured" });
+    return;
+  }
+
   if (webhookSecret) {
     const authHeader = req.headers["authorization"] ?? "";
     if (authHeader !== webhookSecret) {

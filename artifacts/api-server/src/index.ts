@@ -14,6 +14,13 @@ const REQUIRED_ENV: string[] = [
   "REVENUECAT_V2_SECRET_KEY",
 ];
 
+// In production, REVENUECAT_WEBHOOK_SECRET must be set so the webhook
+// handler can authenticate incoming events.  Without it, any caller could
+// send fake subscription events and change a user's tier.
+if (process.env["NODE_ENV"] === "production") {
+  REQUIRED_ENV.push("REVENUECAT_WEBHOOK_SECRET");
+}
+
 const missingEnv = REQUIRED_ENV.filter((k) => !process.env[k]);
 if (missingEnv.length > 0) {
   logger.error(
