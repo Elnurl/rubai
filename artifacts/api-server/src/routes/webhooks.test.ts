@@ -215,6 +215,33 @@ describe("POST /api/webhooks/revenuecat — auth", () => {
 
     expect(res.status).toBe(200);
   });
+
+  it("rejects with 401 in production mode when REVENUECAT_WEBHOOK_SECRET is unset, even with no Authorization header", async () => {
+    // Secret is absent (cleared in beforeEach) but NODE_ENV is production.
+    // The handler must never accept unauthenticated tier changes in prod,
+    // even as a defense-in-depth layer beyond the startup guard in index.ts.
+    vi.stubEnv("NODE_ENV", "production");
+
+    const res = await post(
+      buildBody({
+        type: "INITIAL_PURCHASE",
+        app_user_id: "user_abc123",
+        product_id: "rubai_pro_monthly",
+        transaction_id: "txn_prod_no_secret",
+        entitlement_ids: ["pro"],
+      }),
+    );
+
+    expect(res.status).toBe(401);
+    const json = await res.json();
+    expect(json).toMatchObject({ error: "Unauthorized" });
+    // No tier update should have happened
+    expect(capturedTierUpdate).toBeUndefined();
+    expect(transactionCallCount).toBe(0);
+
+    // Restore NODE_ENV so subsequent tests are unaffected
+    vi.stubEnv("NODE_ENV", "test");
+  });
 });
 
 describe("POST /api/webhooks/revenuecat — INITIAL_PURCHASE tier assignment", () => {

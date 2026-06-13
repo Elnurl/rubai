@@ -48,10 +48,12 @@ router.post("/webhooks/revenuecat", async (req, res) => {
   if (isProduction && !webhookSecret) {
     // Startup guard in index.ts should have prevented this, but defend in
     // depth: never process unauthenticated tier changes in production.
+    // Return 401 (not 500) so callers cannot distinguish misconfiguration
+    // from a deliberate auth rejection — avoids leaking server state.
     req.log?.error(
       "REVENUECAT_WEBHOOK_SECRET is unset in production — rejecting request",
     );
-    res.status(500).json({ error: "Webhook authentication not configured" });
+    res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
