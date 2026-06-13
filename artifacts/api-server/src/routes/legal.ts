@@ -28,6 +28,63 @@ import {
 
 const router: IRouter = Router();
 
+// ── Public HTML privacy policy page ───────────────────────────────────────
+// Renders the English privacy policy as a human-readable HTML page.
+// Required by Apple App Store Connect and Google Play Console — both stores
+// check that the URL returns a page browsers can display.
+router.get("/privacy", (_req, res): void => {
+  const doc = getDocument("privacy_policy", "en");
+  const lines = doc.body
+    .split("\n")
+    .map((line) => {
+      const escaped = line
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+      if (escaped.trim() === "") return "<br/>";
+      const isHeading = /^\d+\./.test(escaped.trim());
+      return isHeading
+        ? `<p><strong>${escaped}</strong></p>`
+        : `<p>${escaped}</p>`;
+    })
+    .join("\n");
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "public, max-age=3600");
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>${doc.title} — rubai</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;background:#FAFAF7;color:#1a1a1a;line-height:1.7;padding:2rem 1rem}
+    .container{max-width:720px;margin:0 auto}
+    header{margin-bottom:2rem;border-bottom:1px solid #e5e5e0;padding-bottom:1.5rem}
+    header h1{font-size:1.75rem;font-weight:700;color:#111}
+    header .app{font-size:0.95rem;color:#10B981;font-weight:600;margin-bottom:0.25rem}
+    p{margin-bottom:0.9rem;font-size:0.97rem}
+    br{display:block;margin:0.3rem 0}
+    footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid #e5e5e0;font-size:0.85rem;color:#666}
+    a{color:#10B981}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="app">rubai — AI Goal Coach</div>
+      <h1>${doc.title}</h1>
+    </header>
+    <main>${lines}</main>
+    <footer>
+      <p>Contact: <a href="mailto:support@rubai.app">support@rubai.app</a></p>
+    </footer>
+  </div>
+</body>
+</html>`);
+});
+
 // Public: anyone can fetch the current versions and document text. /me and
 // /accept require auth so we mount requireAuth on those individually.
 router.get("/legal/current", (_req, res): void => {

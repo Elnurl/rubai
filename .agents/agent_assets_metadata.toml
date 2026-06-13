@@ -6,6 +6,60 @@ uri = "file://artifacts/mobile/assets/images/icon.png"
 type = "image"
 title = "rubai app icon"
 
+[[generated]]
+id = "yhco43XK9addOKmeYh7Bq"
+uri = "file://artifacts/mobile/store-assets/screenshots/feature-graphic-1024x500.png"
+type = "image"
+title = "rubai feature graphic"
+
+[[generated]]
+id = "7BnCB8jaDiM3CqEaFeMdL"
+uri = "file://artifacts/mobile/store-assets/screenshots/ios-67-shot1-dashboard.png"
+type = "image"
+title = "rubai dashboard screenshot"
+
+[[generated]]
+id = "-B94NfcQ-3w2tvOX9xQ6c"
+uri = "file://artifacts/mobile/store-assets/screenshots/ios-67-shot2-roadmap.png"
+type = "image"
+title = "rubai roadmap screenshot"
+
+[[generated]]
+id = "35t7zs08cS6A3nRH2oZ25"
+uri = "file://artifacts/mobile/store-assets/screenshots/ios-67-shot3-coach.png"
+type = "image"
+title = "rubai coach chat screenshot"
+
+[[generated]]
+id = "M1YuLXhO96Dno-nvkmYAZ"
+uri = "file://artifacts/mobile/store-assets/screenshots/ios-67-shot4-voice.png"
+type = "image"
+title = "rubai voice input screenshot"
+
+[[generated]]
+id = "y_U2HpNCW37uf8JLHkxpL"
+uri = "file://artifacts/mobile/store-assets/screenshots/ios-67-shot5-intake.png"
+type = "image"
+title = "rubai intake questionnaire screenshot"
+
+[[generated]]
+id = "7gCpEHfNCo5BUZyYVWR9P"
+uri = "file://artifacts/mobile/store-assets/screenshots/ios-67-shot6-reflection.png"
+type = "image"
+title = "rubai reflection screenshot"
+
+[[generated]]
+id = "M_H20xtDDwqaGhucNRUR3"
+uri = "file://artifacts/mobile/store-assets/screenshots/gplay-shot1-dashboard.png"
+type = "image"
+title = "rubai google play dashboard"
+
+[[generated]]
+id = "dj9ydCdHp16p6Cr5xexTK"
+uri = "file://artifacts/mobile/store-assets/screenshots/gplay-shot2-coach.png"
+type = "image"
+title = "rubai google play coach"
+
 [[outputs]]
 id = "1OZJ-pAK6cNEuLkOeGyNm"
 uri = "file://exports/rubai-system-specification.pdf"
