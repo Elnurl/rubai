@@ -54,3 +54,46 @@ All three workspace `dev` scripts (`artifacts/mobile`, `artifacts/api-server`, `
 - **React Query:** Data fetching, caching, and synchronization.
 - **`@expo/vector-icons` & SF Symbols:** Iconography. Local TTF copies (`assets/fonts/{Feather,Ionicons,MaterialIcons}.ttf`) are loaded explicitly in `app/_layout.tsx` via `useFonts` to bypass an Expo Go bundling quirk that otherwise produces tofu boxes. The custom Expo Go static deploy script (`artifacts/mobile/scripts/build.js`) writes every bundled asset to disk under its **hashed** filename `<name>.<hash>.<type>` (matching what Expo's runtime `AssetSourceResolver` requests) — writing the bare `<name>.<type>` made every icon font 404 in the deployed bundle and broke all icons app-wide.
 - **Replit Secrets:** Environment variable management (`DATABASE_URL`, `CLERK_SECRET_KEY`, `AI_INTEGRATIONS_OPENAI_API_KEY`, `SESSION_SECRET`).
+
+## OTA Rollback Runbook
+
+If a bad JS bundle reaches users via EAS Update, you can roll it back in under a minute — no native rebuild or App Store review required.
+
+### Quick rollback (one command)
+
+```bash
+# From the repo root — rolls back the production channel interactively:
+./scripts/eas-rollback.sh
+
+# Or via npm script from artifacts/mobile:
+pnpm run eas:rollback:production
+```
+
+Running without a `<update-group-id>` argument lists the 10 most recent updates so you can identify the last known-good one, then re-run with that ID:
+
+```bash
+./scripts/eas-rollback.sh production <known-good-update-group-id>
+```
+
+### What the script does
+
+Uses `eas update:republish` to re-point the target channel to an existing update group — no re-bundling, no store review. Devices pick up the rolled-back bundle on their next launch.
+
+When called **without** an update-group-id the script lists the 10 most recent updates on that channel (read-only, no changes made) so you can identify the last known-good group ID. Pass that ID in a second call to execute the rollback.
+
+### Channels
+
+| npm script | Channel | When to use |
+|---|---|---|
+| `eas:rollback:production` | `production` | Hotfix a bad App Store / Play Store OTA |
+| `eas:rollback:preview` | `preview` | Hotfix a bad TestFlight / internal-track OTA |
+| `eas:rollback [channel]` | custom | Any other EAS channel |
+
+### Prerequisites
+
+- `EXPO_TOKEN` environment variable set (or `eas login` completed in the shell).
+- `eas-cli` available via `npx` (no global install required).
+
+### After the rollback
+
+No manual re-enable step is needed. Once you have pushed a proper fix, the normal CI workflow (`eas-update.yml`) publishes a fresh update to the channel automatically.
