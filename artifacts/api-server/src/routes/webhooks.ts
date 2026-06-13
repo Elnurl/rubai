@@ -13,6 +13,14 @@ import { sendTierChangedPushTo } from "../lib/pushScheduler";
 
 const router: IRouter = Router();
 
+// How long after an ACTIVE event's own timestamp we will still return 404
+// (triggering a RevenueCat retry) when the user row doesn't exist yet.
+// Within this window the missing row is most likely a sign-up race;
+// outside it the clerkUserId is genuinely unknown and we stop retrying.
+// Configurable via env so tests and ops can override without code changes.
+const WEBHOOK_RACE_WINDOW_MS =
+  Number(process.env["WEBHOOK_RACE_WINDOW_MS"] ?? "") || 5 * 60 * 1000; // 5 min
+
 const ACTIVE_STATUSES = new Set([
   "INITIAL_PURCHASE",
   "RENEWAL",
@@ -37,6 +45,8 @@ interface RcWebhookEvent {
   transaction_id?: string;
   expiration_at_ms?: number | null;
   entitlement_ids?: string[];
+  /** Unix timestamp (ms) when RevenueCat generated the event. */
+  event_timestamp_ms?: number | null;
 }
 
 interface RcWebhookBody {
@@ -112,8 +122,55 @@ router.post("/webhooks/revenuecat", async (req, res) => {
     });
 
     if (!user) {
-      req.log?.warn({ clerkUserId }, "RC webhook: user not found");
-      res.status(200).json({ ok: true, skipped: "user_not_found" });
+      if (isActive) {
+        // Determine whether this looks like a sign-up race or a genuinely
+        // unknown user (e.g. test purchase from a deleted account).
+        //
+        // Strategy: use the event's own timestamp (`event_timestamp_ms`)
+        // as the reference. If the event was generated within the race
+        // window, the user row probably just hasn't been created yet
+        // (Clerk post-sign-up hook hasn't fired), so we return 404 to
+        // cause RevenueCat to retry. If the event is older than the race
+        // window — meaning RC has already been retrying for a while — the
+        // clerkUserId is genuinely unknown and we return 200 so RC stops
+        // retrying, preventing an indefinite retry loop.
+        //
+        // Fall-through when `event_timestamp_ms` is absent: we assume the
+        // event is recent to err on the side of applying the subscription.
+        const eventAgeMs =
+          event.event_timestamp_ms != null
+            ? Date.now() - event.event_timestamp_ms
+            : 0;
+
+        if (eventAgeMs <= WEBHOOK_RACE_WINDOW_MS) {
+          req.log?.warn(
+            { clerkUserId, eventType: event.type, eventAgeMs },
+            "RC webhook: user not found for recent active event — returning 404 to trigger RC retry",
+          );
+          res.status(404).json({ error: "user_not_found" });
+        } else {
+          req.log?.warn(
+            {
+              clerkUserId,
+              eventType: event.type,
+              eventAgeMs,
+              windowMs: WEBHOOK_RACE_WINDOW_MS,
+            },
+            "RC webhook: user not found and event is older than race window — skipping to stop RC retries",
+          );
+          res.status(200).json({ ok: true, skipped: "user_not_found" });
+        }
+      } else {
+        // For inactive events (cancellation, expiration, billing issues) the
+        // user's tier is already "free" by default, so there is nothing to
+        // apply. Returning 200 is safe — we don't want RC to retry forever
+        // for a user that may have been deleted after cancelling.
+        req.log?.warn(
+          { clerkUserId, eventType: event.type },
+          "RC webhook: user not found for inactive event — skipping",
+        );
+        res.status(200).json({ ok: true, skipped: "user_not_found" });
+      }
       return;
     }
 

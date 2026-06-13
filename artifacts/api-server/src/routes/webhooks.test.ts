@@ -678,7 +678,11 @@ describe("POST /api/webhooks/revenuecat — edge cases", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns 200 skipped when user is not found in the database", async () => {
+  it("returns 404 for a RECENT ACTIVE event when the user is not found (sign-up race → RC should retry)", async () => {
+    // INITIAL_PURCHASE arrives before the user row exists (sign-up race).
+    // The event has a fresh timestamp (within the race window), so 404 tells
+    // RevenueCat to retry. A 200 would make RC treat it as success and never
+    // retry, silently losing the subscription grant.
     mockFindFirst.mockResolvedValue(null);
 
     const res = await post(
@@ -686,16 +690,89 @@ describe("POST /api/webhooks/revenuecat — edge cases", () => {
         type: "INITIAL_PURCHASE",
         app_user_id: "user_nonexistent",
         product_id: "rubai_pro_monthly",
-        transaction_id: "txn_nf_001",
+        transaction_id: "txn_nf_recent",
         entitlement_ids: ["pro"],
+        // event_timestamp_ms is within the default 5-minute race window
+        event_timestamp_ms: Date.now() - 30_000, // 30 seconds ago
+      }),
+    );
+
+    expect(res.status).toBe(404);
+    const json = await res.json();
+    expect(json).toMatchObject({ error: "user_not_found" });
+    expect(capturedTierUpdate).toBeUndefined();
+    expect(transactionCallCount).toBe(0);
+  });
+
+  it("returns 404 for an ACTIVE event with no timestamp when the user is not found (assume recent → RC should retry)", async () => {
+    // When event_timestamp_ms is absent we assume the event is recent and err
+    // on the side of applying the subscription rather than silently skipping.
+    mockFindFirst.mockResolvedValue(null);
+
+    const res = await post(
+      buildBody({
+        type: "INITIAL_PURCHASE",
+        app_user_id: "user_nonexistent",
+        product_id: "rubai_pro_monthly",
+        transaction_id: "txn_nf_no_ts",
+        entitlement_ids: ["pro"],
+        // No event_timestamp_ms field
+      }),
+    );
+
+    expect(res.status).toBe(404);
+    const json = await res.json();
+    expect(json).toMatchObject({ error: "user_not_found" });
+    expect(capturedTierUpdate).toBeUndefined();
+    expect(transactionCallCount).toBe(0);
+  });
+
+  it("returns 200 skipped for a STALE ACTIVE event when the user is not found (genuinely unknown user → stop RC retries)", async () => {
+    // The event is older than the race window, so RevenueCat has already been
+    // retrying for a while. The user row never appeared — this is a genuinely
+    // unknown/deleted account (e.g. abandoned sign-up or test purchase).
+    // Returning 200 prevents RC from retrying indefinitely.
+    mockFindFirst.mockResolvedValue(null);
+
+    const res = await post(
+      buildBody({
+        type: "INITIAL_PURCHASE",
+        app_user_id: "user_ghost",
+        product_id: "rubai_pro_monthly",
+        transaction_id: "txn_nf_stale",
+        entitlement_ids: ["pro"],
+        // 10 minutes ago — well beyond the 5-minute race window
+        event_timestamp_ms: Date.now() - 10 * 60 * 1000,
       }),
     );
 
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toMatchObject({ ok: true, skipped: "user_not_found" });
-    // No tier update should have happened
     expect(capturedTierUpdate).toBeUndefined();
+    expect(transactionCallCount).toBe(0);
+  });
+
+  it("returns 200 skipped for an INACTIVE event when the user is not found (safe to skip regardless of age)", async () => {
+    // CANCELLATION/EXPIRATION on a deleted account: the user's tier is already
+    // free, so there is nothing to apply. We do NOT want RC to retry forever
+    // for a genuinely deleted account, so we still return 200 here.
+    mockFindFirst.mockResolvedValue(null);
+
+    const res = await post(
+      buildBody({
+        type: "CANCELLATION",
+        app_user_id: "user_deleted",
+        product_id: "rubai_pro_monthly",
+        transaction_id: "txn_nf_cancel_001",
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toMatchObject({ ok: true, skipped: "user_not_found" });
+    expect(capturedTierUpdate).toBeUndefined();
+    expect(transactionCallCount).toBe(0);
   });
 
   it("returns 200 skipped for unhandled event types", async () => {
