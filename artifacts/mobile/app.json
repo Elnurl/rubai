@@ -17,7 +17,35 @@
     "ios": {
       "supportsTablet": false,
       "icon": "./assets/images/icon.png",
-      "bundleIdentifier": "com.rubai.mobile"
+      "bundleIdentifier": "com.rubai.mobile",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Allow rubai to use your microphone so you can talk to your coach.",
+        "NSCameraUsageDescription": "Allow rubai to use your camera so you can snap what you're working on and ask the coach about it.",
+        "NSPhotoLibraryUsageDescription": "Allow rubai to read your photos so you can share screenshots and reference images with the coach.",
+        "NSCalendarsUsageDescription": "Allow rubai to read your events so the AI can plan around your meetings.",
+        "NSRemindersUsageDescription": "Allow rubai to read your reminders so the AI can incorporate them into your daily plan."
+      },
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": ["C617.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
+            "NSPrivacyAccessedAPITypeReasons": ["35F9.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+            "NSPrivacyAccessedAPITypeReasons": ["E174.1"]
+          }
+        ]
+      }
     },
     "android": {
       "icon": "./assets/images/icon.png",

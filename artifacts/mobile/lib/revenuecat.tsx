@@ -6,9 +6,9 @@ import Constants from "expo-constants";
 import { useUser } from "@clerk/expo";
 import { customFetch } from "@workspace/api-client-react";
 
-const REVENUECAT_TEST_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY;
-const REVENUECAT_IOS_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY;
-const REVENUECAT_ANDROID_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY;
+const REVENUECAT_TEST_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY ?? "";
+const REVENUECAT_IOS_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY ?? "";
+const REVENUECAT_ANDROID_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY ?? "";
 
 export const RC_ENTITLEMENT_PRO = "pro";
 export const RC_ENTITLEMENT_PREMIUM = "premium";
@@ -16,15 +16,23 @@ export const RC_OFFERING_PRO = "pro";
 export const RC_OFFERING_PREMIUM = "premium";
 
 function getRevenueCatApiKey(): string {
-  if (!REVENUECAT_TEST_API_KEY || !REVENUECAT_IOS_API_KEY || !REVENUECAT_ANDROID_API_KEY) {
-    throw new Error("RevenueCat Public API Keys not found");
-  }
+  // In development and Expo Go, use the sandbox test key.
   if (__DEV__ || Platform.OS === "web" || Constants.executionEnvironment === "storeClient") {
+    if (!REVENUECAT_TEST_API_KEY) {
+      throw new Error("EXPO_PUBLIC_REVENUECAT_TEST_API_KEY is not set");
+    }
     return REVENUECAT_TEST_API_KEY;
   }
-  if (Platform.OS === "ios") return REVENUECAT_IOS_API_KEY;
-  if (Platform.OS === "android") return REVENUECAT_ANDROID_API_KEY;
-  return REVENUECAT_TEST_API_KEY;
+  // In production native builds, use the platform-specific production key.
+  if (Platform.OS === "ios") {
+    if (!REVENUECAT_IOS_API_KEY) throw new Error("EXPO_PUBLIC_REVENUECAT_IOS_API_KEY is not set");
+    return REVENUECAT_IOS_API_KEY;
+  }
+  if (Platform.OS === "android") {
+    if (!REVENUECAT_ANDROID_API_KEY) throw new Error("EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY is not set");
+    return REVENUECAT_ANDROID_API_KEY;
+  }
+  throw new Error("Unsupported platform for RevenueCat");
 }
 
 export function initializeRevenueCat() {

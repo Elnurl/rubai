@@ -328,7 +328,7 @@ export default function PlansScreen() {
                 <Text style={{ fontFamily: "Inter_600SemiBold", color: colors.foreground }}>
                   {getPriceForTier(confirmTier)}
                 </Text>
-                {"\n\n"}This is a test purchase and no real payment will be taken.
+                {__DEV__ ? `\n\nThis is a sandbox purchase — no real payment will be taken.` : ""}
               </Text>
             ) : null}
             <View style={styles.modalActions}>

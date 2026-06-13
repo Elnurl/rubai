@@ -27,9 +27,9 @@ import {
 
 const PROJECT_NAME = "Horizon"; // existing project in RevenueCat
 const APP_STORE_APP_NAME = "RubAI iOS";
-const APP_STORE_BUNDLE_ID = "com.elnur11.rubai";
+const APP_STORE_BUNDLE_ID = "com.rubai.mobile";
 const PLAY_STORE_APP_NAME = "RubAI Android";
-const PLAY_STORE_PACKAGE_NAME = "com.elnur11.rubai";
+const PLAY_STORE_PACKAGE_NAME = "com.rubai.mobile";
 
 type TestStorePricesResponse = {
   object: string;
