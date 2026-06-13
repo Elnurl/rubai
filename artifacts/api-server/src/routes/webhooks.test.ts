@@ -736,3 +736,106 @@ describe("POST /api/webhooks/revenuecat — edge cases", () => {
     expect(capturedTierUpdate).toBe("pro");
   });
 });
+
+describe("POST /api/webhooks/revenuecat — timing-safe auth", () => {
+  // These tests verify constant-time comparison is in place. A header that
+  // shares a prefix with the real secret but differs in the last character
+  // must be rejected just like a completely wrong value — no early-exit on
+  // the matching prefix characters.
+
+  it("rejects a header that differs only in the last character (prefix match)", async () => {
+    vi.stubEnv("REVENUECAT_WEBHOOK_SECRET", "super-secret");
+
+    // "super-secreX" shares "super-secre" with "super-secret" but the last
+    // char is wrong — a naive early-exit comparison might take slightly
+    // longer to reject this than a completely different string.
+    const res = await post(
+      buildBody({
+        type: "INITIAL_PURCHASE",
+        app_user_id: "user_abc123",
+        product_id: "rubai_pro_monthly",
+        transaction_id: "txn_timing_001",
+        entitlement_ids: ["pro"],
+      }),
+      { Authorization: "super-secreX" },
+    );
+
+    expect(res.status).toBe(401);
+    const json = await res.json();
+    expect(json).toMatchObject({ error: "Unauthorized" });
+  });
+
+  it("rejects a header that is a prefix of the real secret (shorter length)", async () => {
+    vi.stubEnv("REVENUECAT_WEBHOOK_SECRET", "super-secret");
+
+    // "super-secre" is a strict prefix — different byte-length means
+    // timingSafeEqual cannot even be called; the length guard must reject.
+    const res = await post(
+      buildBody({
+        type: "INITIAL_PURCHASE",
+        app_user_id: "user_abc123",
+        product_id: "rubai_pro_monthly",
+        transaction_id: "txn_timing_002",
+        entitlement_ids: ["pro"],
+      }),
+      { Authorization: "super-secre" },
+    );
+
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects a header that is the real secret with an extra character appended (longer length)", async () => {
+    vi.stubEnv("REVENUECAT_WEBHOOK_SECRET", "super-secret");
+
+    // "super-secretX" is longer — timingSafeEqual must not be called with
+    // mismatched buffer lengths (it throws); the length guard must reject.
+    const res = await post(
+      buildBody({
+        type: "INITIAL_PURCHASE",
+        app_user_id: "user_abc123",
+        product_id: "rubai_pro_monthly",
+        transaction_id: "txn_timing_003",
+        entitlement_ids: ["pro"],
+      }),
+      { Authorization: "super-secretX" },
+    );
+
+    expect(res.status).toBe(401);
+  });
+
+  it("accepts a header that is byte-for-byte identical to the secret", async () => {
+    vi.stubEnv("REVENUECAT_WEBHOOK_SECRET", "super-secret");
+    mockFindFirst.mockResolvedValue(MOCK_USER);
+
+    const res = await post(
+      buildBody({
+        type: "INITIAL_PURCHASE",
+        app_user_id: "user_abc123",
+        product_id: "rubai_pro_monthly",
+        transaction_id: "txn_timing_004",
+        entitlement_ids: ["pro"],
+      }),
+      { Authorization: "super-secret" },
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedTierUpdate).toBe("pro");
+  });
+
+  it("rejects an empty Authorization header even when secret is set", async () => {
+    vi.stubEnv("REVENUECAT_WEBHOOK_SECRET", "super-secret");
+
+    const res = await post(
+      buildBody({
+        type: "INITIAL_PURCHASE",
+        app_user_id: "user_abc123",
+        product_id: "rubai_pro_monthly",
+        transaction_id: "txn_timing_005",
+        entitlement_ids: ["pro"],
+      }),
+      { Authorization: "" },
+    );
+
+    expect(res.status).toBe(401);
+  });
+});

@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { timingSafeEqual } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db, usersTable, subscriptionsTable } from "@workspace/db";
 import {
@@ -58,8 +59,19 @@ router.post("/webhooks/revenuecat", async (req, res) => {
   }
 
   if (webhookSecret) {
+    // RevenueCat sends the shared secret verbatim in the Authorization header
+    // (no "Bearer " prefix). Example: Authorization: <your-webhook-secret>
+    // We use timingSafeEqual to prevent timing-based brute-force attacks; an
+    // attacker cannot deduce the secret one character at a time by measuring
+    // response latency. Both buffers must be the same byte-length for
+    // timingSafeEqual to work — a length mismatch is an instant rejection.
     const authHeader = req.headers["authorization"] ?? "";
-    if (authHeader !== webhookSecret) {
+    const secretBuf = Buffer.from(webhookSecret, "utf8");
+    const headerBuf = Buffer.from(authHeader, "utf8");
+    const valid =
+      headerBuf.byteLength === secretBuf.byteLength &&
+      timingSafeEqual(headerBuf, secretBuf);
+    if (!valid) {
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
