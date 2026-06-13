@@ -1,20 +1,15 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, usersTable, subscriptionsTable } from "@workspace/db";
+import {
+  RC_ENTITLEMENT_PRO,
+  RC_ENTITLEMENT_PREMIUM,
+  tierFromEntitlements,
+  tierFromProductId,
+  type ActiveTier,
+} from "../lib/rcEntitlements";
 
 const router: IRouter = Router();
-
-const PRO_ENTITLEMENT = "pro";
-const PREMIUM_ENTITLEMENT = "premium";
-
-type ActiveTier = "free" | "pro" | "premium";
-
-function tierFromProductId(productId: string): ActiveTier {
-  const lower = productId.toLowerCase();
-  if (lower.includes("premium")) return "premium";
-  if (lower.includes("pro")) return "pro";
-  return "free";
-}
 
 const ACTIVE_STATUSES = new Set([
   "INITIAL_PURCHASE",
@@ -127,12 +122,14 @@ router.post("/webhooks/revenuecat", async (req, res) => {
           });
       }
 
-      const entitlements = event.entitlement_ids ?? [];
       let newTier: ActiveTier = "free";
       if (isActive) {
-        if (entitlements.includes(PREMIUM_ENTITLEMENT)) newTier = "premium";
-        else if (entitlements.includes(PRO_ENTITLEMENT)) newTier = "pro";
-        else newTier = tierFromProductId(productId);
+        const entitlements = event.entitlement_ids ?? [];
+        if (entitlements.length > 0) {
+          newTier = tierFromEntitlements(entitlements);
+        } else {
+          newTier = tierFromProductId(productId);
+        }
       }
 
       await tx
@@ -144,6 +141,10 @@ router.post("/webhooks/revenuecat", async (req, res) => {
         .where(eq(usersTable.id, user.id));
     });
 
+    req.log?.info(
+      { clerkUserId, eventType: event.type, provider },
+      "RC webhook processed",
+    );
     res.status(200).json({ ok: true });
   } catch (err) {
     req.log?.error({ err, clerkUserId }, "RC webhook processing failed");

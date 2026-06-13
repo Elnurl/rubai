@@ -17,10 +17,14 @@ import {
   recomputeBehavioralStateAsync,
   getBehavioralState,
 } from "../lib/behavioralAnalytics";
+import {
+  RC_ENTITLEMENT_PRO,
+  RC_ENTITLEMENT_PREMIUM,
+  type ActiveTier,
+} from "../lib/rcEntitlements";
 
 // ── RevenueCat tier sync ───────────────────────────────────────────────────
-
-type ActiveTier = "free" | "pro" | "premium";
+// ActiveTier is imported from ../lib/rcEntitlements (shared with webhooks.ts).
 
 interface RcEntitlement {
   expires_date: string | null;
@@ -62,9 +66,16 @@ async function fetchRcTier(clerkUserId: string): Promise<ActiveTier> {
     return new Date(e.expires_date).getTime() > now;
   }
 
-  if (entitlements["premium"] && isActive(entitlements["premium"]!))
+  if (
+    entitlements[RC_ENTITLEMENT_PREMIUM] &&
+    isActive(entitlements[RC_ENTITLEMENT_PREMIUM]!)
+  )
     return "premium";
-  if (entitlements["pro"] && isActive(entitlements["pro"]!)) return "pro";
+  if (
+    entitlements[RC_ENTITLEMENT_PRO] &&
+    isActive(entitlements[RC_ENTITLEMENT_PRO]!)
+  )
+    return "pro";
   return "free";
 }
 
