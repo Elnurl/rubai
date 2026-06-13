@@ -93,6 +93,11 @@ if (!CLERK_PUBLISHABLE_KEY) {
   );
 }
 
+// Clerk proxy URL — empty in dev (Clerk hits FAPI directly), auto-set in
+// the Replit-hosted web build and provided as an EAS secret for native builds.
+// Do NOT gate on __DEV__ — the empty value in dev is intentional.
+const CLERK_PROXY_URL = process.env.EXPO_PUBLIC_CLERK_PROXY_URL || undefined;
+
 SplashScreen.preventAutoHideAsync();
 
 // Web-only: the `fontfaceobserver` package (transitive dep used by Expo's web
@@ -332,6 +337,7 @@ export default function RootLayout() {
           <ClerkProvider
             publishableKey={CLERK_PUBLISHABLE_KEY ?? ""}
             tokenCache={tokenCache}
+            proxyUrl={CLERK_PROXY_URL}
           >
             <ClerkLoaded>
               <GestureHandlerRootView style={{ flex: 1 }}>

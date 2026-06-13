@@ -136,6 +136,10 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
 
   console.log("Starting Metro...");
   console.log(`Setting EXPO_PUBLIC_DOMAIN=${expoPublicDomain}`);
+  const clerkProxyUrl = expoPublicDomain
+    ? `https://${expoPublicDomain}/api/__clerk`
+    : "";
+
   const env = {
     ...process.env,
     EXPO_PUBLIC_DOMAIN: expoPublicDomain,
@@ -144,6 +148,7 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
       process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
       process.env.CLERK_PUBLISHABLE_KEY ||
       "",
+    EXPO_PUBLIC_CLERK_PROXY_URL: clerkProxyUrl,
   };
 
   if (expoPublicReplId) {
