@@ -3,6 +3,14 @@
     "version": ">= 12.0.0",
     "appVersionSource": "remote"
   },
+  "update": {
+    "production": {
+      "channel": "production"
+    },
+    "preview": {
+      "channel": "preview"
+    }
+  },
   "build": {
     "development": {
       "developmentClient": true,
@@ -17,6 +25,7 @@
       }
     },
     "preview": {
+      "channel": "preview",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
@@ -31,6 +40,7 @@
       }
     },
     "production": {
+      "channel": "production",
       "android": {
         "buildType": "app-bundle"
       },
