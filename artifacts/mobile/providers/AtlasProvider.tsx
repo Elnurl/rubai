@@ -1,4 +1,5 @@
 import { useAuth } from "@clerk/expo";
+import * as Notifications from "expo-notifications";
 import React, {
   createContext,
   useCallback,
@@ -8,6 +9,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { AppState, type AppStateStatus } from "react-native";
 import type {
   BehavioralProfile,
   BehavioralSnapshot,
@@ -27,6 +29,7 @@ import type {
 import {
   ApiError,
   atlasRegisterPushToken,
+  customFetch,
   getMeState,
   putMeState,
 } from "@workspace/api-client-react";
@@ -869,6 +872,89 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
   }, [clerkLoaded, isSignedIn, userId]);
+
+  // ----- Tier sync: foreground resume ----------------------------------
+  // When the app returns to the foreground (e.g. user switches back after
+  // completing a purchase flow in another app, or receives a CANCELLATION
+  // that arrived while backgrounded), silently re-read the DB-authoritative
+  // tier via GET /api/me.
+  //
+  // We intentionally use GET /me (DB read) and NOT POST /me/sync-tier
+  // (RevenueCat API re-query) here. The webhook has already written the
+  // correct tier to the DB, so a direct DB read is both faster and
+  // authoritative. Using sync-tier would re-query RevenueCat, which may
+  // still report an active entitlement for a CANCELLATION (until period
+  // end), silently overwriting the correct webhook-written downgrade.
+  useEffect(() => {
+    if (!isSignedIn || !userId) return;
+
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      if (nextState !== "active") return;
+      // Only sync when the session is fully booted and not in a local preview.
+      if (!ownerRef.current || suppressPushRef.current) return;
+      if (localTierOverrideRef.current !== null) return;
+
+      const owner = ownerRef.current;
+      void customFetch<{ tier: string; clerkUserId: string; email: string }>(
+        "/api/me",
+      )
+        .then((res) => {
+          if (ownerRef.current !== owner) return;
+          if (localTierOverrideRef.current !== null) return;
+          if (res.tier === serverTierRef.current) return;
+          serverTierRef.current = res.tier;
+          setTier(res.tier);
+          void writeCacheSnapshot(owner);
+          if (__DEV__) console.log("[atlas] tier updated on foreground:", res.tier);
+        })
+        .catch(() => {
+          // Non-fatal — we'll retry next time the app comes to the foreground.
+        });
+    };
+
+    const sub = AppState.addEventListener("change", handleAppStateChange);
+    return () => sub.remove();
+  }, [isSignedIn, userId, writeCacheSnapshot]);
+
+  // ----- Tier sync: push notification ----------------------------------
+  // When the server fires a tier_changed push (after a RevenueCat webhook),
+  // immediately re-read the DB-authoritative tier via GET /api/me so the
+  // UI reflects the webhook-written tier without an app restart.
+  //
+  // Same reasoning as the foreground sync above: we read from the DB (GET
+  // /me), not from RevenueCat (/me/sync-tier), so a webhook-written
+  // CANCELLATION downgrade is never overwritten by a stale RC entitlement.
+  useEffect(() => {
+    if (!isSignedIn || !userId) return;
+
+    const sub = Notifications.addNotificationReceivedListener((notification) => {
+      const data = notification.request.content.data as
+        | Record<string, unknown>
+        | null
+        | undefined;
+      if (data?.type !== "tier_changed") return;
+      if (!ownerRef.current || suppressPushRef.current) return;
+      if (localTierOverrideRef.current !== null) return;
+
+      const owner = ownerRef.current;
+      void customFetch<{ tier: string; clerkUserId: string; email: string }>(
+        "/api/me",
+      )
+        .then((res) => {
+          if (ownerRef.current !== owner) return;
+          if (localTierOverrideRef.current !== null) return;
+          serverTierRef.current = res.tier;
+          setTier(res.tier);
+          void writeCacheSnapshot(owner);
+          if (__DEV__) console.log("[atlas] tier updated via push:", res.tier);
+        })
+        .catch(() => {
+          // Non-fatal — the AppState foreground sync will cover it on next resume.
+        });
+    });
+
+    return () => sub.remove();
+  }, [isSignedIn, userId, writeCacheSnapshot]);
 
   // ----- Local mutators (each schedules a push) ------------------------
 

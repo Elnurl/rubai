@@ -131,6 +131,55 @@ export async function sendPushTo(
 }
 
 /**
+ * Send a silent data-only push to poke the mobile client into re-checking
+ * its subscription tier. Fires after a webhook updates the tier in the DB
+ * so the change surfaces immediately without requiring an app restart.
+ *
+ * The push carries no audible sound and suppresses its banner in the mobile
+ * notification handler (checked via data.type === "tier_changed"). On iOS,
+ * _contentAvailable requests a brief background-processing window so the
+ * app can call /me/sync-tier even when backgrounded.
+ */
+export async function sendTierChangedPushTo(
+  token: string,
+  newTier: string,
+): Promise<boolean> {
+  if (!Expo.isExpoPushToken(token)) {
+    logger.warn({ token }, "Skipping non-Expo push token (tier-changed)");
+    return false;
+  }
+  try {
+    const tickets = await expo.sendPushNotificationsAsync([
+      {
+        to: token,
+        // Omit sound — the UI update is the feedback.
+        sound: undefined,
+        // Friendly fallback body shown if the app is fully terminated and
+        // the OS renders the notification natively.
+        title: "Your plan was updated",
+        body:
+          newTier === "free"
+            ? "Your subscription has ended."
+            : `You're now on the ${newTier} plan.`,
+        data: { type: "tier_changed", tier: newTier },
+        // Ask iOS to wake the app briefly so it can sync in the background.
+        _contentAvailable: true,
+        priority: "normal",
+      },
+    ]);
+    const ticket = tickets[0];
+    if (ticket?.status === "error") {
+      logger.warn({ ticket }, "Expo tier-changed push returned error ticket");
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logger.error({ err }, "Failed to send tier-changed push");
+    return false;
+  }
+}
+
+/**
  * Send the morning nudge to one user if they're in their local morning
  * window and haven't been nudged yet today. Returns true when a push
  * was actually delivered.

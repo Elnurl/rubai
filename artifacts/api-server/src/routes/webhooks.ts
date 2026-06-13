@@ -9,6 +9,7 @@ import {
   tierFromProductId,
   type ActiveTier,
 } from "../lib/rcEntitlements";
+import { sendTierChangedPushTo } from "../lib/pushScheduler";
 
 const router: IRouter = Router();
 
@@ -121,6 +122,16 @@ router.post("/webhooks/revenuecat", async (req, res) => {
       ? new Date(event.expiration_at_ms)
       : null;
 
+    // Compute the new tier before the transaction so we can use it after.
+    let newTier: ActiveTier = "free";
+    if (isActive) {
+      const entitlements = event.entitlement_ids ?? [];
+      newTier =
+        entitlements.length > 0
+          ? tierFromEntitlements(entitlements)
+          : tierFromProductId(productId);
+    }
+
     await db.transaction(async (tx) => {
       if (productId && storeTransactionId) {
         await tx
@@ -148,16 +159,6 @@ router.post("/webhooks/revenuecat", async (req, res) => {
           });
       }
 
-      let newTier: ActiveTier = "free";
-      if (isActive) {
-        const entitlements = event.entitlement_ids ?? [];
-        if (entitlements.length > 0) {
-          newTier = tierFromEntitlements(entitlements);
-        } else {
-          newTier = tierFromProductId(productId);
-        }
-      }
-
       await tx
         .update(usersTable)
         .set({
@@ -168,9 +169,17 @@ router.post("/webhooks/revenuecat", async (req, res) => {
     });
 
     req.log?.info(
-      { clerkUserId, eventType: event.type, provider },
+      { clerkUserId, eventType: event.type, provider, newTier },
       "RC webhook processed",
     );
+
+    // Fire-and-forget: poke the user's device so the tier change surfaces
+    // immediately without requiring an app restart. Errors are swallowed so
+    // a missing / invalid push token never causes the webhook to return 5xx.
+    if (user.expoPushToken) {
+      void sendTierChangedPushTo(user.expoPushToken, newTier).catch(() => {});
+    }
+
     res.status(200).json({ ok: true });
   } catch (err) {
     req.log?.error({ err, clerkUserId }, "RC webhook processing failed");

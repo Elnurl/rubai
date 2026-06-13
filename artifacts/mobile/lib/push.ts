@@ -6,13 +6,29 @@ import { Platform } from "react-native";
 // Foreground presentation: when a push lands while the app is open we still
 // want it to show as a banner/sound — otherwise the user sees nothing for
 // scheduled morning nudges they're already inside the app for.
+// Exception: tier_changed pushes are data-only signals — the UI itself is
+// the feedback, so we suppress the banner to avoid a double alert.
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification) => {
+    const data = notification.request.content.data as
+      | Record<string, unknown>
+      | null
+      | undefined;
+    if (data?.type === "tier_changed") {
+      return {
+        shouldShowBanner: false,
+        shouldShowList: false,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+      };
+    }
+    return {
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    };
+  },
 });
 
 export type PushRegistration = {
