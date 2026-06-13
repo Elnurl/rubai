@@ -4,6 +4,7 @@ export * from "./behavioral_events";
 export * from "./conversations";
 export * from "./messages";
 export * from "./subscriptions";
+export * from "./tier_transitions";
 export * from "./users";
 export * from "./user_state";
 export * from "./user_behavioral_state";

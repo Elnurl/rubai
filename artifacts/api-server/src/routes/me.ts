@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
-import { db, usersTable, userStateTable } from "@workspace/db";
+import { db, usersTable, userStateTable, tierTransitionsTable } from "@workspace/db";
 import {
   GetMeResponse,
   GetMeStateResponse,
@@ -174,12 +174,27 @@ router.post("/me/sync-tier", async (req, res): Promise<void> => {
     return;
   }
 
-  await db
-    .update(usersTable)
-    .set({ tier })
-    .where(eq(usersTable.id, user.id));
+  const tierChanged = user.tier !== tier;
 
-  req.log.info({ userId: user.id, tier }, "Tier synced from RevenueCat");
+  await db.transaction(async (tx) => {
+    await tx
+      .update(usersTable)
+      .set({ tier })
+      .where(eq(usersTable.id, user.id));
+
+    if (tierChanged) {
+      await tx.insert(tierTransitionsTable).values({
+        userId: user.id,
+        fromTier: user.tier,
+        toTier: tier,
+        triggeredBy: "sync-tier",
+        eventType: null,
+        metadata: {},
+      });
+    }
+  });
+
+  req.log.info({ userId: user.id, tier, tierChanged }, "Tier synced from RevenueCat");
   res.json({ tier });
 });
 

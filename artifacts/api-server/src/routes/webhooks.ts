@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { timingSafeEqual } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { db, usersTable, subscriptionsTable } from "@workspace/db";
+import { db, usersTable, subscriptionsTable, tierTransitionsTable } from "@workspace/db";
 import {
   RC_ENTITLEMENT_PRO,
   RC_ENTITLEMENT_PREMIUM,
@@ -189,6 +189,8 @@ router.post("/webhooks/revenuecat", async (req, res) => {
           : tierFromProductId(productId);
     }
 
+    const tierChanged = user.tier !== newTier;
+
     await db.transaction(async (tx) => {
       if (productId && storeTransactionId) {
         await tx
@@ -223,10 +225,25 @@ router.post("/webhooks/revenuecat", async (req, res) => {
           updatedAt: new Date(),
         })
         .where(eq(usersTable.id, user.id));
+
+      if (tierChanged) {
+        await tx.insert(tierTransitionsTable).values({
+          userId: user.id,
+          fromTier: user.tier,
+          toTier: newTier,
+          triggeredBy: "webhook",
+          eventType: event.type,
+          metadata: {
+            provider,
+            productId: productId || null,
+            storeTransactionId: storeTransactionId || null,
+          },
+        });
+      }
     });
 
     req.log?.info(
-      { clerkUserId, eventType: event.type, provider, newTier },
+      { clerkUserId, eventType: event.type, provider, newTier, tierChanged },
       "RC webhook processed",
     );
 
