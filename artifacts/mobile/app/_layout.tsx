@@ -29,6 +29,10 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import colors from "@/constants/colors";
 import { AtlasProvider, useAtlas } from "@/providers/AtlasProvider";
 import { initializeRevenueCat, SubscriptionProvider } from "@/lib/revenuecat";
+import {
+  cacheApiBaseUrl,
+  cacheSessionToken,
+} from "@/lib/backgroundTierSync";
 import { Alert } from "react-native";
 
 try {
@@ -79,6 +83,9 @@ function resolveApiBaseUrl(): string | null {
 const API_BASE_URL = resolveApiBaseUrl();
 if (API_BASE_URL) {
   setBaseUrl(API_BASE_URL);
+  // Cache the base URL in AsyncStorage so background tasks can build
+  // absolute URLs without re-running the env-var resolution logic.
+  void cacheApiBaseUrl(API_BASE_URL);
 }
 if (__DEV__) {
   // eslint-disable-next-line no-console
@@ -156,8 +163,16 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
   const router = useRouter();
 
+  // Wrap the Clerk token getter so every token retrieval also caches the JWT
+  // in SecureStore for background-task use (no React context in background).
   useEffect(() => {
-    setAuthTokenGetter(() => getToken());
+    setAuthTokenGetter(async () => {
+      const token = await getToken();
+      if (token) {
+        void cacheSessionToken(token);
+      }
+      return token;
+    });
     return () => {
       setAuthTokenGetter(null);
     };

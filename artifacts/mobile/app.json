@@ -24,7 +24,8 @@
         "NSCameraUsageDescription": "Allow rubai to use your camera so you can snap what you're working on and ask the coach about it.",
         "NSPhotoLibraryUsageDescription": "Allow rubai to read your photos so you can share screenshots and reference images with the coach.",
         "NSCalendarsUsageDescription": "Allow rubai to read your events so the AI can plan around your meetings.",
-        "NSRemindersUsageDescription": "Allow rubai to read your reminders so the AI can incorporate them into your daily plan."
+        "NSRemindersUsageDescription": "Allow rubai to read your reminders so the AI can incorporate them into your daily plan.",
+        "UIBackgroundModes": ["fetch", "remote-notification"]
       },
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [

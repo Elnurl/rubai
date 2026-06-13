@@ -35,6 +35,14 @@ import {
 } from "@workspace/api-client-react";
 import { registerForPushAsync } from "@/lib/push";
 import {
+  clearCachedSessionToken,
+  clearLastActiveUserId,
+  registerPeriodicTierSyncTask,
+  registerTierSyncNotificationTask,
+  setLastActiveUserId,
+  unregisterTierSyncTasks,
+} from "@/lib/backgroundTierSync";
+import {
   TaskHistoryEntry,
   clearAllAtlas,
   clearLegacyV2Snapshot,
@@ -633,6 +641,10 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       setSyncStatus("idle");
       setSyncMessage(null);
       setLoaded(true);
+      // Clear background-task state so tasks don't run for a signed-out user.
+      void clearLastActiveUserId();
+      void clearCachedSessionToken();
+      void unregisterTierSyncTasks();
       return;
     }
 
@@ -640,6 +652,10 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     // to do (this guards against effect re-runs from Clerk re-emitting the
     // same identity).
     if (ownerRef.current === userId) return;
+
+    // Persist the user ID for background-task cache access (no React context
+    // available in background execution).
+    void setLastActiveUserId(userId);
 
     let cancelled = false;
     suppressPushRef.current = true;
@@ -883,6 +899,17 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
   }, [clerkLoaded, isSignedIn, userId]);
+
+  // ----- Background tier sync: task registration -----------------------
+  // Register the two background tasks (notification-triggered + periodic)
+  // once per signed-in session.  Both helpers are idempotent and fall back
+  // gracefully when background execution is unavailable (simulator, Android
+  // battery saver, iOS restrictions).
+  useEffect(() => {
+    if (!isSignedIn || !userId) return;
+    void registerTierSyncNotificationTask();
+    void registerPeriodicTierSyncTask();
+  }, [isSignedIn, userId]);
 
   // ----- Tier sync: foreground resume ----------------------------------
   // When the app returns to the foreground (e.g. user switches back after

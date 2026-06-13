@@ -65,11 +65,13 @@
   "dependencies": {
     "@ide/backoff": "^1.0.0",
     "expo-audio": "^1.1.1",
+    "expo-background-fetch": "^56.0.18",
     "expo-calendar": "~15.0.8",
     "expo-device": "~8.0.10",
     "expo-document-picker": "^56.0.4",
     "expo-notifications": "~0.32.17",
     "expo-speech": "^14.0.8",
+    "expo-task-manager": "^56.0.18",
     "expo-updates": "^56.0.19",
     "react-native-purchases": "^10.2.0"
   }
