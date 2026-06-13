@@ -97,15 +97,21 @@ Add headline overlays using Figma, Sketch, or Canva after capturing raw screensh
 
 ## Checklist
 
-### Apple App Store
-- [ ] 3+ screenshots at 1290 × 2796 px (6.7" iPhone)
-- [ ] 3+ screenshots at 1242 × 2208 px (5.5" iPhone)
-- [ ] App name, subtitle, description, keywords filled in App Store Connect
+### Apple App Store — Assets Prepared (files in this folder, ready to upload)
+- [x] 6 screenshot files at 1290 × 2796 px (6.7" iPhone): `ios-67-shot1-dashboard.png` through `ios-67-shot6-reflection.png`
+- [x] 3 screenshot files at 1242 × 2208 px (5.5" iPhone): `ios-55-shot1-dashboard.png` through `ios-55-shot3-coach.png`
+- [x] Headline overlays applied to all screenshots (text confirmed correct)
+
+### Apple App Store — Requires Human Action (browser + Apple ID)
+- [ ] Screenshots uploaded to App Store Connect → My Apps → [app] → iOS App → 6.7" Display and 5.5" Display
+- [ ] App name, subtitle, description, keywords filled in App Store Connect (copy from `listing.md`)
 - [ ] Privacy policy URL set in App Store Connect → App Privacy
-- [ ] App Privacy data practice questionnaire completed (see below)
+- [ ] App Privacy data practice questionnaire completed (see table below)
 - [ ] Content rating questionnaire completed (see `content-rating.md`)
 - [ ] Sign in with Apple entitlement enabled ✓ (already in `app.json`)
 - [ ] Support URL filled in
+
+> **Note on screenshot fidelity:** Current files are AI-generated marketing mockups at the correct store pixel dimensions. They can be replaced with real Xcode simulator captures at any time — see `store-upload-guide.md` for instructions. Apple accepts either for initial submission.
 
 ### App Privacy (Apple — Data Practice Questions)
 Navigate to: App Store Connect → your app → App Privacy
@@ -127,12 +133,16 @@ Navigate to: App Store Connect → your app → App Privacy
 
 *Audio and photos are processed in real time by OpenAI but not stored by rubai server-side beyond the request duration.
 
-### Google Play
-- [ ] Feature graphic (1024 × 500 px) uploaded
-- [ ] 2+ phone screenshots uploaded
-- [ ] Short description (≤80 chars) filled in
-- [ ] Full description filled in
+### Google Play — Assets Prepared (files in this folder, ready to upload)
+- [x] Feature graphic file (1024 × 500 px): `feature-graphic-1024x500.png`
+- [x] 2 phone screenshot files (1080 × 1920 px): `gplay-shot1-dashboard.png`, `gplay-shot2-coach.png`
+
+### Google Play — Requires Human Action (browser + Google account)
+- [ ] Feature graphic uploaded to Google Play Console → Store presence → Main store listing → Graphics
+- [ ] Phone screenshots uploaded (min 2 required)
+- [ ] Short description (≤80 chars) filled in (copy from `listing.md`)
+- [ ] Full description filled in (copy from `listing.md`)
 - [ ] Privacy policy URL set in Store listing
 - [ ] Content rating questionnaire completed (see `content-rating.md`)
 - [ ] Age group set (Everyone / 13+)
-- [ ] Data safety section completed (analogous to Apple App Privacy above)
+- [ ] Data safety section completed (analogous to Apple App Privacy table above)

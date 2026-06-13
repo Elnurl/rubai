@@ -60,6 +60,18 @@ uri = "file://artifacts/mobile/store-assets/screenshots/gplay-shot2-coach.png"
 type = "image"
 title = "rubai google play coach"
 
+[[generated]]
+id = "Wvhu4mxGpV9dSu8NEdsI9"
+uri = "file://artifacts/mobile/store-assets/screenshots/ios-67-shot2-roadmap-new.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "nwIhYFFOc918nguMiVRtR"
+uri = "file://artifacts/mobile/store-assets/screenshots/ios-55-shot2-roadmap-new.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "1OZJ-pAK6cNEuLkOeGyNm"
 uri = "file://exports/rubai-system-specification.pdf"
