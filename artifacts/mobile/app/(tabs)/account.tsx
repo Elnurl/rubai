@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import React from "react";
 import {
   Alert,
+  ActivityIndicator,
   Image,
   Platform,
   Pressable,
@@ -21,6 +22,8 @@ import { AskCoachPill } from "@/components/AskCoachPill";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { TIER_INFO, type SubscriptionTier } from "@/types/atlas";
+import { useGetMeTierHistory } from "@workspace/api-client-react";
+import type { TierTransitionEntry } from "@workspace/api-client-react";
 
 const APP_VERSION = "rubai · v1.0 · designed for execution";
 
@@ -47,6 +50,9 @@ export default function AccountScreen() {
 
   const tierKey = (tier as SubscriptionTier) in TIER_INFO ? (tier as SubscriptionTier) : "free";
   const tierInfo = TIER_INFO[tierKey];
+
+  const { data: tierHistoryData, isLoading: tierHistoryLoading } =
+    useGetMeTierHistory({ limit: 20 });
 
   const accountEmail = user?.primaryEmailAddress?.emailAddress ?? "Signed in";
   const fullName =
@@ -350,6 +356,35 @@ export default function AccountScreen() {
           />
         </Group>
 
+        {/* SUBSCRIPTION HISTORY */}
+        <SectionLabel>SUBSCRIPTION HISTORY</SectionLabel>
+        <Group>
+          {tierHistoryLoading ? (
+            <View style={styles.historyPlaceholder}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : !tierHistoryData?.transitions?.length ? (
+            <View style={styles.historyPlaceholder}>
+              <Text
+                style={{
+                  color: colors.mutedForeground,
+                  fontFamily: "Inter_400Regular",
+                  fontSize: 13,
+                }}
+              >
+                No subscription changes yet.
+              </Text>
+            </View>
+          ) : (
+            tierHistoryData.transitions.map((entry, idx) => (
+              <React.Fragment key={entry.id}>
+                {idx > 0 && <Divider />}
+                <HistoryRow entry={entry} />
+              </React.Fragment>
+            ))
+          )}
+        </Group>
+
         {/* SESSION */}
         <SectionLabel>SESSION</SectionLabel>
         <Group>
@@ -491,6 +526,98 @@ function NavRow({
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Tier-history helpers                                                       */
+/* -------------------------------------------------------------------------- */
+
+const TIER_RANK: Record<string, number> = { free: 0, pro: 1, premium: 2 };
+
+function transitionDirection(from: string, to: string): { label: string; icon: React.ComponentProps<typeof Feather>["name"]; positive: boolean } {
+  const fromRank = TIER_RANK[from] ?? 0;
+  const toRank = TIER_RANK[to] ?? 0;
+  if (toRank > fromRank) return { label: "Upgraded", icon: "arrow-up-circle", positive: true };
+  if (toRank < fromRank) return { label: "Downgraded", icon: "arrow-down-circle", positive: false };
+  return { label: "Changed", icon: "refresh-cw", positive: true };
+}
+
+function triggerLabel(triggeredBy: string, eventType: string | null): string {
+  if (triggeredBy === "sync-tier") return "App sync";
+  if (!eventType) return "Purchase";
+  const map: Record<string, string> = {
+    INITIAL_PURCHASE: "Purchase",
+    RENEWAL: "Renewal",
+    CANCELLATION: "Cancelled",
+    EXPIRATION: "Expired",
+    BILLING_ISSUE: "Billing issue",
+    PRODUCT_CHANGE: "Plan change",
+    TRANSFER: "Transfer",
+    SUBSCRIBER_ALIAS: "Account merge",
+  };
+  return map[eventType] ?? "Purchase";
+}
+
+function tierDisplayName(tier: string): string {
+  const key = tier as SubscriptionTier;
+  return TIER_INFO[key]?.label ?? (tier.charAt(0).toUpperCase() + tier.slice(1));
+}
+
+function formatHistoryDate(raw: Date | string): string {
+  const d = typeof raw === "string" ? new Date(raw) : raw;
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function HistoryRow({ entry }: { entry: TierTransitionEntry }) {
+  const colors = useColors();
+  const dir = transitionDirection(entry.fromTier, entry.toTier);
+  const trigger = triggerLabel(entry.triggeredBy, entry.eventType);
+  const accentColor = dir.positive ? colors.primary : colors.destructive;
+  const dateStr = formatHistoryDate(entry.createdAt);
+
+  return (
+    <View style={[styles.row, { minHeight: 56 }]}>
+      <View style={[styles.rowIcon, { backgroundColor: accentColor + "14" }]}>
+        <Feather name={dir.icon} size={14} color={accentColor} />
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text
+          numberOfLines={1}
+          style={{
+            color: colors.foreground,
+            fontFamily: "Inter_600SemiBold",
+            fontSize: 13,
+            letterSpacing: -0.1,
+          }}
+        >
+          {dir.label} to {tierDisplayName(entry.toTier)}
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={{
+            color: colors.mutedForeground,
+            fontFamily: "Inter_400Regular",
+            fontSize: 11,
+            lineHeight: 15,
+          }}
+        >
+          {trigger}
+          {dateStr ? `  ·  ${dateStr}` : ""}
+        </Text>
+      </View>
+      <Text
+        style={{
+          color: colors.mutedForeground,
+          fontFamily: "Inter_400Regular",
+          fontSize: 11,
+        }}
+      >
+        {tierDisplayName(entry.fromTier)}
+        {"  →"}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: {
@@ -549,6 +676,12 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  historyPlaceholder: {
+    paddingVertical: 18,
+    paddingHorizontal: 16,
     alignItems: "center",
     justifyContent: "center",
   },
