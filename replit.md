@@ -57,7 +57,9 @@ All three workspace `dev` scripts (`artifacts/mobile`, `artifacts/api-server`, `
 
 ## Webhook Health-Check Uptime Monitor
 
-The `GET /api/webhooks/revenuecat/health` endpoint is checked every **5 minutes** by a GitHub Actions cron job (`.github/workflows/webhook-health-check.yml`). If the endpoint returns anything other than HTTP 200 with `{ ok: true }`, the job fails and GitHub automatically emails the repository owner (and any watchers with "Failed workflows" notifications enabled).
+The `GET /api/webhooks/revenuecat/health` endpoint is checked every **5 minutes** by a GitHub Actions cron job (`.github/workflows/webhook-health-check.yml`). If the endpoint returns anything other than HTTP 200 with `{ ok: true, secretConfigured: true }`, the job fails and GitHub automatically emails the repository owner (and any watchers with "Failed workflows" notifications enabled).
+
+> **`secretConfigured: false`** in the health response means the `REVENUECAT_WEBHOOK_SECRET` Replit secret is unset or empty. Without it the endpoint cannot validate incoming webhook signatures, so real RevenueCat purchase events would be accepted unauthenticated and silently processed (or, in production, rejected with 503). Set the secret in **Replit → Secrets** and redeploy.
 
 ### Required GitHub Secrets
 

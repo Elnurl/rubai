@@ -43,7 +43,13 @@ jobs:
             exit 1
           fi
 
-          echo "Health check passed."
+          SECRET_CONFIGURED=$(python3 -c "import json,sys; d=json.load(open('/tmp/health_body.json')); print(str(d.get('secretConfigured','')).lower())")
+          if [ "$SECRET_CONFIGURED" != "true" ]; then
+            echo "::error::Webhook secret is not configured on the server (secretConfigured=false). Set the REVENUECAT_WEBHOOK_SECRET Replit secret — without it the endpoint accepts unauthenticated calls and real purchases may be silently dropped."
+            exit 1
+          fi
+
+          echo "Health check passed (ok=true, secretConfigured=true)."
 
       - name: Notify Slack on failure
         if: failure()
