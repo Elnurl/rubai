@@ -6,10 +6,13 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "seed-revenuecat": "tsx ./src/seedRevenueCat.ts",
+    "backfill-tier-history": "tsx ./src/backfillTierHistory.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@replit/revenuecat-sdk": "^4.2.0"
+    "@replit/revenuecat-sdk": "^4.2.0",
+    "@workspace/db": "workspace:*",
+    "drizzle-orm": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
