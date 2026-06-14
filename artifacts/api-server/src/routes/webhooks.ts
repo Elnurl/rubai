@@ -76,13 +76,26 @@ router.post("/webhooks/revenuecat", async (req, res) => {
     // attacker cannot deduce the secret one character at a time by measuring
     // response latency. Both buffers must be the same byte-length for
     // timingSafeEqual to work — a length mismatch is an instant rejection.
+    //
+    // Trim the stored secret to guard against accidental leading/trailing
+    // whitespace introduced when copy-pasting into the secrets manager (a
+    // common source of "right value, wrong bytes" mismatches).
     const authHeader = req.headers["authorization"] ?? "";
-    const secretBuf = Buffer.from(webhookSecret, "utf8");
+    const trimmedSecret = webhookSecret.trim();
+    const secretBuf = Buffer.from(trimmedSecret, "utf8");
     const headerBuf = Buffer.from(authHeader, "utf8");
     const valid =
       headerBuf.byteLength === secretBuf.byteLength &&
       timingSafeEqual(headerBuf, secretBuf);
     if (!valid) {
+      req.log?.warn(
+        {
+          headerByteLength: headerBuf.byteLength,
+          secretByteLength: secretBuf.byteLength,
+          headerPrefix: authHeader.slice(0, 8) || "(empty)",
+        },
+        "RC webhook: Authorization header does not match REVENUECAT_WEBHOOK_SECRET — check that the secret in Replit matches the value shown in RevenueCat Project Settings → Integrations → Webhooks",
+      );
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
