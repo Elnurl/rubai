@@ -71,3 +71,4 @@ REVENUECAT_GOOGLE_PLAY_STORE_APP_ID = "app2bb65b8564"
 
 [nix]
 channel = "stable-25_05"
+packages = ["eas-cli"]

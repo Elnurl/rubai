@@ -3,25 +3,12 @@
     "version": ">= 12.0.0",
     "appVersionSource": "remote"
   },
-  "update": {
-    "production": {
-      "channel": "production"
-    },
-    "preview": {
-      "channel": "preview"
-    }
-  },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "env": {
-        "EXPO_PUBLIC_REVENUECAT_TEST_API_KEY": "",
-        "EXPO_PUBLIC_REVENUECAT_IOS_API_KEY": "",
-        "EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY": ""
       }
     },
     "preview": {
@@ -29,14 +16,6 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "env": {
-        "EXPO_PUBLIC_DOMAIN": "",
-        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "",
-        "EXPO_PUBLIC_CLERK_PROXY_URL": "",
-        "EXPO_PUBLIC_REVENUECAT_TEST_API_KEY": "",
-        "EXPO_PUBLIC_REVENUECAT_IOS_API_KEY": "",
-        "EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY": ""
       }
     },
     "production": {
@@ -51,11 +30,6 @@
   },
   "submit": {
     "production": {
-      "ios": {
-        "appleId": "",
-        "ascAppId": "",
-        "appleTeamId": ""
-      },
       "android": {
         "serviceAccountKeyPath": "./google-service-account.json",
         "track": "internal"
