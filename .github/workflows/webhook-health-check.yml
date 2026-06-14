@@ -1,0 +1,46 @@
+name: Webhook Health Check
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub Actions cron runs in UTC.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    name: GET /api/webhooks/revenuecat/health
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping health endpoint
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          REVENUECAT_WEBHOOK_SECRET: ${{ secrets.REVENUECAT_WEBHOOK_SECRET }}
+        run: |
+          if [ -z "$API_BASE_URL" ]; then
+            echo "::error::API_BASE_URL secret is not set. Add it in GitHub → Settings → Secrets."
+            exit 1
+          fi
+
+          HEALTH_URL="${API_BASE_URL}/api/webhooks/revenuecat/health"
+          echo "Checking $HEALTH_URL"
+
+          HTTP_CODE=$(curl -s -o /tmp/health_body.json -w "%{http_code}" \
+            -H "Authorization: ${REVENUECAT_WEBHOOK_SECRET}" \
+            "$HEALTH_URL")
+
+          echo "HTTP status: $HTTP_CODE"
+          echo "Response body:"
+          cat /tmp/health_body.json
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Health check returned HTTP $HTTP_CODE (expected 200). The RevenueCat webhook path may be down."
+            exit 1
+          fi
+
+          OK_FIELD=$(python3 -c "import json,sys; d=json.load(open('/tmp/health_body.json')); print(str(d.get('ok','')).lower())")
+          if [ "$OK_FIELD" != "true" ]; then
+            echo "::error::Health check returned HTTP 200 but ok != true. Response: $(cat /tmp/health_body.json)"
+            exit 1
+          fi
+
+          echo "Health check passed."

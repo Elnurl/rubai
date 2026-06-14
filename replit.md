@@ -55,6 +55,39 @@ All three workspace `dev` scripts (`artifacts/mobile`, `artifacts/api-server`, `
 - **`@expo/vector-icons` & SF Symbols:** Iconography. Local TTF copies (`assets/fonts/{Feather,Ionicons,MaterialIcons}.ttf`) are loaded explicitly in `app/_layout.tsx` via `useFonts` to bypass an Expo Go bundling quirk that otherwise produces tofu boxes. The custom Expo Go static deploy script (`artifacts/mobile/scripts/build.js`) writes every bundled asset to disk under its **hashed** filename `<name>.<hash>.<type>` (matching what Expo's runtime `AssetSourceResolver` requests) — writing the bare `<name>.<type>` made every icon font 404 in the deployed bundle and broke all icons app-wide.
 - **Replit Secrets:** Environment variable management (`DATABASE_URL`, `CLERK_SECRET_KEY`, `AI_INTEGRATIONS_OPENAI_API_KEY`, `SESSION_SECRET`).
 
+## Webhook Health-Check Uptime Monitor
+
+The `GET /api/webhooks/revenuecat/health` endpoint is checked every **5 minutes** by a GitHub Actions cron job (`.github/workflows/webhook-health-check.yml`). If the endpoint returns anything other than HTTP 200 with `{ ok: true }`, the job fails and GitHub automatically emails the repository owner (and any watchers with "Failed workflows" notifications enabled).
+
+### Required GitHub Secrets
+
+Add these in **GitHub → Settings → Secrets and variables → Actions**:
+
+| Secret | Value |
+|---|---|
+| `API_BASE_URL` | Your production API root, e.g. `https://your-replit-domain.replit.app` — no trailing slash, no `/api` suffix |
+| `REVENUECAT_WEBHOOK_SECRET` | The same value stored in the `REVENUECAT_WEBHOOK_SECRET` Replit secret |
+
+### How it works
+
+The workflow sends:
+```
+GET <API_BASE_URL>/api/webhooks/revenuecat/health
+Authorization: <REVENUECAT_WEBHOOK_SECRET>
+```
+
+In production the endpoint validates the `Authorization` header using timing-safe comparison. A missing or wrong secret returns 401; an unconfigured server secret returns 503. Either causes the cron job to fail and GitHub to alert you.
+
+### Triggering a manual check
+
+Go to **GitHub → Actions → Webhook Health Check → Run workflow** to run it immediately without waiting for the next 5-minute tick.
+
+### Disabling the monitor
+
+Comment out or delete the `schedule:` block in `.github/workflows/webhook-health-check.yml`. The `workflow_dispatch:` trigger keeps the manual-run button available.
+
+---
+
 ## OTA Rollback Runbook
 
 If a bad JS bundle reaches users via EAS Update, you can roll it back in under a minute — no native rebuild or App Store review required.
