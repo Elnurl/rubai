@@ -1,15 +1,11 @@
 import { Router, type IRouter } from "express";
 import { timingSafeEqual } from "node:crypto";
-import { eq } from "drizzle-orm";
-import { db, usersTable, subscriptionsTable, tierTransitionsTable } from "@workspace/db";
+import { db, webhookRetryQueueTable } from "@workspace/db";
 import {
-  RC_ENTITLEMENT_PRO,
-  RC_ENTITLEMENT_PREMIUM,
-  tierFromEntitlements,
-  tierFromProductId,
-  type ActiveTier,
-} from "../lib/rcEntitlements";
-import { sendTierChangedPushTo } from "../lib/pushScheduler";
+  processWebhookEvent,
+  buildIdempotencyKey,
+  type RcWebhookEvent,
+} from "../lib/webhookProcessor";
 
 const router: IRouter = Router();
 
@@ -28,26 +24,6 @@ const ACTIVE_STATUSES = new Set([
   "NON_RENEWING_PURCHASE",
   "UNCANCELLATION",
 ]);
-
-const INACTIVE_STATUSES = new Set([
-  "CANCELLATION",
-  "EXPIRATION",
-  "BILLING_ISSUE",
-  "SUBSCRIBER_ALIAS",
-]);
-
-interface RcWebhookEvent {
-  type: string;
-  app_user_id?: string;
-  original_app_user_id?: string;
-  product_id?: string;
-  store?: string;
-  transaction_id?: string;
-  expiration_at_ms?: number | null;
-  entitlement_ids?: string[];
-  /** Unix timestamp (ms) when RevenueCat generated the event. */
-  event_timestamp_ms?: number | null;
-}
 
 interface RcWebhookBody {
   event?: RcWebhookEvent;
@@ -96,8 +72,6 @@ router.post("/webhooks/revenuecat", async (req, res) => {
   if (isProduction && !webhookSecret) {
     // Startup guard in index.ts should have prevented this, but defend in
     // depth: never process unauthenticated tier changes in production.
-    // Return 401 (not 500) so callers cannot distinguish misconfiguration
-    // from a deliberate auth rejection — avoids leaking server state.
     req.log?.error(
       "REVENUECAT_WEBHOOK_SECRET is unset in production — rejecting request",
     );
@@ -107,15 +81,7 @@ router.post("/webhooks/revenuecat", async (req, res) => {
 
   if (webhookSecret) {
     // RevenueCat sends the shared secret verbatim in the Authorization header
-    // (no "Bearer " prefix). Example: Authorization: <your-webhook-secret>
-    // We use timingSafeEqual to prevent timing-based brute-force attacks; an
-    // attacker cannot deduce the secret one character at a time by measuring
-    // response latency. Both buffers must be the same byte-length for
-    // timingSafeEqual to work — a length mismatch is an instant rejection.
-    //
-    // Trim the stored secret to guard against accidental leading/trailing
-    // whitespace introduced when copy-pasting into the secrets manager (a
-    // common source of "right value, wrong bytes" mismatches).
+    // (no "Bearer " prefix). timingSafeEqual prevents timing-based attacks.
     const authHeader = req.headers["authorization"] ?? "";
     const trimmedSecret = webhookSecret.trim();
     const secretBuf = Buffer.from(trimmedSecret, "utf8");
@@ -153,161 +119,154 @@ router.post("/webhooks/revenuecat", async (req, res) => {
     return;
   }
 
-  const productId = event.product_id ?? "";
-  const storeTransactionId = event.transaction_id ?? null;
-  const provider = event.store?.toLowerCase() ?? "revenuecat";
-
   const isActive = ACTIVE_STATUSES.has(event.type);
-  const isInactive = INACTIVE_STATUSES.has(event.type);
 
-  if (!isActive && !isInactive) {
-    res.status(200).json({ ok: true, skipped: "unhandled_event_type" });
-    return;
-  }
+  // ── Sign-up race window check ──────────────────────────────────────────
+  // For active events we may need to 404 so RevenueCat retries while the
+  // user row is being created.  We handle this BEFORE attempting the DB
+  // transaction; processWebhookEvent will return user_not_found (non-
+  // retryable) once the race window has passed.
+  //
+  // We do a quick user-existence check only in the race window path so we
+  // can return 404 (prompting RC to retry) without going through the full
+  // processor. Outside the window processWebhookEvent handles not-found
+  // gracefully as a permanent skip.
+  if (isActive) {
+    const eventAgeMs =
+      event.event_timestamp_ms != null
+        ? Date.now() - event.event_timestamp_ms
+        : 0;
 
-  try {
-    const user = await db.query.usersTable.findFirst({
-      where: eq(usersTable.clerkUserId, clerkUserId),
-    });
+    if (eventAgeMs <= WEBHOOK_RACE_WINDOW_MS) {
+      // Delegate to processWebhookEvent; if it returns user_not_found we
+      // return 404 here so RC keeps retrying within its own window.
+      const result = await processWebhookEvent(event, req.log ?? console);
 
-    if (!user) {
-      if (isActive) {
-        // Determine whether this looks like a sign-up race or a genuinely
-        // unknown user (e.g. test purchase from a deleted account).
-        //
-        // Strategy: use the event's own timestamp (`event_timestamp_ms`)
-        // as the reference. If the event was generated within the race
-        // window, the user row probably just hasn't been created yet
-        // (Clerk post-sign-up hook hasn't fired), so we return 404 to
-        // cause RevenueCat to retry. If the event is older than the race
-        // window — meaning RC has already been retrying for a while — the
-        // clerkUserId is genuinely unknown and we return 200 so RC stops
-        // retrying, preventing an indefinite retry loop.
-        //
-        // Fall-through when `event_timestamp_ms` is absent: we assume the
-        // event is recent to err on the side of applying the subscription.
-        const eventAgeMs =
-          event.event_timestamp_ms != null
-            ? Date.now() - event.event_timestamp_ms
-            : 0;
+      if (result.ok) {
+        req.log?.info(
+          { clerkUserId, eventType: event.type },
+          "RC webhook processed (inline)",
+        );
+        res.status(200).json({ ok: true });
+        return;
+      }
 
-        if (eventAgeMs <= WEBHOOK_RACE_WINDOW_MS) {
-          req.log?.warn(
-            { clerkUserId, eventType: event.type, eventAgeMs },
-            "RC webhook: user not found for recent active event — returning 404 to trigger RC retry",
-          );
-          res.status(404).json({ error: "user_not_found" });
-        } else {
-          req.log?.warn(
-            {
-              clerkUserId,
-              eventType: event.type,
-              eventAgeMs,
-              windowMs: WEBHOOK_RACE_WINDOW_MS,
-            },
-            "RC webhook: user not found and event is older than race window — skipping to stop RC retries",
-          );
-          res.status(200).json({ ok: true, skipped: "user_not_found" });
-        }
-      } else {
-        // For inactive events (cancellation, expiration, billing issues) the
-        // user's tier is already "free" by default, so there is nothing to
-        // apply. Returning 200 is safe — we don't want RC to retry forever
-        // for a user that may have been deleted after cancelling.
+      if (!result.retryable && result.error === "user_not_found") {
+        // User row doesn't exist yet and the event is fresh — return 404 so
+        // RevenueCat retries within its own retry window.
+        req.log?.warn(
+          { clerkUserId, eventType: event.type, eventAgeMs },
+          "RC webhook: user not found for recent active event — returning 404 to trigger RC retry",
+        );
+        res.status(404).json({ error: "user_not_found" });
+        return;
+      }
+
+      if (!result.retryable) {
+        // Some other permanent skip (unhandled event type, no user id, etc.)
+        res.status(200).json({ ok: true, skipped: result.error });
+        return;
+      }
+
+      // Retryable error (DB down) — try to enqueue so our worker retries.
+      // If the enqueue itself fails (DB completely unavailable) return 500 so
+      // RC keeps retrying while the database recovers.
+      const enqueued = await enqueueEvent(event, req.log ?? console);
+      if (enqueued) {
         req.log?.warn(
           { clerkUserId, eventType: event.type },
-          "RC webhook: user not found for inactive event — skipping",
+          "RC webhook: inline processing failed — queued for retry",
         );
-        res.status(200).json({ ok: true, skipped: "user_not_found" });
+        res.status(200).json({ ok: true, queued: true });
+      } else {
+        req.log?.error(
+          { clerkUserId, eventType: event.type },
+          "RC webhook: inline processing failed and could not enqueue — returning 500",
+        );
+        res.status(500).json({ error: "Internal error" });
       }
       return;
     }
+  }
 
-    const status = isActive ? "active" : "canceled";
-    const currentPeriodEnd = event.expiration_at_ms
-      ? new Date(event.expiration_at_ms)
-      : null;
+  // ── Outside race window (or inactive event) ────────────────────────────
+  // Try inline processing first. If it fails with a retryable error, enqueue
+  // the event so our background worker handles it — this prevents the
+  // purchase from being silently dropped when RC's own retry window expires.
+  const result = await processWebhookEvent(event, req.log ?? console);
 
-    // Compute the new tier before the transaction so we can use it after.
-    let newTier: ActiveTier = "free";
-    if (isActive) {
-      const entitlements = event.entitlement_ids ?? [];
-      newTier =
-        entitlements.length > 0
-          ? tierFromEntitlements(entitlements)
-          : tierFromProductId(productId);
-    }
-
-    const tierChanged = user.tier !== newTier;
-
-    await db.transaction(async (tx) => {
-      if (productId && storeTransactionId) {
-        await tx
-          .insert(subscriptionsTable)
-          .values({
-            userId: user.id,
-            provider,
-            productId,
-            status,
-            currentPeriodEnd,
-            storeTransactionId,
-            raw: event as unknown as Record<string, unknown>,
-          })
-          .onConflictDoUpdate({
-            target: [
-              subscriptionsTable.provider,
-              subscriptionsTable.storeTransactionId,
-            ],
-            set: {
-              status,
-              currentPeriodEnd,
-              raw: event as unknown as Record<string, unknown>,
-              updatedAt: new Date(),
-            },
-          });
-      }
-
-      await tx
-        .update(usersTable)
-        .set({
-          tier: newTier,
-          updatedAt: new Date(),
-        })
-        .where(eq(usersTable.id, user.id));
-
-      if (tierChanged) {
-        await tx.insert(tierTransitionsTable).values({
-          userId: user.id,
-          fromTier: user.tier,
-          toTier: newTier,
-          triggeredBy: "webhook",
-          eventType: event.type,
-          metadata: {
-            provider,
-            productId: productId || null,
-            storeTransactionId: storeTransactionId || null,
-          },
-        });
-      }
-    });
-
+  if (result.ok) {
     req.log?.info(
-      { clerkUserId, eventType: event.type, provider, newTier, tierChanged },
-      "RC webhook processed",
+      { clerkUserId, eventType: event.type },
+      "RC webhook processed (inline)",
     );
-
-    // Fire-and-forget: poke the user's device so the tier change surfaces
-    // immediately without requiring an app restart. Errors are swallowed so
-    // a missing / invalid push token never causes the webhook to return 5xx.
-    if (user.expoPushToken) {
-      void sendTierChangedPushTo(user.expoPushToken, newTier).catch(() => {});
-    }
-
     res.status(200).json({ ok: true });
-  } catch (err) {
-    req.log?.error({ err, clerkUserId }, "RC webhook processing failed");
+    return;
+  }
+
+  if (!result.retryable) {
+    // Permanent skip: unknown user after race window, unhandled event type, etc.
+    req.log?.warn(
+      { clerkUserId, eventType: event.type, reason: result.error },
+      "RC webhook: permanent skip",
+    );
+    res.status(200).json({ ok: true, skipped: result.error });
+    return;
+  }
+
+  // Retryable failure — enqueue for the background worker and ack RC so it
+  // doesn't exhaust its own limited retry budget.
+  const enqueued = await enqueueEvent(event, req.log ?? console);
+  if (enqueued) {
+    req.log?.warn(
+      { clerkUserId, eventType: event.type },
+      "RC webhook: inline processing failed — queued for retry",
+    );
+    res.status(200).json({ ok: true, queued: true });
+  } else {
+    // Could not enqueue (DB completely unavailable) — return 500 so RC
+    // keeps retrying while the database recovers.
+    req.log?.error(
+      { clerkUserId, eventType: event.type },
+      "RC webhook: inline processing failed and could not enqueue — returning 500",
+    );
     res.status(500).json({ error: "Internal error" });
   }
 });
+
+/**
+ * Insert the event into the retry queue.  Uses ON CONFLICT DO NOTHING so
+ * duplicate deliveries from RevenueCat are silently ignored.
+ *
+ * Returns true if the enqueue succeeded (row inserted or already existed),
+ * false if the DB write itself failed.
+ */
+async function enqueueEvent(
+  event: RcWebhookEvent,
+  log: { warn?(obj: object, msg: string): void; error?(obj: object, msg: string): void },
+): Promise<boolean> {
+  const clerkUserId =
+    event.original_app_user_id ?? event.app_user_id ?? null;
+  const idempotencyKey = buildIdempotencyKey(event);
+
+  try {
+    await db
+      .insert(webhookRetryQueueTable)
+      .values({
+        idempotencyKey,
+        eventType: event.type,
+        clerkUserId,
+        payload: event as unknown as Record<string, unknown>,
+      })
+      .onConflictDoNothing();
+    return true;
+  } catch (err) {
+    log.error?.(
+      { err, idempotencyKey, eventType: event.type },
+      "RC webhook: failed to enqueue event for retry",
+    );
+    return false;
+  }
+}
 
 export default router;

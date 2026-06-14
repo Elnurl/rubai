@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startPushScheduler } from "./lib/pushScheduler";
+import { startWebhookRetryWorker } from "./lib/webhookRetryWorker";
 import { runMigrations } from "@workspace/db";
 
 // ── Required env-var guard ─────────────────────────────────────────────────
@@ -56,5 +57,6 @@ if (Number.isNaN(port) || port <= 0) {
 
     logger.info({ port }, "Server listening");
     startPushScheduler();
+    startWebhookRetryWorker();
   });
 })();

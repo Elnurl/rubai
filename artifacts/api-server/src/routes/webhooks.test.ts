@@ -47,6 +47,8 @@ vi.mock("@workspace/db", () => {
           upsertCallCount++;
           return Promise.resolve(undefined);
         }),
+        // for tier_transitions insert which uses no onConflictDoUpdate
+        then: undefined,
       }),
     }),
     update: () => ({
@@ -74,9 +76,27 @@ vi.mock("@workspace/db", () => {
           return fn(makeTx());
         },
       ),
+      // Used by enqueueEvent in webhooks.ts and by the retry worker.
+      // ON CONFLICT DO NOTHING just resolves — no state tracking needed.
+      insert: () => ({
+        values: () => ({
+          onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+        }),
+      }),
+      // Used by reclaimStaleProcessingRows in the retry worker (not exercised
+      // in these route tests, but needed so import-time setup doesn't throw).
+      update: () => ({
+        set: () => ({
+          where: () => ({
+            returning: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+      }),
     },
     usersTable: {},
     subscriptionsTable: {},
+    tierTransitionsTable: {},
+    webhookRetryQueueTable: {},
     // Export the inner spy so tests can configure per-scenario return values.
     __mockFindFirst: mockFindFirst,
   };
