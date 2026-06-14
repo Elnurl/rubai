@@ -51,6 +51,34 @@ jobs:
 
           echo "Health check passed (ok=true, secretConfigured=true)."
 
+      - name: Auto-resolve PagerDuty incident on success
+        if: success()
+        env:
+          PAGERDUTY_INTEGRATION_KEY: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
+        run: |
+          if [ -z "$PAGERDUTY_INTEGRATION_KEY" ]; then
+            echo "PAGERDUTY_INTEGRATION_KEY is not set — skipping PagerDuty resolve. Add it in GitHub → Settings → Secrets to enable auto-resolve."
+            exit 0
+          fi
+
+          HTTP_CODE=$(curl -s -o /tmp/pd_resolve_response.json -w "%{http_code}" \
+            -X POST "https://events.pagerduty.com/v2/enqueue" \
+            -H "Content-Type: application/json" \
+            --data "{
+              \"routing_key\": \"${PAGERDUTY_INTEGRATION_KEY}\",
+              \"event_action\": \"resolve\",
+              \"dedup_key\": \"revenuecat-webhook-health\"
+            }")
+
+          echo "PagerDuty resolve response (HTTP $HTTP_CODE):"
+          cat /tmp/pd_resolve_response.json
+
+          if [ "$HTTP_CODE" != "202" ]; then
+            echo "::warning::PagerDuty resolve submission returned HTTP $HTTP_CODE (expected 202). Check the integration key."
+          else
+            echo "PagerDuty incident resolved successfully."
+          fi
+
       - name: Notify Slack on failure
         if: failure()
         env:
