@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import React, { useEffect } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
@@ -7,6 +8,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withDelay,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,6 +17,8 @@ import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 
 const AUTO_DISMISS_MS = 4000;
+const SWIPE_DISTANCE_THRESHOLD = -40;
+const SWIPE_VELOCITY_THRESHOLD = -600;
 
 type IconName = React.ComponentProps<typeof Feather>["name"];
 
@@ -76,9 +80,13 @@ export function TierChangeToast() {
   const { pendingTierChangeToast, dismissTierChangeToast } = useAtlas();
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(-20);
+  const gestureOffsetY = useSharedValue(0);
 
   useEffect(() => {
     if (!pendingTierChangeToast) return;
+
+    gestureOffsetY.value = 0;
+
     opacity.value = withTiming(1, {
       duration: 220,
       easing: Easing.out(Easing.quad),
@@ -100,11 +108,34 @@ export function TierChangeToast() {
       AUTO_DISMISS_MS,
       withTiming(-20, { duration: 200 }),
     );
-  }, [pendingTierChangeToast, opacity, translateY, dismissTierChangeToast]);
+  }, [pendingTierChangeToast, opacity, translateY, gestureOffsetY, dismissTierChangeToast]);
+
+  const panGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      if (e.translationY < 0) {
+        gestureOffsetY.value = e.translationY;
+      }
+    })
+    .onEnd((e) => {
+      const shouldDismiss =
+        e.translationY < SWIPE_DISTANCE_THRESHOLD ||
+        e.velocityY < SWIPE_VELOCITY_THRESHOLD;
+
+      if (shouldDismiss) {
+        gestureOffsetY.value = withTiming(-200, { duration: 180 });
+        opacity.value = withTiming(0, { duration: 180 }, (finished) => {
+          if (finished) {
+            runOnJS(dismissTierChangeToast)();
+          }
+        });
+      } else {
+        gestureOffsetY.value = withSpring(0, { damping: 20, stiffness: 300 });
+      }
+    });
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
-    transform: [{ translateY: translateY.value }],
+    transform: [{ translateY: translateY.value + gestureOffsetY.value }],
   }));
 
   if (!pendingTierChangeToast) return null;
@@ -119,59 +150,62 @@ export function TierChangeToast() {
   const iconBg = msg.isUpgrade ? colors.accent : colors.mutedForeground;
 
   return (
-    <Animated.View
-      pointerEvents="box-none"
-      style={[styles.wrap, { top }, animatedStyle]}
-    >
-      <Pressable
-        onPress={dismissTierChangeToast}
-        style={[
-          styles.card,
-          {
-            backgroundColor: colors.foreground,
-            borderRadius: colors.radius,
-          },
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel={msg.title}
+    <GestureDetector gesture={panGesture}>
+      <Animated.View
+        pointerEvents="box-none"
+        style={[styles.wrap, { top }, animatedStyle]}
       >
-        <View style={[styles.iconWrap, { backgroundColor: iconBg }]}>
-          <Feather
-            name={msg.icon}
-            size={16}
-            color={colors.primaryForeground}
-          />
-        </View>
-        <View style={styles.text}>
-          <Text
-            style={[
-              styles.eyebrow,
-              { color: colors.accent, fontFamily: "Inter_600SemiBold" },
-            ]}
-          >
-            {msg.eyebrow}
-          </Text>
-          <Text
-            style={[
-              styles.title,
-              { color: colors.background, fontFamily: "Inter_700Bold" },
-            ]}
-            numberOfLines={1}
-          >
-            {msg.title}
-          </Text>
-          <Text
-            style={[
-              styles.subtitle,
-              { color: colors.background, fontFamily: "Inter_400Regular" },
-            ]}
-            numberOfLines={2}
-          >
-            {msg.subtitle}
-          </Text>
-        </View>
-      </Pressable>
-    </Animated.View>
+        <Pressable
+          onPress={dismissTierChangeToast}
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.foreground,
+              borderRadius: colors.radius,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={msg.title}
+          accessibilityHint="Swipe up or tap to dismiss"
+        >
+          <View style={[styles.iconWrap, { backgroundColor: iconBg }]}>
+            <Feather
+              name={msg.icon}
+              size={16}
+              color={colors.primaryForeground}
+            />
+          </View>
+          <View style={styles.text}>
+            <Text
+              style={[
+                styles.eyebrow,
+                { color: colors.accent, fontFamily: "Inter_600SemiBold" },
+              ]}
+            >
+              {msg.eyebrow}
+            </Text>
+            <Text
+              style={[
+                styles.title,
+                { color: colors.background, fontFamily: "Inter_700Bold" },
+              ]}
+              numberOfLines={1}
+            >
+              {msg.title}
+            </Text>
+            <Text
+              style={[
+                styles.subtitle,
+                { color: colors.background, fontFamily: "Inter_400Regular" },
+              ]}
+              numberOfLines={2}
+            >
+              {msg.subtitle}
+            </Text>
+          </View>
+        </Pressable>
+      </Animated.View>
+    </GestureDetector>
   );
 }
 
