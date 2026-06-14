@@ -44,3 +44,40 @@ jobs:
           fi
 
           echo "Health check passed."
+
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL is not set — skipping Slack alert. Add it in GitHub → Settings → Secrets to enable paging."
+            exit 0
+          fi
+
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          curl -s -X POST "$SLACK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            --data "{
+              \"text\": \":rotating_light: *RevenueCat webhook is DOWN*\",
+              \"attachments\": [
+                {
+                  \"color\": \"danger\",
+                  \"fields\": [
+                    {
+                      \"title\": \"Endpoint\",
+                      \"value\": \"${{ secrets.API_BASE_URL }}/api/webhooks/revenuecat/health\",
+                      \"short\": false
+                    },
+                    {
+                      \"title\": \"Run\",
+                      \"value\": \"<${RUN_URL}|View failed workflow run>\",
+                      \"short\": false
+                    }
+                  ],
+                  \"footer\": \"Webhook Health Check · ${{ github.repository }}\",
+                  \"ts\": $(date +%s)
+                }
+              ]
+            }"
