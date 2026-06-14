@@ -51,6 +51,62 @@ jobs:
 
           echo "Health check passed (ok=true, secretConfigured=true)."
 
+      - name: Write failure summary
+        if: failure()
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          PAGERDUTY_INTEGRATION_KEY: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
+        run: |
+          HEALTH_URL="${API_BASE_URL}/api/webhooks/revenuecat/health"
+          RESPONSE_BODY=""
+          if [ -f /tmp/health_body.json ]; then
+            RESPONSE_BODY=$(cat /tmp/health_body.json)
+          fi
+
+          PD_LINK=""
+          if [ -n "$PAGERDUTY_INTEGRATION_KEY" ]; then
+            PD_LINK="- 🔴 **PagerDuty:** [Open active incidents](https://app.pagerduty.com)"
+          fi
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<SUMMARY
+          ## ❌ RevenueCat Webhook Health Check Failed
+
+          **Endpoint:** \`${HEALTH_URL}\`
+
+          **Raw response:**
+          \`\`\`json
+          ${RESPONSE_BODY:-<no response body — endpoint may be unreachable>}
+          \`\`\`
+
+          ## 🔧 On-call runbook
+
+          Work through these steps in order until the health check passes again:
+
+          1. **Check Replit deploy status**
+             - Open the Replit project and verify the API Server workflow is running.
+             - If it is stopped or crashed, restart it and wait ~30 s for the health check to re-run.
+
+          2. **Verify the \`REVENUECAT_WEBHOOK_SECRET\` secret**
+             - In Replit → Secrets, confirm \`REVENUECAT_WEBHOOK_SECRET\` is set and non-empty.
+             - In GitHub → Settings → Secrets, confirm the same value is stored as \`REVENUECAT_WEBHOOK_SECRET\`.
+             - A \`secretConfigured: false\` response body means the Replit secret is missing or empty.
+
+          3. **Check recent deployments**
+             - If a recent deploy broke the server, use the OTA rollback runbook:
+               \`\`\`bash
+               pnpm run eas:rollback:production
+               \`\`\`
+             - Re-deploy the API server after fixing the root cause.
+
+          4. **Escalate if unresolved within 15 minutes**
+          ${PD_LINK}
+             - Trigger a manual PagerDuty alert if automated paging did not fire.
+             - Page the on-call engineer directly and start an incident channel.
+
+          ---
+          *Workflow run: [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})*
+          SUMMARY
+
       - name: Auto-resolve PagerDuty incident on success
         if: success()
         env:
