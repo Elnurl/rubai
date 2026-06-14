@@ -205,6 +205,10 @@ type AtlasContextValue = AtlasState & {
 
 export type TierChangeToastPayload = { fromTier: string; toTier: string };
 
+type ToastQueueEntry =
+  | { kind: "tier-change"; payload: TierChangeToastPayload }
+  | { kind: "award"; payload: EarnedAward };
+
 export class GoalLimitError extends Error {
   constructor(public limit: number) {
     super(`Goal limit reached: ${limit}`);
@@ -401,25 +405,59 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [activeGoalId, setActiveGoalId] = useState<string | null>(null);
-  const [pendingAwardToast, setPendingAwardToast] = useState<EarnedAward | null>(null);
-  const pendingAwardToastRef = useRef<EarnedAward | null>(null);
-  const awardQueueRef = useRef<EarnedAward[]>([]);
+  // --- Unified toast queue ---------------------------------------------------
+  // A single queue ensures AwardToast and TierChangeToast never overlap.
+  // Tier-change entries are inserted before any pending award entries (higher
+  // priority); award entries always append to the back.
+  const [activeToast, setActiveToast] = useState<ToastQueueEntry | null>(null);
+  const activeToastRef = useRef<ToastQueueEntry | null>(null);
+  const toastQueueRef = useRef<ToastQueueEntry[]>([]);
+
+  const advanceToastQueue = useCallback(() => {
+    const next = toastQueueRef.current.shift() ?? null;
+    activeToastRef.current = next;
+    setActiveToast(next);
+  }, []);
+
+  const enqueueToast = useCallback(
+    (entry: ToastQueueEntry) => {
+      if (!activeToastRef.current) {
+        activeToastRef.current = entry;
+        setActiveToast(entry);
+        return;
+      }
+      if (entry.kind === "tier-change") {
+        // Insert ahead of any already-queued award entries so plan changes
+        // are always shown before award toasts.
+        const firstAwardIdx = toastQueueRef.current.findIndex(
+          (e) => e.kind === "award",
+        );
+        if (firstAwardIdx === -1) {
+          toastQueueRef.current.push(entry);
+        } else {
+          toastQueueRef.current.splice(firstAwardIdx, 0, entry);
+        }
+      } else {
+        toastQueueRef.current.push(entry);
+      }
+    },
+    [],
+  );
 
   const dismissAwardToast = useCallback(() => {
-    pendingAwardToastRef.current = null;
-    const next = awardQueueRef.current.shift();
-    if (next) {
-      pendingAwardToastRef.current = next;
-      setPendingAwardToast(next);
-    } else {
-      setPendingAwardToast(null);
-    }
-  }, []);
-  const [pendingTierChangeToast, setPendingTierChangeToast] =
-    useState<TierChangeToastPayload | null>(null);
+    advanceToastQueue();
+  }, [advanceToastQueue]);
+
   const dismissTierChangeToast = useCallback(() => {
-    setPendingTierChangeToast(null);
-  }, []);
+    advanceToastQueue();
+  }, [advanceToastQueue]);
+
+  // Derived values — at most one of these is non-null at any given moment,
+  // which guarantees the two toast components never render simultaneously.
+  const pendingAwardToast =
+    activeToast?.kind === "award" ? activeToast.payload : null;
+  const pendingTierChangeToast =
+    activeToast?.kind === "tier-change" ? activeToast.payload : null;
 
   const [tier, setTier] = useState<string>(DEFAULT_SUBSCRIPTION.tier);
   const [account, setAccount] = useState<AccountPrefs>(DEFAULT_ACCOUNT);
@@ -945,7 +983,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
           setTier(res.tier);
           void writeCacheSnapshot(owner);
           if (prevTier !== res.tier) {
-            setPendingTierChangeToast({ fromTier: prevTier, toTier: res.tier });
+            enqueueToast({ kind: "tier-change", payload: { fromTier: prevTier, toTier: res.tier } });
           }
           if (__DEV__) console.log("[atlas] tier updated on foreground:", res.tier);
         })
@@ -991,7 +1029,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
           setTier(res.tier);
           void writeCacheSnapshot(owner);
           if (prevTier !== res.tier) {
-            setPendingTierChangeToast({ fromTier: prevTier, toTier: res.tier });
+            enqueueToast({ kind: "tier-change", payload: { fromTier: prevTier, toTier: res.tier } });
           }
           if (__DEV__) console.log("[atlas] tier updated via push:", res.tier);
         })
@@ -1212,24 +1250,14 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
       if (toQueue.length > 0) {
-        // Surface the most "important" award if multiple unlocked at once;
-        // ordering in AWARD_DEFS encodes loose priority (streaks bigger first
-        // for ties). For simplicity we just queue them sequentially.
+        // Enqueue each new award through the shared toast queue so they never
+        // overlap a tier-change toast (or each other).
         for (const award of toQueue) {
-          awardQueueRef.current.push(award);
-        }
-        // Trigger the toast pump — `setPendingAwardToast` only assigns when
-        // nothing is currently showing; the toast's onClose drains the queue.
-        if (!pendingAwardToastRef.current) {
-          const next = awardQueueRef.current.shift();
-          if (next) {
-            pendingAwardToastRef.current = next;
-            setPendingAwardToast(next);
-          }
+          enqueueToast({ kind: "award", payload: award });
         }
       }
     },
-    [updateActiveGoal],
+    [updateActiveGoal, enqueueToast],
   );
 
   const appendActiveFocusMinutes = useCallback(
