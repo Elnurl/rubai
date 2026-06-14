@@ -35,6 +35,7 @@ import type {
   GCalSyncPlanResult,
   GenerateTitleRequest,
   GenerateTitleResponse,
+  GetMeTierHistoryParams,
   GoogleCalendarTodayEventsParams,
   HealthStatus,
   IntakeQuestionsRequest,
@@ -59,6 +60,7 @@ import type {
   RoadmapEvolutionResponse,
   RoadmapRequest,
   SendTestPushResponse,
+  TierHistoryResponse,
   TranscribeRequest,
   TranscribeResponse,
 } from "./api.schemas";
@@ -373,6 +375,104 @@ export const usePutMeState = <
 > => {
   return useMutation(getPutMeStateMutationOptions(options));
 };
+
+/**
+ * Returns every tier change in reverse-chronological order. Useful for support tooling to answer billing questions without database access.
+ * @summary Subscription tier transition history for the signed-in user
+ */
+export const getGetMeTierHistoryUrl = (params?: GetMeTierHistoryParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/me/tier-history?${stringifiedParams}`
+    : `/api/me/tier-history`;
+};
+
+export const getMeTierHistory = async (
+  params?: GetMeTierHistoryParams,
+  options?: RequestInit,
+): Promise<TierHistoryResponse> => {
+  return customFetch<TierHistoryResponse>(getGetMeTierHistoryUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMeTierHistoryQueryKey = (
+  params?: GetMeTierHistoryParams,
+) => {
+  return [`/api/me/tier-history`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetMeTierHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMeTierHistory>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: GetMeTierHistoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMeTierHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetMeTierHistoryQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMeTierHistory>>
+  > = ({ signal }) => getMeTierHistory(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMeTierHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMeTierHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMeTierHistory>>
+>;
+export type GetMeTierHistoryQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Subscription tier transition history for the signed-in user
+ */
+
+export function useGetMeTierHistory<
+  TData = Awaited<ReturnType<typeof getMeTierHistory>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: GetMeTierHistoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMeTierHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMeTierHistoryQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Continue an adaptive onboarding conversation for the chosen goal model

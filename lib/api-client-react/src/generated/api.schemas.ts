@@ -64,6 +64,26 @@ export interface GCalSyncPlanResult {
 }
 
 /**
+ * A single tier change event in the user's subscription history.
+ */
+export interface TierTransitionEntry {
+  id: number;
+  fromTier: string;
+  toTier: string;
+  /** "webhook" or "sync-tier" */
+  triggeredBy: string;
+  /** Raw RevenueCat event type (e.g. "INITIAL_PURCHASE"). Null for sync-tier entries. */
+  eventType: string | null;
+  createdAt: string;
+}
+
+export interface TierHistoryResponse {
+  transitions: TierTransitionEntry[];
+  /** Total number of transitions returned in this response. */
+  total: number;
+}
+
+/**
  * Public-safe identity and tier for the signed-in user.
  */
 export interface MeResponse {
@@ -820,6 +840,15 @@ export interface LegalAcceptInput {
   /** @minItems 1 */
   documents: LegalAcceptItem[];
 }
+
+export type GetMeTierHistoryParams = {
+  /**
+   * Maximum number of records to return (1–100, default 50).
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+};
 
 export type GoogleCalendarTodayEventsParams = {
   calendarId: string;

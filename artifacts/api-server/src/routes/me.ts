@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db, usersTable, userStateTable, tierTransitionsTable } from "@workspace/db";
 import {
   GetMeResponse,
@@ -198,10 +198,51 @@ router.post("/me/sync-tier", async (req, res): Promise<void> => {
   res.json({ tier });
 });
 
-// GET /me/behavioral-state
-// Returns the pre-computed behavioral state for the authenticated user.
-// Used by the mobile insights screen to show live energy / procrastination /
-// flow-state data derived from real behavioral events.
+// GET /me/tier-history
+// Returns the authenticated user's subscription tier transition history in
+// reverse-chronological order. Intended for self-service inspection and
+// support tooling so billing questions can be answered without DB access.
+router.get("/me/tier-history", async (req, res): Promise<void> => {
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, req.userId!));
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  const rawLimit = parseInt(String(req.query.limit ?? "50"), 10);
+  const limit = Number.isNaN(rawLimit)
+    ? 50
+    : Math.min(100, Math.max(1, rawLimit));
+
+  const rows = await db
+    .select({
+      id: tierTransitionsTable.id,
+      fromTier: tierTransitionsTable.fromTier,
+      toTier: tierTransitionsTable.toTier,
+      triggeredBy: tierTransitionsTable.triggeredBy,
+      eventType: tierTransitionsTable.eventType,
+      createdAt: tierTransitionsTable.createdAt,
+    })
+    .from(tierTransitionsTable)
+    .where(eq(tierTransitionsTable.userId, user.id))
+    .orderBy(desc(tierTransitionsTable.createdAt))
+    .limit(limit);
+
+  const transitions = rows.map((r) => ({
+    id: r.id,
+    fromTier: r.fromTier,
+    toTier: r.toTier,
+    triggeredBy: r.triggeredBy,
+    eventType: r.eventType ?? null,
+    createdAt: r.createdAt.toISOString(),
+  }));
+
+  res.json({ transitions, total: transitions.length });
+});
+
 router.get("/me/behavioral-state", async (req, res): Promise<void> => {
   const [user] = await db
     .select()

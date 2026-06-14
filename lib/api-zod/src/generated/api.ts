@@ -124,6 +124,46 @@ export const PutMeStateResponse = zod.object({
 });
 
 /**
+ * Returns every tier change in reverse-chronological order. Useful for support tooling to answer billing questions without database access.
+ * @summary Subscription tier transition history for the signed-in user
+ */
+export const getMeTierHistoryQueryLimitDefault = 50;
+export const getMeTierHistoryQueryLimitMax = 100;
+
+export const GetMeTierHistoryQueryParams = zod.object({
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(getMeTierHistoryQueryLimitMax)
+    .default(getMeTierHistoryQueryLimitDefault)
+    .describe("Maximum number of records to return (1–100, default 50)."),
+});
+
+export const GetMeTierHistoryResponse = zod.object({
+  transitions: zod.array(
+    zod
+      .object({
+        id: zod.number(),
+        fromTier: zod.string(),
+        toTier: zod.string(),
+        triggeredBy: zod.string().describe('\"webhook\" or \"sync-tier\"'),
+        eventType: zod
+          .union([zod.string(), zod.null()])
+          .describe(
+            'Raw RevenueCat event type (e.g. \"INITIAL_PURCHASE\"). Null for sync-tier entries.',
+          ),
+        createdAt: zod.coerce.date(),
+      })
+      .describe(
+        "A single tier change event in the user's subscription history.",
+      ),
+  ),
+  total: zod
+    .number()
+    .describe("Total number of transitions returned in this response."),
+});
+
+/**
  * @summary Continue an adaptive onboarding conversation for the chosen goal model
  */
 export const AtlasOnboardingChatBody = zod.object({

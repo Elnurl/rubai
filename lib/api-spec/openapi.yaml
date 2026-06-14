@@ -100,6 +100,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/MeStateConflictResponse"
 
+  /me/tier-history:
+    get:
+      operationId: getMeTierHistory
+      tags: [me]
+      summary: Subscription tier transition history for the signed-in user
+      description: Returns every tier change in reverse-chronological order. Useful for support tooling to answer billing questions without database access.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          description: Maximum number of records to return (1–100, default 50).
+      responses:
+        "200":
+          description: Tier transition history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TierHistoryResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /atlas/onboarding-chat:
     post:
       operationId: atlasOnboardingChat
@@ -654,6 +684,41 @@ components:
           items:
             type: integer
       required: [written, eventIds, successIndices]
+
+    TierTransitionEntry:
+      type: object
+      description: A single tier change event in the user's subscription history.
+      properties:
+        id:
+          type: integer
+        fromTier:
+          type: string
+        toTier:
+          type: string
+        triggeredBy:
+          type: string
+          description: '"webhook" or "sync-tier"'
+        eventType:
+          oneOf:
+            - type: string
+            - type: "null"
+          description: Raw RevenueCat event type (e.g. "INITIAL_PURCHASE"). Null for sync-tier entries.
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, fromTier, toTier, triggeredBy, eventType, createdAt]
+
+    TierHistoryResponse:
+      type: object
+      properties:
+        transitions:
+          type: array
+          items:
+            $ref: "#/components/schemas/TierTransitionEntry"
+        total:
+          type: integer
+          description: Total number of transitions returned in this response.
+      required: [transitions, total]
 
     MeResponse:
       type: object
