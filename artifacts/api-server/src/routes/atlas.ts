@@ -1025,6 +1025,7 @@ router.post("/coach", async (req, res) => {
 Speak conversationally, with warmth and precision. EVERY reply must ground itself in the real context below — reference the current phase, today's tasks, a recent reflection, a learned trait, or a known fact, not generic advice. Push back gently when they make excuses, celebrate small wins, name the pattern you see.
 
 Hard rules:
+- LANGUAGE RULE: Write ALL text output (reply, suggestedReplies) in the same language as the user's goal and profile data. If the goal is in Turkish, respond in Turkish. If in Azerbaijani, in Azerbaijani. If in Russian, in Russian. Never switch to another language.
 - "reply" is plain prose. No markdown, headings, bullets, or emojis. Under 110 words unless they explicitly ask for detail.
 - "suggestedReplies": 0-3 short follow-ups (<= 50 chars each) that THIS user would plausibly want to send next given THIS context. Each must reference something concrete (a phase name, a reflection reason, a fact). If nothing fits, return [].
 - "actionSuggestion": include only when one of these app actions is genuinely warranted right now:
@@ -1526,6 +1527,7 @@ router.post("/coach/stream", async (req, res) => {
 Speak conversationally, with warmth and precision. EVERY reply must ground itself in the real context below — reference the current phase, today's tasks, a recent reflection, a learned trait, or a known fact, not generic advice. Push back gently when they make excuses, celebrate small wins, name the pattern you see.
 
 Hard rules:
+- LANGUAGE RULE: Write ALL text output (reply, suggestedReplies) in the same language as the user's goal and profile data. If the goal is in Turkish, respond in Turkish. If in Azerbaijani, in Azerbaijani. If in Russian, in Russian. Never switch to another language.
 - "reply" is plain prose. No markdown, headings, bullets, or emojis. Under 110 words unless they explicitly ask for detail.
 - "suggestedReplies": 0-3 short follow-ups (<= 50 chars each).
 - "actionSuggestion" / "memoryUpdate": same rules as the non-streaming /coach endpoint.
@@ -1721,7 +1723,7 @@ router.post("/adapt", async (req, res) => {
         messages: [
           {
             role: "system",
-            content: `You are rabai's adaptive planning engine. Based on behavioural data, decide whether to make the plan easier, keep it the same, or push harder. Provide 2-4 concrete adjustments (short imperative phrases, no markdown, no emojis) and a brief 1-sentence encouragement.`,
+            content: `You are rabai's adaptive planning engine. Based on behavioural data, decide whether to make the plan easier, keep it the same, or push harder. Provide 2-4 concrete adjustments (short imperative phrases, no markdown, no emojis) and a brief 1-sentence encouragement.\n\nLANGUAGE RULE: Write ALL text output (adjustments, encouragement) in the same language as the user's goal and profile data. Never switch to another language.`,
           },
           {
             role: "user",
@@ -2024,6 +2026,7 @@ Produce an updated BehavioralProfile that captures:
 - aiInsight: ONE warm, plain-English sentence the user will see as a fresh insight after this refresh. Reference real data. No emojis, no markdown.
 
 Hard rules:
+- LANGUAGE RULE: Write ALL text fields (summary, focusStyle, learningPreference, failurePatterns, strengths, recommendedAdjustments, aiInsight) in the same language as the user's goal and profile data. Never switch to another language.
 - No emojis, no markdown anywhere.
 - Be evidence-based. Do not invent failure patterns or peak hours when there is no signal — return empty arrays instead.
 - Evolve the previous profile incrementally; preserve anything still true.`,
@@ -2115,6 +2118,7 @@ Inputs you receive:
 - whether this evolution was manual (user pressed a button) or auto (background trigger after enough new signal).
 
 Hard rules:
+- LANGUAGE RULE: Write ALL text output (changeSummary, rationale, phase titles, milestone titles, phaseChanges summaries) in the same language as the user's goal and profile data. Never switch to another language.
 - Preserve the user's progress: do NOT renumber or destroy phases that are already in the past or that the user is currently in unless they are clearly broken. Strongly prefer modifying upcoming phases (current week and beyond).
 - Preserve phase ids when keeping the same phase ("phase-1", "phase-2", ...). Use the same id format for any new phases.
 - Total phases must stay between 3 and 5. Each phase 2-6 weeks, with 2-4 milestones. Milestone ids: m-<phaseNumber>-<index>.
