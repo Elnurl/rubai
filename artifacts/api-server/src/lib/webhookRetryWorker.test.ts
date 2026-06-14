@@ -7,7 +7,7 @@
  *   3. Worker backs off on repeated failure
  *   4. Worker moves to dead-letter after MAX_ATTEMPTS
  *   5. Stale processing rows are reclaimed
- *   6. Non-retryable failure (user_not_found) skips the queue
+ *   6. Active user_not_found is retryable; inactive user_not_found is a permanent skip
  *   7. Idempotency key prevents duplicate queue entries
  */
 
@@ -354,7 +354,9 @@ describe("processWebhookEvent", () => {
     }
   });
 
-  it("returns ok:false retryable:false for user_not_found", async () => {
+  it("returns ok:false retryable:true for user_not_found on active events", async () => {
+    // Active events (purchases, renewals) are retryable when user doesn't exist
+    // so the retry worker can pick them up once the user row is created.
     __mockFindFirst.mockResolvedValue(null);
 
     const result = await processWebhookEvent(
@@ -364,6 +366,28 @@ describe("processWebhookEvent", () => {
         product_id: "rubai_pro_monthly",
         transaction_id: "txn_notfound",
         entitlement_ids: ["pro"],
+      },
+      console,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.retryable).toBe(true);
+      expect(result.error).toBe("user_not_found");
+    }
+  });
+
+  it("returns ok:false retryable:false for user_not_found on inactive events", async () => {
+    // Inactive events (cancellations, expirations) are permanent skips when
+    // the user doesn't exist — nothing to cancel for an account-less subscriber.
+    __mockFindFirst.mockResolvedValue(null);
+
+    const result = await processWebhookEvent(
+      {
+        type: "CANCELLATION",
+        app_user_id: "user_nobody",
+        product_id: "rubai_pro_monthly",
+        transaction_id: "txn_cancel_notfound",
       },
       console,
     );
@@ -527,7 +551,9 @@ describe("processWebhookEvent — attempt tracking for retry worker", () => {
     expect(proUpdate).toBeDefined();
   });
 
-  it("non-retryable user_not_found is never retried", async () => {
+  it("active user_not_found is retryable — worker will keep trying until user exists", async () => {
+    // Active purchase events for a missing user are marked retryable so the
+    // background worker queues them until the user row is created.
     __mockFindFirst.mockResolvedValue(null);
 
     const event = {
@@ -541,13 +567,35 @@ describe("processWebhookEvent — attempt tracking for retry worker", () => {
     const result1 = await processWebhookEvent(event, console);
     const result2 = await processWebhookEvent(event, console);
 
-    // Both attempts return the same non-retryable result.
+    // Both attempts return retryable (user still not found).
     expect(result1.ok).toBe(false);
     expect(result2.ok).toBe(false);
-    if (!result1.ok) expect(result1.retryable).toBe(false);
-    if (!result2.ok) expect(result2.retryable).toBe(false);
+    if (!result1.ok) expect(result1.retryable).toBe(true);
+    if (!result2.ok) expect(result2.retryable).toBe(true);
 
     // No tier updates should have been applied.
+    expect(capturedUpdates.filter((u) => "tier" in u.values)).toHaveLength(0);
+  });
+
+  it("inactive user_not_found is a permanent skip — worker will not retry", async () => {
+    // Inactive events (EXPIRATION, CANCELLATION) for a missing user are
+    // non-retryable: there is nothing to cancel for an account-less subscriber.
+    __mockFindFirst.mockResolvedValue(null);
+
+    const event = {
+      type: "EXPIRATION",
+      app_user_id: "ghost_user_inactive",
+      product_id: "rubai_pro_monthly",
+      transaction_id: "txn_ghost_exp",
+    };
+
+    const result = await processWebhookEvent(event, console);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.retryable).toBe(false);
+      expect(result.error).toBe("user_not_found");
+    }
     expect(capturedUpdates.filter((u) => "tier" in u.values)).toHaveLength(0);
   });
 });

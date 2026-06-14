@@ -747,11 +747,11 @@ describe("POST /api/webhooks/revenuecat — edge cases", () => {
     expect(transactionCallCount).toBe(0);
   });
 
-  it("returns 200 skipped for a STALE ACTIVE event when the user is not found (genuinely unknown user → stop RC retries)", async () => {
+  it("returns 200 queued for a STALE ACTIVE event when the user is not found (enqueue for recovery — user may sign up later)", async () => {
     // The event is older than the race window, so RevenueCat has already been
-    // retrying for a while. The user row never appeared — this is a genuinely
-    // unknown/deleted account (e.g. abandoned sign-up or test purchase).
-    // Returning 200 prevents RC from retrying indefinitely.
+    // retrying for a while. Rather than silently dropping the purchase, we
+    // enqueue it in our own retry queue so the background worker can apply it
+    // once the user row exists (sign-up race recovery path).
     mockFindFirst.mockResolvedValue(null);
 
     const res = await post(
@@ -768,7 +768,7 @@ describe("POST /api/webhooks/revenuecat — edge cases", () => {
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json).toMatchObject({ ok: true, skipped: "user_not_found" });
+    expect(json).toMatchObject({ ok: true, queued: true });
     expect(capturedTierUpdate).toBeUndefined();
     expect(transactionCallCount).toBe(0);
   });

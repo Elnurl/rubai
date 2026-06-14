@@ -133,6 +133,22 @@ async function processEntry(id: number): Promise<boolean> {
       },
       "webhook retry: event moved to dead-letter queue — manual intervention required",
     );
+
+    // Emit a targeted alert when a purchase is lost because the subscriber
+    // never signed up within the recovery window.  Ops should manually check
+    // the RevenueCat dashboard for this subscriber and re-trigger the webhook
+    // (or update the user's tier directly) once their account is confirmed.
+    if (result.error === "user_not_found") {
+      logger.error(
+        {
+          queueId: id,
+          eventType: row.eventType,
+          clerkUserId: row.clerkUserId,
+        },
+        "webhook retry: PURCHASE LOST — subscriber completed in-app purchase but never signed up within the recovery window; check RevenueCat dashboard for this subscriber and reconcile manually",
+      );
+    }
+
     return true;
   }
 

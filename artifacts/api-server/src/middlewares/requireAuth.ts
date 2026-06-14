@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { getAuth } from "@clerk/express";
 import { eq } from "drizzle-orm";
 import { db, usersTable, analyticsEventsTable } from "@workspace/db";
+import { replayWebhookEventsForUser } from "../lib/webhookRecovery";
 
 declare global {
   namespace Express {
@@ -61,6 +62,12 @@ export async function requireAuth(
         .catch((err) =>
           req.log.warn({ err }, "Failed to record user.signed_up event"),
         );
+      // Best-effort: replay any RevenueCat purchase webhook events that were
+      // queued while this user row didn't exist yet (sign-up race recovery).
+      // Errors are swallowed so a replay failure never blocks sign-in.
+      void replayWebhookEventsForUser(clerkUserId).catch((err) =>
+        req.log.warn({ err }, "Failed to replay webhook events after user creation"),
+      );
     } else if (email && email !== row.email) {
       const [updated] = await db
         .update(usersTable)

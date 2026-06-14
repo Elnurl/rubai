@@ -103,9 +103,26 @@ export async function processWebhookEvent(
     });
 
     if (!user) {
+      if (isActive) {
+        // Active purchase/renewal for a user that doesn't exist yet.  The
+        // sign-up race window in webhooks.ts already handles the "fresh event"
+        // case by returning 404 so RC retries.  If we reach this branch the
+        // event is older than the race window, which means RC may be nearing
+        // the end of its own retry budget.  Mark the result retryable so the
+        // webhook handler enqueues the event in our own recovery queue — the
+        // background worker will keep attempting until the user row appears or
+        // MAX_ATTEMPTS is exhausted.
+        log.warn(
+          { clerkUserId, eventType: event.type },
+          "processWebhookEvent: user not found for active event — scheduling recovery retry",
+        );
+        return { ok: false, retryable: true, error: "user_not_found" };
+      }
+      // Inactive event (CANCELLATION, EXPIRATION, BILLING_ISSUE, …) for a
+      // user that never existed: nothing to cancel, safe to skip permanently.
       log.warn(
         { clerkUserId, eventType: event.type },
-        "processWebhookEvent: user not found — will not retry",
+        "processWebhookEvent: user not found for inactive event — permanent skip",
       );
       return { ok: false, retryable: false, error: "user_not_found" };
     }

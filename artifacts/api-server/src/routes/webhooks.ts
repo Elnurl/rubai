@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { timingSafeEqual } from "node:crypto";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, webhookRetryQueueTable } from "@workspace/db";
 import {
   processWebhookEvent,
@@ -29,7 +30,7 @@ interface RcWebhookBody {
   event?: RcWebhookEvent;
 }
 
-router.get("/webhooks/revenuecat/health", (req, res) => {
+router.get("/webhooks/revenuecat/health", async (req, res) => {
   const webhookSecret = process.env["REVENUECAT_WEBHOOK_SECRET"];
   const isProduction = process.env["NODE_ENV"] === "production";
   const secretConfigured = Boolean(webhookSecret?.trim());
@@ -61,8 +62,54 @@ router.get("/webhooks/revenuecat/health", (req, res) => {
     }
   }
 
-  req.log?.info({ secretConfigured }, "RC webhook health check OK");
-  res.status(200).json({ ok: true, secretConfigured });
+  // Surface recovery queue metrics so ops can detect silently lost purchases.
+  let pendingRecovery = 0;
+  let deadRecovery = 0;
+  try {
+    const [pendingRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(webhookRetryQueueTable)
+      .where(
+        and(
+          eq(webhookRetryQueueTable.status, "pending"),
+          inArray(webhookRetryQueueTable.lastError, [
+            "user_not_found",
+            "replayed_after_user_creation",
+          ]),
+        ),
+      );
+    pendingRecovery = pendingRow?.count ?? 0;
+
+    const [deadRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(webhookRetryQueueTable)
+      .where(
+        and(
+          eq(webhookRetryQueueTable.status, "dead"),
+          eq(webhookRetryQueueTable.lastError, "user_not_found"),
+        ),
+      );
+    deadRecovery = deadRow?.count ?? 0;
+
+    if (deadRecovery > 0) {
+      req.log?.error(
+        { deadRecovery },
+        "RC webhook health: dead-lettered user_not_found purchases detected — subscriptions may be lost, manual RC subscriber check required",
+      );
+    } else if (pendingRecovery > 0) {
+      req.log?.warn(
+        { pendingRecovery },
+        "RC webhook health: pending user_not_found recovery entries — awaiting user sign-up",
+      );
+    }
+  } catch (err) {
+    // DB unavailable — do not block the health response; the check below is
+    // best-effort and the DB status is already visible via other monitors.
+    req.log?.warn({ err }, "RC webhook health: could not query recovery queue");
+  }
+
+  req.log?.info({ secretConfigured, pendingRecovery, deadRecovery }, "RC webhook health check OK");
+  res.status(200).json({ ok: true, secretConfigured, pendingRecovery, deadRecovery });
 });
 
 router.post("/webhooks/revenuecat", async (req, res) => {
@@ -124,13 +171,14 @@ router.post("/webhooks/revenuecat", async (req, res) => {
   // ── Sign-up race window check ──────────────────────────────────────────
   // For active events we may need to 404 so RevenueCat retries while the
   // user row is being created.  We handle this BEFORE attempting the DB
-  // transaction; processWebhookEvent will return user_not_found (non-
-  // retryable) once the race window has passed.
+  // transaction; processWebhookEvent will return user_not_found (retryable
+  // for active events) once the race window has passed so it gets enqueued
+  // into our own recovery queue.
   //
   // We do a quick user-existence check only in the race window path so we
   // can return 404 (prompting RC to retry) without going through the full
-  // processor. Outside the window processWebhookEvent handles not-found
-  // gracefully as a permanent skip.
+  // processor. Outside the window processWebhookEvent handles not-found by
+  // marking it retryable (active) or permanent-skip (inactive).
   if (isActive) {
     const eventAgeMs =
       event.event_timestamp_ms != null
@@ -151,9 +199,11 @@ router.post("/webhooks/revenuecat", async (req, res) => {
         return;
       }
 
-      if (!result.retryable && result.error === "user_not_found") {
-        // User row doesn't exist yet and the event is fresh — return 404 so
-        // RevenueCat retries within its own retry window.
+      // Within the race window, any user_not_found (regardless of retryable
+      // flag) should return 404 so RC keeps retrying while the user row is
+      // being created. Note: for active events processWebhookEvent now returns
+      // retryable:true for user_not_found, so we check the error string here.
+      if (result.error === "user_not_found") {
         req.log?.warn(
           { clerkUserId, eventType: event.type, eventAgeMs },
           "RC webhook: user not found for recent active event — returning 404 to trigger RC retry",
@@ -171,7 +221,7 @@ router.post("/webhooks/revenuecat", async (req, res) => {
       // Retryable error (DB down) — try to enqueue so our worker retries.
       // If the enqueue itself fails (DB completely unavailable) return 500 so
       // RC keeps retrying while the database recovers.
-      const enqueued = await enqueueEvent(event, req.log ?? console);
+      const enqueued = await enqueueEvent(event, req.log ?? console, result.error);
       if (enqueued) {
         req.log?.warn(
           { clerkUserId, eventType: event.type },
@@ -193,6 +243,10 @@ router.post("/webhooks/revenuecat", async (req, res) => {
   // Try inline processing first. If it fails with a retryable error, enqueue
   // the event so our background worker handles it — this prevents the
   // purchase from being silently dropped when RC's own retry window expires.
+  //
+  // For active events, user_not_found is now retryable (processWebhookEvent
+  // marks it so), which means it will be enqueued here and the retry worker
+  // will keep trying until the user row exists or MAX_ATTEMPTS is exhausted.
   const result = await processWebhookEvent(event, req.log ?? console);
 
   if (result.ok) {
@@ -205,7 +259,7 @@ router.post("/webhooks/revenuecat", async (req, res) => {
   }
 
   if (!result.retryable) {
-    // Permanent skip: unknown user after race window, unhandled event type, etc.
+    // Permanent skip: unknown user for inactive event, unhandled event type, etc.
     req.log?.warn(
       { clerkUserId, eventType: event.type, reason: result.error },
       "RC webhook: permanent skip",
@@ -216,10 +270,19 @@ router.post("/webhooks/revenuecat", async (req, res) => {
 
   // Retryable failure — enqueue for the background worker and ack RC so it
   // doesn't exhaust its own limited retry budget.
-  const enqueued = await enqueueEvent(event, req.log ?? console);
-  if (enqueued) {
+  // For active user_not_found events this is the recovery path: the worker
+  // will keep retrying until the user row appears.
+  if (result.error === "user_not_found") {
     req.log?.warn(
       { clerkUserId, eventType: event.type },
+      "RC webhook: active purchase for unknown user outside race window — enqueuing for recovery",
+    );
+  }
+
+  const enqueued = await enqueueEvent(event, req.log ?? console, result.error);
+  if (enqueued) {
+    req.log?.warn(
+      { clerkUserId, eventType: event.type, reason: result.error },
       "RC webhook: inline processing failed — queued for retry",
     );
     res.status(200).json({ ok: true, queued: true });
@@ -238,12 +301,17 @@ router.post("/webhooks/revenuecat", async (req, res) => {
  * Insert the event into the retry queue.  Uses ON CONFLICT DO NOTHING so
  * duplicate deliveries from RevenueCat are silently ignored.
  *
+ * `initialLastError` is stored immediately so health checks and the
+ * replay-on-user-creation hook can filter by error reason without waiting
+ * for the worker's first retry attempt.
+ *
  * Returns true if the enqueue succeeded (row inserted or already existed),
  * false if the DB write itself failed.
  */
 async function enqueueEvent(
   event: RcWebhookEvent,
   log: { warn?(obj: object, msg: string): void; error?(obj: object, msg: string): void },
+  initialLastError?: string,
 ): Promise<boolean> {
   const clerkUserId =
     event.original_app_user_id ?? event.app_user_id ?? null;
@@ -257,6 +325,7 @@ async function enqueueEvent(
         eventType: event.type,
         clerkUserId,
         payload: event as unknown as Record<string, unknown>,
+        lastError: initialLastError ?? null,
       })
       .onConflictDoNothing();
     return true;
