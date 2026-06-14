@@ -53,6 +53,42 @@ interface RcWebhookBody {
   event?: RcWebhookEvent;
 }
 
+router.get("/webhooks/revenuecat/health", (req, res) => {
+  const webhookSecret = process.env["REVENUECAT_WEBHOOK_SECRET"];
+  const isProduction = process.env["NODE_ENV"] === "production";
+  const secretConfigured = Boolean(webhookSecret?.trim());
+
+  if (isProduction) {
+    if (!secretConfigured) {
+      req.log?.error(
+        "REVENUECAT_WEBHOOK_SECRET is unset in production — health check rejected",
+      );
+      res.status(503).json({ ok: false, error: "secret_not_configured" });
+      return;
+    }
+
+    const authHeader = req.headers["authorization"] ?? "";
+    const trimmedSecret = webhookSecret!.trim();
+    const secretBuf = Buffer.from(trimmedSecret, "utf8");
+    const headerBuf = Buffer.from(authHeader, "utf8");
+    const valid =
+      headerBuf.byteLength === secretBuf.byteLength &&
+      timingSafeEqual(headerBuf, secretBuf);
+
+    if (!valid) {
+      req.log?.warn(
+        { headerByteLength: headerBuf.byteLength },
+        "RC webhook health: Authorization header does not match REVENUECAT_WEBHOOK_SECRET",
+      );
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+  }
+
+  req.log?.info({ secretConfigured }, "RC webhook health check OK");
+  res.status(200).json({ ok: true, secretConfigured });
+});
+
 router.post("/webhooks/revenuecat", async (req, res) => {
   const webhookSecret = process.env["REVENUECAT_WEBHOOK_SECRET"];
   const isProduction = process.env["NODE_ENV"] === "production";
