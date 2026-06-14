@@ -5,6 +5,7 @@ import googleCalendarRouter from "./googleCalendar";
 import legalRouter from "./legal";
 import meRouter from "./me";
 import webhooksRouter from "./webhooks";
+import adminRouter from "./admin";
 import { requireAuth } from "../middlewares/requireAuth";
 import { aiRateLimiter } from "../middlewares/rateLimit";
 
@@ -13,6 +14,9 @@ const router: IRouter = Router();
 router.use(healthRouter);
 // Webhooks mount BEFORE requireAuth — RevenueCat posts without user auth.
 router.use(webhooksRouter);
+// Admin routes mount before requireAuth — they use their own X-Admin-Key gate
+// and must not be intercepted by the Clerk auth middleware.
+router.use(adminRouter);
 // Legal routes mount BEFORE meRouter because meRouter installs requireAuth
 // as a router-level middleware that, due to Express middleware ordering,
 // would otherwise reject unauthenticated requests for /legal/current and

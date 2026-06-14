@@ -18,6 +18,8 @@ tags:
     description: Google Calendar integration via Replit connector
   - name: legal
     description: Versioned Privacy Policy and Terms of Service acceptance
+  - name: admin
+    description: Internal support endpoints — gated by X-Admin-Key header
 paths:
   /healthz:
     get:
@@ -125,6 +127,66 @@ paths:
                 $ref: "#/components/schemas/TierHistoryResponse"
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users/{clerkUserId}/tier-history:
+    get:
+      operationId: adminGetUserTierHistory
+      tags: [admin]
+      summary: Subscription tier history for any user (support lookup)
+      description: |
+        Returns every tier transition for the specified user in reverse-chronological order.
+        Intended for support staff to answer billing questions without requiring the customer
+        to be present or granting direct database access.
+        Requires the `X-Admin-Key` header to match the server's `ADMIN_API_KEY` environment variable.
+      parameters:
+        - name: clerkUserId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The Clerk user ID of the user to look up.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          description: Maximum number of records to return (1–100, default 50).
+      security:
+        - AdminKey: []
+      responses:
+        "200":
+          description: Tier transition history for the specified user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TierHistoryResponse"
+        "401":
+          description: Missing X-Admin-Key header
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Invalid admin key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Admin API not configured on this server
           content:
             application/json:
               schema:
@@ -567,6 +629,12 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
 components:
+  securitySchemes:
+    AdminKey:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
+      description: Secret key required for all /admin/* endpoints. Set via the ADMIN_API_KEY environment variable on the server.
   schemas:
     HealthStatus:
       type: object
