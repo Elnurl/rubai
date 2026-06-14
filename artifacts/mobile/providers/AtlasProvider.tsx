@@ -1648,6 +1648,12 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     [schedulePush],
   );
 
+  const flushToastQueue = useCallback(() => {
+    toastQueueRef.current = [];
+    activeToastRef.current = null;
+    setActiveToast(null);
+  }, []);
+
   const resetAll = useCallback(async () => {
     // Clear locally first so the UI updates instantly, then push the empty
     // state up to the server so other devices see the reset.
@@ -1659,14 +1665,16 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     setActiveGoalId(null);
     setAccount(DEFAULT_ACCOUNT);
     setPendingDraftState(null);
+    flushToastQueue();
     schedulePush();
-  }, [schedulePush]);
+  }, [flushToastQueue, schedulePush]);
 
   const signOut = useCallback(async () => {
     const owner = ownerRef.current;
     // Stop anything queued before we lose the auth token.
     suppressPushRef.current = true;
     pushDirtyRef.current = false;
+    flushToastQueue();
     if (owner) {
       await clearUserCache(owner);
     }
@@ -1676,7 +1684,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       // eslint-disable-next-line no-console
       if (__DEV__) console.warn("[atlas] signOut failed", err);
     }
-  }, [clerkSignOut]);
+  }, [clerkSignOut, flushToastQueue]);
 
   const dismissSyncMessage = useCallback(() => {
     setSyncMessage(null);
