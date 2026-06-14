@@ -70,6 +70,7 @@ Add these in **GitHub → Settings → Secrets and variables → Actions**:
 | `API_BASE_URL` | Your production API root, e.g. `https://your-replit-domain.replit.app` — no trailing slash, no `/api` suffix |
 | `REVENUECAT_WEBHOOK_SECRET` | The same value stored in the `REVENUECAT_WEBHOOK_SECRET` Replit secret |
 | `SLACK_WEBHOOK_URL` | Incoming Webhook URL for your on-call Slack channel — get it from **Slack → Apps → Incoming Webhooks**. When set, the workflow posts an alert immediately after a failed health check. If omitted, the step is skipped silently (GitHub's own failure email still fires). |
+| `PAGERDUTY_INTEGRATION_KEY` | **Events API v2** integration key from your PagerDuty service (32-char hex string). Create it in **PagerDuty → Services → \<your service\> → Integrations → Add integration → Events API v2**. When set, the workflow triggers a `critical` incident with escalation on every health-check failure. If omitted, the step is skipped silently — opt-in, same pattern as `SLACK_WEBHOOK_URL`. |
 
 ### How it works
 

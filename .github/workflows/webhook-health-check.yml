@@ -87,3 +87,49 @@ jobs:
                 }
               ]
             }"
+
+      - name: Page on-call via PagerDuty on failure
+        if: failure()
+        env:
+          PAGERDUTY_INTEGRATION_KEY: ${{ secrets.PAGERDUTY_INTEGRATION_KEY }}
+        run: |
+          if [ -z "$PAGERDUTY_INTEGRATION_KEY" ]; then
+            echo "PAGERDUTY_INTEGRATION_KEY is not set — skipping PagerDuty alert. Add it in GitHub → Settings → Secrets to enable phone/SMS paging."
+            exit 0
+          fi
+
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          HTTP_CODE=$(curl -s -o /tmp/pd_response.json -w "%{http_code}" \
+            -X POST "https://events.pagerduty.com/v2/enqueue" \
+            -H "Content-Type: application/json" \
+            --data "{
+              \"routing_key\": \"${PAGERDUTY_INTEGRATION_KEY}\",
+              \"event_action\": \"trigger\",
+              \"dedup_key\": \"revenuecat-webhook-health\",
+              \"payload\": {
+                \"summary\": \"RevenueCat webhook health check FAILED — ${{ secrets.API_BASE_URL }}/api/webhooks/revenuecat/health\",
+                \"source\": \"${{ github.repository }} / webhook-health-check\",
+                \"severity\": \"critical\",
+                \"custom_details\": {
+                  \"run_url\": \"${RUN_URL}\",
+                  \"repository\": \"${{ github.repository }}\",
+                  \"workflow\": \"${{ github.workflow }}\"
+                }
+              },
+              \"links\": [
+                {
+                  \"href\": \"${RUN_URL}\",
+                  \"text\": \"View failed workflow run\"
+                }
+              ]
+            }")
+
+          echo "PagerDuty response (HTTP $HTTP_CODE):"
+          cat /tmp/pd_response.json
+
+          if [ "$HTTP_CODE" != "202" ]; then
+            echo "::warning::PagerDuty event submission returned HTTP $HTTP_CODE (expected 202). Check the integration key."
+          else
+            echo "PagerDuty incident triggered successfully."
+          fi
