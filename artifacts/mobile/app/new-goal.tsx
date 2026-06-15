@@ -18,15 +18,17 @@ import { GoalCard } from "@/components/GoalCard";
 import { GOAL_META, TEMPLATE_GOAL_TYPES } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
-import type { GoalType } from "@workspace/api-client-react";
+import { useAtlasGenerateTitle, type GoalType } from "@workspace/api-client-react";
 
 export default function NewGoalScreen() {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { setPendingDraft, canAddMoreGoals, goalLimit } = useAtlas();
+  const generateTitle = useAtlasGenerateTitle();
   const [selected, setSelected] = useState<GoalType | null>(null);
   const [customGoal, setCustomGoal] = useState("");
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
 
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 12;
@@ -39,10 +41,22 @@ export default function NewGoalScreen() {
   const onContinue = async () => {
     if (!canAddMoreGoals) return;
     if (hasCustom) {
+      setIsGeneratingTitle(true);
+      let aiTitle = customTrimmed.split(/\s+/).slice(0, 4).join(" ") || customTrimmed;
+      try {
+        const res = await generateTitle.mutateAsync({
+          data: { goalType: "custom", userInput: customTrimmed },
+        });
+        if (res.title?.trim()) aiTitle = res.title.trim();
+      } catch {
+        // silent fallback — first 4 words already set above
+      } finally {
+        setIsGeneratingTitle(false);
+      }
       await setPendingDraft({
         goalType: "custom",
         goalTitle: customTrimmed,
-        customGoalTitle: customTrimmed,
+        customGoalTitle: aiTitle,
         questions: [],
         answers: [],
         stage: "loading_questions",
@@ -198,11 +212,12 @@ export default function NewGoalScreen() {
         ]}
       >
         <AtlasButton
-          label="Continue to intake"
+          label={isGeneratingTitle ? "Naming your goal…" : "Continue to intake"}
           onPress={onContinue}
           disabled={!canContinue}
+          loading={isGeneratingTitle}
           icon={
-            canContinue ? (
+            canContinue && !isGeneratingTitle ? (
               <Feather name="arrow-right" size={18} color={colors.primaryForeground} />
             ) : undefined
           }
