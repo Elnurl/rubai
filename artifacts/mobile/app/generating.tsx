@@ -7,7 +7,6 @@ import { Feather } from "@expo/vector-icons";
 
 import { GOAL_META, profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
-import i18n from "@/lib/i18n";
 import { GoalLimitError, useAtlas } from "@/providers/AtlasProvider";
 import { TIER_INFO } from "@/types/atlas";
 import {
@@ -15,18 +14,23 @@ import {
   type UserProfile,
 } from "@workspace/api-client-react";
 
-const STEPS = [
-  i18n.t("generating.step1", "Reading your intake"),
-  i18n.t("generating.step2", "Analyzing constraints and time"),
-  i18n.t("generating.step3", "Selecting strategy"),
-  i18n.t("generating.step4", "Drafting phases"),
-  i18n.t("generating.step5", "Setting milestones"),
-  i18n.t("generating.step6", "Stress-testing the plan"),
-];
 
 export default function GeneratingScreen() {
   const colors = useColors();
   const { t } = useTranslation();
+  const steps = useMemo(
+    () => [
+      t("generating.step1", "Reading your intake"),
+      t("generating.step2", "Analyzing constraints and time"),
+      t("generating.step3", "Selecting strategy"),
+      t("generating.step4", "Drafting phases"),
+      t("generating.step5", "Setting milestones"),
+      t("generating.step6", "Stress-testing the plan"),
+    ],
+    [t],
+  );
+  const stepsLastIdxRef = useRef(steps.length - 1);
+  stepsLastIdxRef.current = steps.length - 1;
   const router = useRouter();
   const params = useLocalSearchParams<{ profile?: string }>();
   const {
@@ -90,7 +94,7 @@ export default function GeneratingScreen() {
   useEffect(() => {
     if (errorState) return;
     const id = setInterval(() => {
-      setStepIndex((i) => Math.min(i + 1, STEPS.length - 1));
+      setStepIndex((i) => Math.min(i + 1, stepsLastIdxRef.current));
     }, 1500);
     return () => clearInterval(id);
   }, [errorState]);
@@ -140,7 +144,7 @@ export default function GeneratingScreen() {
         }
         await setRoadmapForGoal(goalId, roadmap);
         await setPendingDraft(null);
-        setStepIndex(STEPS.length - 1);
+        setStepIndex(stepsLastIdxRef.current);
         setTimeout(() => router.replace("/(tabs)"), 700);
       } catch (err) {
         // Surface the failure instead of looping silently. We split errors
@@ -246,7 +250,7 @@ export default function GeneratingScreen() {
             ? errorState.kind === "limit"
               ? t("generating.onPlan", "You're on the {{plan}} plan", { plan: planLabel })
               : t("generating.serverUnreachable", "Couldn't reach the server")
-            : STEPS[stepIndex]}
+            : steps[stepIndex]}
         </Text>
 
         {errorState?.kind === "network" && (

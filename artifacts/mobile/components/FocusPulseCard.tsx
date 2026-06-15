@@ -5,18 +5,8 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { AreaChart } from "@/components/charts/AreaChart";
 import { useColors } from "@/hooks/useColors";
-import i18n from "@/lib/i18n";
 import { useAtlas } from "@/providers/AtlasProvider";
 
-const DAY_LABELS = [
-  i18n.t("focusPulseCard.dayMon", "M"),
-  i18n.t("focusPulseCard.dayTue", "T"),
-  i18n.t("focusPulseCard.dayWed", "W"),
-  i18n.t("focusPulseCard.dayThu", "T"),
-  i18n.t("focusPulseCard.dayFri", "F"),
-  i18n.t("focusPulseCard.daySat", "S"),
-  i18n.t("focusPulseCard.daySun", "S"),
-];
 
 function isoForDaysAgo(daysAgo: number): string {
   const d = new Date();
@@ -28,6 +18,18 @@ function isoForDaysAgo(daysAgo: number): string {
 export function FocusPulseCard() {
   const colors = useColors();
   const { t } = useTranslation();
+  const dayLabels = useMemo(
+    () => [
+      t("focusPulseCard.dayMon", "M"),
+      t("focusPulseCard.dayTue", "T"),
+      t("focusPulseCard.dayWed", "W"),
+      t("focusPulseCard.dayThu", "T"),
+      t("focusPulseCard.dayFri", "F"),
+      t("focusPulseCard.daySat", "S"),
+      t("focusPulseCard.daySun", "S"),
+    ],
+    [t],
+  );
   const { activeTaskHistory } = useAtlas();
 
   const { data, deltaPct } = useMemo(() => {
@@ -123,7 +125,7 @@ export function FocusPulseCard() {
 
       <AreaChart
         data={data}
-        labels={DAY_LABELS}
+        labels={dayLabels}
         height={120}
         showDots
         highlightLastDot

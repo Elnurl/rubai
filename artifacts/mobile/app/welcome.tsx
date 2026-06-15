@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Platform,
@@ -22,16 +22,6 @@ import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { useAtlasGenerateTitle, type GoalType } from "@workspace/api-client-react";
 
-import i18n from "@/lib/i18n";
-
-const PLACEHOLDERS = [
-  i18n.t("welcome.placeholder1", "Launch my freelance design studio by October"),
-  i18n.t("welcome.placeholder2", "Run my first half marathon in 6 months"),
-  i18n.t("welcome.placeholder3", "Read 30 books and journal weekly this year"),
-  i18n.t("welcome.placeholder4", "Move to Berlin and find a job by June"),
-  i18n.t("welcome.placeholder5", "Save 15,000 for a down payment in 9 months"),
-];
-
 export default function WelcomeScreen() {
   const colors = useColors();
   const { t } = useTranslation();
@@ -42,9 +32,18 @@ export default function WelcomeScreen() {
   const [selected, setSelected] = useState<GoalType | null>(null);
   const [customGoal, setCustomGoal] = useState("");
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
-  const [placeholder] = useState(
-    () => PLACEHOLDERS[Math.floor(Math.random() * PLACEHOLDERS.length)],
+  const placeholders = useMemo(
+    () => [
+      t("welcome.placeholder1", "Launch my freelance design studio by October"),
+      t("welcome.placeholder2", "Run my first half marathon in 6 months"),
+      t("welcome.placeholder3", "Read 30 books and journal weekly this year"),
+      t("welcome.placeholder4", "Move to Berlin and find a job by June"),
+      t("welcome.placeholder5", "Save 15,000 for a down payment in 9 months"),
+    ],
+    [t],
   );
+  const placeholderIndexRef = useRef(Math.floor(Math.random() * 5));
+  const placeholder = placeholders[placeholderIndexRef.current];
 
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 12;

@@ -66,12 +66,6 @@ import { useTypewriter } from "@/lib/useTypewriter";
 import type { CoachMemory } from "@workspace/api-client-react";
 import type { ChatSession } from "@/types/atlas";
 
-const COLD_START_SUGGESTIONS = [
-  i18n.t("coach.suggestionStuck", "I'm feeling stuck today"),
-  i18n.t("coach.suggestionEasier", "Make today's plan easier"),
-  i18n.t("coach.suggestionHarder", "Push me harder this week"),
-  i18n.t("coach.suggestionFocus", "What should I focus on?"),
-];
 
 type ModelChoice = "smart" | "fast";
 
@@ -122,6 +116,15 @@ type PendingAttachment = {
 
 export default function CoachScreen() {
   const { t } = useTranslation();
+  const coldStartSuggestions = useMemo(
+    () => [
+      t("coach.suggestionStuck", "I'm feeling stuck today"),
+      t("coach.suggestionEasier", "Make today's plan easier"),
+      t("coach.suggestionHarder", "Push me harder this week"),
+      t("coach.suggestionFocus", "What should I focus on?"),
+    ],
+    [t],
+  );
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -1485,7 +1488,7 @@ export default function CoachScreen() {
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.suggestions}
           >
-            {COLD_START_SUGGESTIONS.map((s) => (
+            {coldStartSuggestions.map((s) => (
               <Pressable
                 key={s}
                 onPress={() => send(s)}

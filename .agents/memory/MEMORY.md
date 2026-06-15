@@ -5,3 +5,4 @@
 - [Expo vector-icons font loading](expo-vector-icons-fonts.md) — use .font spread in useFonts; loading local TTF copies causes web/Android simulation box glyphs due to asset mismatch.
 - [Drizzle migrations in ESM bundle](drizzle-esm-migration-path.md) — import.meta.url in esbuild bundle resolves to dist/index.mjs; use ./drizzle (not ../drizzle) as the fallback migrations path.
 - [Migration bootstrap on existing DB](drizzle-migration-bootstrap.md) — if tables pre-exist without __drizzle_migrations entry, compute SHA256 of the SQL file and INSERT the hash manually to unblock startup.
+- [i18n pattern (mobile)](i18n-pattern.md) — react-i18next setup, 10-language support, module-level array pitfall, extraction tooling.

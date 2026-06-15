@@ -33,23 +33,6 @@ type ReasonOption = {
   icon: React.ComponentProps<typeof Feather>["name"];
 };
 
-const COMPLETED_TAGS: ReasonOption[] = [
-  { value: "easy", label: i18n.t("reflectionSheet.tagEasy", "Easy"), icon: "smile" },
-  { value: "just_right", label: i18n.t("reflectionSheet.tagJustRight", "Just right"), icon: "check-circle" },
-  { value: "tough", label: i18n.t("reflectionSheet.tagTough", "Tough"), icon: "alert-triangle" },
-  { value: "energized", label: i18n.t("reflectionSheet.tagEnergized", "Energized"), icon: "zap" },
-  { value: "focused", label: i18n.t("reflectionSheet.tagFocused", "Focused"), icon: "target" },
-  { value: "tired", label: i18n.t("reflectionSheet.tagTired", "Tired"), icon: "moon" },
-];
-
-const SKIPPED_TAGS: ReasonOption[] = [
-  { value: "no_time", label: i18n.t("reflectionSheet.tagNoTime", "No time"), icon: "clock" },
-  { value: "tired", label: i18n.t("reflectionSheet.tagTooTired", "Too tired"), icon: "moon" },
-  { value: "distracted", label: i18n.t("reflectionSheet.tagDistracted", "Distracted"), icon: "shuffle" },
-  { value: "blocked", label: i18n.t("reflectionSheet.tagBlocked", "Blocked"), icon: "x-octagon" },
-  { value: "skipped", label: i18n.t("reflectionSheet.tagSkippedOnPurpose", "Skipped on purpose"), icon: "skip-forward" },
-  { value: "tough", label: i18n.t("reflectionSheet.tagTooHard", "Too hard"), icon: "alert-triangle" },
-];
 
 type Props = {
   visible: boolean;
@@ -135,7 +118,27 @@ export function ReflectionSheet({
     }
   }, [visible, taskId, date, initialReasonTag, initialNote]);
 
-  const tags = useMemo(() => (completed ? COMPLETED_TAGS : SKIPPED_TAGS), [completed]);
+  const tags = useMemo<ReasonOption[]>(
+    () =>
+      completed
+        ? [
+            { value: "easy", label: t("reflectionSheet.tagEasy", "Easy"), icon: "smile" as const },
+            { value: "just_right", label: t("reflectionSheet.tagJustRight", "Just right"), icon: "check-circle" as const },
+            { value: "tough", label: t("reflectionSheet.tagTough", "Tough"), icon: "alert-triangle" as const },
+            { value: "energized", label: t("reflectionSheet.tagEnergized", "Energized"), icon: "zap" as const },
+            { value: "focused", label: t("reflectionSheet.tagFocused", "Focused"), icon: "target" as const },
+            { value: "tired", label: t("reflectionSheet.tagTired", "Tired"), icon: "moon" as const },
+          ]
+        : [
+            { value: "no_time", label: t("reflectionSheet.tagNoTime", "No time"), icon: "clock" as const },
+            { value: "tired", label: t("reflectionSheet.tagTooTired", "Too tired"), icon: "moon" as const },
+            { value: "distracted", label: t("reflectionSheet.tagDistracted", "Distracted"), icon: "shuffle" as const },
+            { value: "blocked", label: t("reflectionSheet.tagBlocked", "Blocked"), icon: "x-octagon" as const },
+            { value: "skipped", label: t("reflectionSheet.tagSkippedOnPurpose", "Skipped on purpose"), icon: "skip-forward" as const },
+            { value: "tough", label: t("reflectionSheet.tagTooHard", "Too hard"), icon: "alert-triangle" as const },
+          ],
+    [completed, t],
+  );
 
   const handlePickedAsset = useCallback(
     (asset: ImagePicker.ImagePickerAsset) => {
