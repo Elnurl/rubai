@@ -1,6 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Keyboard,
   Platform,
@@ -33,6 +34,7 @@ type Props = {
  */
 export function CoachQuickBar({ placeholder, onHeight }: Props) {
   const colors = useColors();
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
@@ -123,7 +125,7 @@ export function CoachQuickBar({ placeholder, onHeight }: Props) {
             onPress={submit}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="Send to coach"
+            accessibilityLabel={t("coachQuickBar.sendToCoach", "Send to coach")}
             style={[styles.sendBtn, { backgroundColor: colors.primary }]}
           >
             <Feather name="arrow-up" size={16} color={colors.primaryForeground} />
@@ -133,7 +135,7 @@ export function CoachQuickBar({ placeholder, onHeight }: Props) {
             onPress={openCoachFocused}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="Open voice coach"
+            accessibilityLabel={t("coachQuickBar.openVoiceCoach", "Open voice coach")}
             style={styles.sendBtn}
           >
             <Feather name="mic" size={18} color={colors.mutedForeground} />

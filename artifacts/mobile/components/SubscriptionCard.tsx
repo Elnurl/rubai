@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
@@ -15,6 +16,7 @@ const TIER_ORDER: SubscriptionTier[] = ["free", "pro", "premium"];
 
 export function SubscriptionCard({ currentTier, goalsUsed, onSelect }: Props) {
   const colors = useColors();
+  const { t } = useTranslation();
   const current = TIER_INFO[currentTier];
 
   return (
@@ -39,7 +41,7 @@ export function SubscriptionCard({ currentTier, goalsUsed, onSelect }: Props) {
                 },
               ]}
             >
-              YOUR PLAN
+              {t("subscriptionCard.yourPlan", "YOUR PLAN")}
             </Text>
             <Text
               style={[
@@ -89,7 +91,9 @@ export function SubscriptionCard({ currentTier, goalsUsed, onSelect }: Props) {
             },
           ]}
         >
-          {goalsUsed} of {current.goalLimit} goal{current.goalLimit === 1 ? "" : "s"} in use
+          {current.goalLimit === 1
+            ? t("subscriptionCard.goalsInUseOne", "{{used}} of {{limit}} goal in use", { used: goalsUsed, limit: current.goalLimit })
+            : t("subscriptionCard.goalsInUseOther", "{{used}} of {{limit}} goals in use", { used: goalsUsed, limit: current.goalLimit })}
         </Text>
       </View>
 
@@ -99,7 +103,7 @@ export function SubscriptionCard({ currentTier, goalsUsed, onSelect }: Props) {
           { color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
         ]}
       >
-        SWITCH TIER
+        {t("subscriptionCard.switchTier", "SWITCH TIER")}
       </Text>
 
       {TIER_ORDER.map((tier) => {
@@ -154,7 +158,9 @@ export function SubscriptionCard({ currentTier, goalsUsed, onSelect }: Props) {
                   { color: colors.foreground, fontFamily: "Inter_500Medium" },
                 ]}
               >
-                {info.goalLimit} active goal{info.goalLimit === 1 ? "" : "s"}
+                {info.goalLimit === 1
+                  ? t("subscriptionCard.activeGoalsOne", "{{count}} active goal", { count: info.goalLimit })
+                  : t("subscriptionCard.activeGoalsOther", "{{count}} active goals", { count: info.goalLimit })}
               </Text>
             </View>
             {isCurrent ? (
@@ -173,7 +179,7 @@ export function SubscriptionCard({ currentTier, goalsUsed, onSelect }: Props) {
                     { color: colors.primary, fontFamily: "Inter_600SemiBold" },
                   ]}
                 >
-                  CURRENT
+                  {t("subscriptionCard.current", "CURRENT")}
                 </Text>
               </View>
             ) : (
@@ -189,8 +195,7 @@ export function SubscriptionCard({ currentTier, goalsUsed, onSelect }: Props) {
           { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
         ]}
       >
-        Demo subscription. No real charges — switch freely to explore the
-        multi-goal experience.
+        {t("subscriptionCard.disclaimer", "Demo subscription. No real charges — switch freely to explore the multi-goal experience.")}
       </Text>
     </View>
   );

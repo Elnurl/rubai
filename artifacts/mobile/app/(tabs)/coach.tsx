@@ -3,6 +3,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Alert,
@@ -60,15 +61,16 @@ import {
   stripAttachmentMeta,
 } from "@/lib/attachmentEncoding";
 import { streamCoachReply, type CoachStreamFinal } from "@/lib/coachStream";
+import i18n from "@/lib/i18n";
 import { useTypewriter } from "@/lib/useTypewriter";
 import type { CoachMemory } from "@workspace/api-client-react";
 import type { ChatSession } from "@/types/atlas";
 
 const COLD_START_SUGGESTIONS = [
-  "I'm feeling stuck today",
-  "Make today's plan easier",
-  "Push me harder this week",
-  "What should I focus on?",
+  i18n.t("coach.suggestionStuck", "I'm feeling stuck today"),
+  i18n.t("coach.suggestionEasier", "Make today's plan easier"),
+  i18n.t("coach.suggestionHarder", "Push me harder this week"),
+  i18n.t("coach.suggestionFocus", "What should I focus on?"),
 ];
 
 type ModelChoice = "smart" | "fast";
@@ -80,21 +82,22 @@ function calendarOutcomeMessage(
   calendarTitle?: string | null,
 ): string {
   if (outcome.ok) {
-    return `Added ${outcome.written} task${
-      outcome.written === 1 ? "" : "s"
-    } to ${calendarTitle ?? "your calendar"}.`;
+    const target = calendarTitle ?? i18n.t("coach.yourCalendar", "your calendar");
+    return outcome.written === 1
+      ? i18n.t("coach.addedTaskToCalendar", "Added {{count}} task to {{target}}.", { count: outcome.written, target })
+      : i18n.t("coach.addedTasksToCalendar", "Added {{count}} tasks to {{target}}.", { count: outcome.written, target });
   }
   switch (outcome.reason) {
     case "no-permission":
-      return "I need calendar permission first. Open Account → Calendar sync to grant access.";
+      return i18n.t("coach.calNoPermission", "I need calendar permission first. Open Account → Calendar sync to grant access.");
     case "no-calendar":
-      return "Pick a calendar in Account → Calendar sync, then ask me again.";
+      return i18n.t("coach.calNoCalendar", "Pick a calendar in Account → Calendar sync, then ask me again.");
     case "web":
-      return "Calendar sync is mobile-only — try this from the iOS or Android app.";
+      return i18n.t("coach.calWeb", "Calendar sync is mobile-only — try this from the iOS or Android app.");
     case "disabled":
-      return "Turn on calendar sync in Account → Calendar sync first.";
+      return i18n.t("coach.calDisabled", "Turn on calendar sync in Account → Calendar sync first.");
     default:
-      return "There's nothing to add to your calendar yet.";
+      return i18n.t("coach.calNothing", "There's nothing to add to your calendar yet.");
   }
 }
 
@@ -118,6 +121,7 @@ type PendingAttachment = {
 };
 
 export default function CoachScreen() {
+  const { t } = useTranslation();
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -216,7 +220,7 @@ export default function CoachScreen() {
     if (activeCoachHistory.length === 0 && activeProfile && activeRoadmap) {
       const opener: ChatMessage = {
         role: "assistant",
-        content: `I'm here. We're working on ${activeRoadmap.headline.toLowerCase()}. Tell me what's on your mind, what got in the way, or what you want to push on.`,
+        content: t("coach.opener", "I'm here. We're working on {{headline}}. Tell me what's on your mind, what got in the way, or what you want to push on.", { headline: activeRoadmap.headline.toLowerCase() }),
       };
       void setActiveCoachHistory([opener]);
     }
@@ -236,7 +240,7 @@ export default function CoachScreen() {
       // eslint-disable-next-line no-alert
       window.alert(msg);
     } else {
-      Alert.alert("Voice", msg);
+      Alert.alert(t("coach.voice", "Voice"), msg);
     }
   }, [recorder.state, recorder.errorMessage]);
 
@@ -499,8 +503,8 @@ export default function CoachScreen() {
         const errMsg: ChatMessage = {
           role: "assistant",
           content: isQuotaExceeded
-            ? "Günlük AI limitinə çatdın. Daha çox istifadə üçün planını yüksəlt. 🚀"
-            : "Bağlantı bir anlığa kəsildi. Mesajını yenidən göndər — davam edək.",
+            ? t("coach.quotaExceeded", "Günlük AI limitinə çatdın. Daha çox istifadə üçün planını yüksəlt. 🚀")
+            : t("coach.connectionLost", "Bağlantı bir anlığa kəsildi. Mesajını yenidən göndər — davam edək."),
         };
         await appendCoachMessageToSession(pinnedGoalId, pinnedSessionId, errMsg);
       }
@@ -615,15 +619,15 @@ export default function CoachScreen() {
       const goAhead = () => void deleteCoachSession(sessionId);
       if (Platform.OS === "web") {
         // eslint-disable-next-line no-alert
-        if (window.confirm(`Delete "${title}"?`)) goAhead();
+        if (window.confirm(t("coach.deleteConfirmWeb", 'Delete "{{title}}"?', { title }))) goAhead();
         return;
       }
       Alert.alert(
-        "Delete chat",
-        `Delete "${title}"? This cannot be undone.`,
+        t("coach.deleteChatTitle", "Delete chat"),
+        t("coach.deleteChatMessage", 'Delete "{{title}}"? This cannot be undone.', { title }),
         [
-          { text: "Cancel", style: "cancel" },
-          { text: "Delete", style: "destructive", onPress: goAhead },
+          { text: t("coach.cancel", "Cancel"), style: "cancel" },
+          { text: t("coach.delete", "Delete"), style: "destructive", onPress: goAhead },
         ],
       );
     },
@@ -670,7 +674,7 @@ export default function CoachScreen() {
       await bar.onUndo();
       await appendActiveCoachMessage({
         role: "assistant",
-        content: "Reverted — back to how it was.",
+        content: t("coach.reverted", "Reverted — back to how it was."),
       });
     } catch {
       // best-effort revert; ignore failures
@@ -692,7 +696,7 @@ export default function CoachScreen() {
               await setActiveDailyPlan(planSnapshot);
             }
           : null;
-        let confirmation = "Done.";
+        let confirmation = t("coach.done", "Done.");
         let undoFn: (() => Promise<void>) | null = null;
         let permanentNote: string | null = null;
         let applied = false;
@@ -704,7 +708,7 @@ export default function CoachScreen() {
                 ...planSnapshot,
                 tasks: [...planSnapshot.tasks, action.task],
               });
-              confirmation = `Added "${action.task.title}" to today.`;
+              confirmation = t("coach.addedTaskToday", 'Added "{{title}}" to today.', { title: action.task.title });
               undoFn = restorePlan;
               applied = true;
             }
@@ -717,9 +721,9 @@ export default function CoachScreen() {
                 ...planSnapshot,
                 tasks: [...planSnapshot.tasks, ...tasks],
               });
-              confirmation = `Added ${tasks.length} task${
-                tasks.length === 1 ? "" : "s"
-              } to today.`;
+              confirmation = tasks.length === 1
+                ? t("coach.addedTasksTodayOne", "Added {{count}} task to today.", { count: tasks.length })
+                : t("coach.addedTasksTodayMany", "Added {{count}} tasks to today.", { count: tasks.length });
               undoFn = restorePlan;
               applied = true;
             }
@@ -735,8 +739,8 @@ export default function CoachScreen() {
                 tasks: planSnapshot.tasks.filter((t) => t.id !== action.taskId),
               });
               confirmation = removed
-                ? `Removed "${removed.title}" from today.`
-                : "Removed that task.";
+                ? t("coach.removedTaskToday", 'Removed "{{title}}" from today.', { title: removed.title })
+                : t("coach.removedThatTask", "Removed that task.");
               undoFn = restorePlan;
               applied = true;
             }
@@ -772,8 +776,8 @@ export default function CoachScreen() {
                 ),
               });
               confirmation = edited
-                ? `Updated "${edited.title}".`
-                : "Updated that task.";
+                ? t("coach.updatedTask", 'Updated "{{title}}".', { title: edited.title })
+                : t("coach.updatedThatTask", "Updated that task.");
               undoFn = restorePlan;
               applied = true;
             }
@@ -787,9 +791,9 @@ export default function CoachScreen() {
                 ...planSnapshot,
                 tasks: planSnapshot.tasks.filter((t) => !drop.has(t.id)),
               });
-              confirmation = `Lightened today by ${ids.length} task${
-                ids.length === 1 ? "" : "s"
-              }.`;
+              confirmation = ids.length === 1
+                ? t("coach.lightenedTodayOne", "Lightened today by {{count}} task.", { count: ids.length })
+                : t("coach.lightenedTodayMany", "Lightened today by {{count}} tasks.", { count: ids.length });
               undoFn = restorePlan;
               applied = true;
             }
@@ -807,7 +811,7 @@ export default function CoachScreen() {
                 ...g,
                 profile: { ...g.profile, customGoalTitle: newTitle },
               }));
-              confirmation = `Renamed your goal to "${newTitle}".`;
+              confirmation = t("coach.renamedGoal", 'Renamed your goal to "{{title}}".', { title: newTitle });
               undoFn = async () => {
                 await updateActiveGoal((g) => ({
                   ...g,
@@ -843,7 +847,7 @@ export default function CoachScreen() {
                 plan,
                 account.reminderTime,
               );
-              confirmation = "Rebuilt today's plan from scratch.";
+              confirmation = t("coach.rebuiltPlan", "Rebuilt today's plan from scratch.");
               undoFn = restorePlan;
               applied = true;
             }
@@ -873,9 +877,7 @@ export default function CoachScreen() {
                 action.event,
               );
               if (outcome.ok) {
-                confirmation = `Added "${action.event.title}" to ${
-                  account.calendarSync.calendarTitle ?? "your calendar"
-                }.`;
+                confirmation = t("coach.addedEventToCalendar", 'Added "{{title}}" to {{target}}.', { title: action.event.title, target: account.calendarSync.calendarTitle ?? t("coach.yourCalendar", "your calendar") });
                 applied = true;
               } else {
                 permanentNote = calendarOutcomeMessage(
@@ -923,8 +925,8 @@ export default function CoachScreen() {
                 };
               });
               confirmation = edited
-                ? `Updated milestone "${edited.title}".`
-                : "Updated milestone.";
+                ? t("coach.updatedMilestone", 'Updated milestone "{{title}}".', { title: edited.title })
+                : t("coach.updatedMilestoneGeneric", "Updated milestone.");
               undoFn = async () => {
                 await updateActiveGoal((g) => ({ ...g, roadmap: prevRoadmap }));
               };
@@ -962,7 +964,7 @@ export default function CoachScreen() {
                   },
                 };
               });
-              confirmation = `Added milestone "${newMilestone.title}".`;
+              confirmation = t("coach.addedMilestone", 'Added milestone "{{title}}".', { title: newMilestone.title });
               undoFn = async () => {
                 await updateActiveGoal((g) => ({ ...g, roadmap: prevRoadmap }));
               };
@@ -997,8 +999,8 @@ export default function CoachScreen() {
                 };
               });
               confirmation = removed
-                ? `Removed milestone "${removed.title}".`
-                : "Removed milestone.";
+                ? t("coach.removedMilestone", 'Removed milestone "{{title}}".', { title: removed.title })
+                : t("coach.removedMilestoneGeneric", "Removed milestone.");
               undoFn = async () => {
                 await updateActiveGoal((g) => ({ ...g, roadmap: prevRoadmap }));
               };
@@ -1034,8 +1036,8 @@ export default function CoachScreen() {
                 };
               });
               confirmation = editedPhase
-                ? `Updated phase "${editedPhase.title}".`
-                : "Updated phase.";
+                ? t("coach.updatedPhase", 'Updated phase "{{title}}".', { title: editedPhase.title })
+                : t("coach.updatedPhaseGeneric", "Updated phase.");
               undoFn = async () => {
                 await updateActiveGoal((g) => ({ ...g, roadmap: prevRoadmap }));
               };
@@ -1055,13 +1057,13 @@ export default function CoachScreen() {
         } else {
           await appendActiveCoachMessage({
             role: "assistant",
-            content: "I couldn't apply that just now — want me to try again?",
+            content: t("coach.couldntApply", "I couldn't apply that just now — want me to try again?"),
           });
         }
       } catch {
         await appendActiveCoachMessage({
           role: "assistant",
-          content: "I couldn't apply that just now — want me to try again?",
+          content: t("coach.couldntApply", "I couldn't apply that just now — want me to try again?"),
         });
       } finally {
         setApplyingAction(false);
@@ -1104,12 +1106,12 @@ export default function CoachScreen() {
         }
       } catch (err) {
         const message =
-          err instanceof Error ? err.message : "Couldn't transcribe that clip.";
+          err instanceof Error ? err.message : t("coach.transcribeFailed", "Couldn't transcribe that clip.");
         if (Platform.OS === "web") {
           // eslint-disable-next-line no-alert
           window.alert(message);
         } else {
-          Alert.alert("Voice", message);
+          Alert.alert(t("coach.voice", "Voice"), message);
         }
       } finally {
         setTranscribing(false);
@@ -1148,7 +1150,7 @@ export default function CoachScreen() {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
         if (Platform.OS !== "web") {
-          Alert.alert("Photos", "Allow photo access to attach an image.");
+          Alert.alert(t("coach.photos", "Photos"), t("coach.photoPermission", "Allow photo access to attach an image."));
         }
         return;
       }
@@ -1180,8 +1182,8 @@ export default function CoachScreen() {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
         Alert.alert(
-          "Camera",
-          "Allow camera access to snap what you're working on.",
+          t("coach.camera", "Camera"),
+          t("coach.cameraPermission", "Allow camera access to snap what you're working on."),
         );
         return;
       }
@@ -1298,7 +1300,7 @@ export default function CoachScreen() {
                 style={[styles.undoButton, { borderColor: colors.primary }]}
               >
                 <Text style={[styles.undoButtonText, { color: colors.primary }]}>
-                  Undo
+                  {t("coach.undo", "Undo")}
                 </Text>
               </Pressable>
             ) : null}
@@ -1393,8 +1395,8 @@ export default function CoachScreen() {
       <View style={[styles.root, { backgroundColor: colors.background, paddingTop: topPad }]}>
         <EmptyState
           icon="message-circle"
-          title="Coach unlocks after intake"
-          description="Add a goal and finish the intake form first."
+          title={t("coach.emptyTitle", "Coach unlocks after intake")}
+          description={t("coach.emptyDesc", "Add a goal and finish the intake form first.")}
         />
       </View>
     );
@@ -1416,7 +1418,7 @@ export default function CoachScreen() {
             onPress={() => setSidebarOpen(true)}
             hitSlop={10}
             accessibilityRole="button"
-            accessibilityLabel="Open chat history"
+            accessibilityLabel={t("coach.openChatHistory", "Open chat history")}
             testID="open-sidebar"
             style={({ pressed }) => [
               styles.hamburgerBtn,
@@ -1529,7 +1531,7 @@ export default function CoachScreen() {
                 },
               ]}
             >
-              {modelChoice === "fast" ? "FAST MODE" : "SMART MODE"}
+              {modelChoice === "fast" ? t("coach.fastMode", "FAST MODE") : t("coach.smartMode", "SMART MODE")}
             </Text>
           </Pressable>
           <Text
@@ -1554,7 +1556,7 @@ export default function CoachScreen() {
                 },
               ]}
             >
-              {autoSpeak ? "VOICE ON" : "VOICE OFF"}
+              {autoSpeak ? t("coach.voiceOn", "VOICE ON") : t("coach.voiceOff", "VOICE OFF")}
             </Text>
           </Pressable>
           {transcribing ? (
@@ -1574,7 +1576,7 @@ export default function CoachScreen() {
                   { color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
                 ]}
               >
-                TRANSCRIBING…
+                {t("coach.transcribing", "TRANSCRIBING…")}
               </Text>
             </>
           ) : null}
@@ -1665,7 +1667,7 @@ export default function CoachScreen() {
                   { color: colors.foreground, fontFamily: "Inter_500Medium" },
                 ]}
               >
-                Recording {formatTime(recordingSeconds)}
+                {t("coach.recording", "Recording {{time}}", { time: formatTime(recordingSeconds) })}
               </Text>
             </View>
           ) : (
@@ -1673,7 +1675,7 @@ export default function CoachScreen() {
               ref={inputRef}
               value={draft}
               onChangeText={setDraft}
-              placeholder="Talk to your coach..."
+              placeholder={t("coach.inputPlaceholder", "Talk to your coach...")}
               placeholderTextColor={colors.mutedForeground}
               multiline
               style={[
@@ -1781,7 +1783,7 @@ export default function CoachScreen() {
                 { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
               ]}
             >
-              Camera
+              {t("coach.camera", "Camera")}
             </Text>
             <Text
               style={[
@@ -1789,7 +1791,7 @@ export default function CoachScreen() {
                 { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
               ]}
             >
-              Take a photo right now
+              {t("coach.cameraSub", "Take a photo right now")}
             </Text>
           </View>
         </Pressable>
@@ -1820,7 +1822,7 @@ export default function CoachScreen() {
                 { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
               ]}
             >
-              Photos
+              {t("coach.photos", "Photos")}
             </Text>
             <Text
               style={[
@@ -1828,7 +1830,7 @@ export default function CoachScreen() {
                 { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
               ]}
             >
-              Pick from your library
+              {t("coach.photosSub", "Pick from your library")}
             </Text>
           </View>
         </Pressable>
@@ -1856,7 +1858,7 @@ export default function CoachScreen() {
                 { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
               ]}
             >
-              Files
+              {t("coach.files", "Files")}
             </Text>
             <Text
               style={[
@@ -1864,7 +1866,7 @@ export default function CoachScreen() {
                 { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
               ]}
             >
-              PDF, Word, text, CSV…
+              {t("coach.filesSub", "PDF, Word, text, CSV…")}
             </Text>
           </View>
         </Pressable>
@@ -1901,6 +1903,7 @@ function ChatSessionsSidebar({
   onPickSession: (id: string) => void;
   onDeleteSession: (id: string, title: string) => void;
 }) {
+  const { t } = useTranslation();
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const PANEL_W = 290;
@@ -1944,7 +1947,7 @@ function ChatSessionsSidebar({
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={onClose}
-          accessibilityLabel="Close chat history"
+          accessibilityLabel={t("coach.closeChatHistory", "Close chat history")}
         />
       </Animated.View>
 
@@ -1971,7 +1974,7 @@ function ChatSessionsSidebar({
               ]}
               numberOfLines={1}
             >
-              {goalTitle ? goalTitle.toUpperCase() : "CHATS"}
+              {goalTitle ? goalTitle.toUpperCase() : t("coach.chatsEyebrow", "CHATS")}
             </Text>
             <Text
               style={[
@@ -1979,13 +1982,13 @@ function ChatSessionsSidebar({
                 { color: colors.foreground, fontFamily: "Inter_700Bold" },
               ]}
             >
-              Chats
+              {t("coach.chatsTitle", "Chats")}
             </Text>
           </View>
           <Pressable
             onPress={onClose}
             hitSlop={10}
-            accessibilityLabel="Close chat history"
+            accessibilityLabel={t("coach.closeChatHistory", "Close chat history")}
             style={({ pressed }) => [
               sidebarStyles.iconBtn,
               {
@@ -2014,7 +2017,7 @@ function ChatSessionsSidebar({
               { color: colors.primaryForeground, fontFamily: "Inter_600SemiBold" },
             ]}
           >
-            New chat
+            {t("coach.newChat", "New chat")}
           </Text>
         </Pressable>
 
@@ -2026,7 +2029,7 @@ function ChatSessionsSidebar({
                 { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
               ]}
             >
-              No chats yet. Tap "New chat" to start.
+              {t("coach.noChats", 'No chats yet. Tap "New chat" to start.')}
             </Text>
           </View>
         ) : (
@@ -2066,7 +2069,7 @@ function ChatSessionsSidebar({
                         { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
                       ]}
                     >
-                      {item.title || "New chat"}
+                      {item.title || t("coach.newChat", "New chat")}
                     </Text>
                     {preview ? (
                       <Text
@@ -2083,7 +2086,7 @@ function ChatSessionsSidebar({
                   <Pressable
                     onPress={() => onDeleteSession(item.id, item.title)}
                     hitSlop={8}
-                    accessibilityLabel="Delete chat"
+                    accessibilityLabel={t("coach.deleteChat", "Delete chat")}
                     style={({ pressed }) => ({
                       padding: 6,
                       opacity: pressed ? 0.6 : 0.8,
@@ -2202,6 +2205,7 @@ function WorkingOnInfoButton({
   memory: CoachMemory | null;
   onForgetMemory: () => void | Promise<void>;
 }) {
+  const { t } = useTranslation();
   const colors = useColors();
   const [open, setOpen] = useState(false);
   const facts = memory?.facts ?? [];
@@ -2211,7 +2215,7 @@ function WorkingOnInfoButton({
         onPress={() => setOpen(true)}
         hitSlop={10}
         accessibilityRole="button"
-        accessibilityLabel="Working on and remembered context"
+        accessibilityLabel={t("coach.workingOnContext", "Working on and remembered context")}
         style={({ pressed }) => [
           infoStyles.btn,
           {
@@ -2254,7 +2258,7 @@ function WorkingOnInfoButton({
                 },
               ]}
             >
-              WORKING ON
+              {t("coach.workingOn", "WORKING ON")}
             </Text>
             <Text
               style={[
@@ -2285,7 +2289,7 @@ function WorkingOnInfoButton({
                     },
                   ]}
                 >
-                  WHAT RUBAI REMEMBERS
+                  {t("coach.whatRubaiRemembers", "WHAT RUBAI REMEMBERS")}
                 </Text>
                 <Text
                   style={[
@@ -2352,7 +2356,7 @@ function WorkingOnInfoButton({
                       },
                     ]}
                   >
-                    Forget everything
+                    {t("coach.forgetEverything", "Forget everything")}
                   </Text>
                 </Pressable>
               </>

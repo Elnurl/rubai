@@ -23,7 +23,9 @@ import {
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 
+import i18n from "@/lib/i18n";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { friendlyAuthError } from "@/lib/authErrors";
@@ -38,6 +40,7 @@ import {
 type EditField = "name" | "email" | "phone" | "password" | null;
 
 export default function ProfileScreen() {
+  const { t } = useTranslation();
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -55,16 +58,16 @@ export default function ProfileScreen() {
   };
   const onAppearanceLongPress = () => {
     void updateAccount({ themeOverride: "system" });
-    if (Platform.OS !== "web") Alert.alert("Appearance", "Following system setting.");
+    if (Platform.OS !== "web") Alert.alert(t("profile.appearance", "Appearance"), t("profile.followingSystem", "Following system setting."));
   };
   const onSignOut = () => {
     const doSignOut = async () => { await signOut(); };
     if (Platform.OS === "web") {
-      if (typeof window !== "undefined" && window.confirm("Sign out of rubai?")) void doSignOut();
+      if (typeof window !== "undefined" && window.confirm(t("profile.signOutConfirmWeb", "Sign out of rubai?"))) void doSignOut();
     } else {
-      Alert.alert("Sign out?", "You can sign back in any time.", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Sign out", onPress: doSignOut },
+      Alert.alert(t("profile.signOutTitle", "Sign out?"), t("profile.signOutMessage", "You can sign back in any time."), [
+        { text: t("profile.cancel", "Cancel"), style: "cancel" },
+        { text: t("profile.signOut", "Sign out"), onPress: doSignOut },
       ]);
     }
   };
@@ -85,7 +88,7 @@ export default function ProfileScreen() {
   const fullName =
     [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() ||
     user?.username ||
-    (user?.primaryEmailAddress?.emailAddress?.split("@")[0] ?? "Your account");
+    (user?.primaryEmailAddress?.emailAddress?.split("@")[0] ?? t("profile.yourAccount", "Your account"));
   const avatarUrl = localAvatarUri ?? user?.imageUrl ?? null;
   const initials =
     ((user?.firstName?.[0] ?? "") + (user?.lastName?.[0] ?? "")).trim() ||
@@ -96,8 +99,8 @@ export default function ProfileScreen() {
     if (!user) return;
     const hasPhoto = !!user.imageUrl && !user.imageUrl.includes("/default");
     const options = hasPhoto
-      ? ["Choose from library", "Remove photo", "Cancel"]
-      : ["Choose from library", "Cancel"];
+      ? [t("profile.chooseFromLibrary", "Choose from library"), t("profile.removePhoto", "Remove photo"), t("profile.cancel", "Cancel")]
+      : [t("profile.chooseFromLibrary", "Choose from library"), t("profile.cancel", "Cancel")];
     const cancelIdx = options.length - 1;
     const destructiveIdx = hasPhoto ? 1 : -1;
 
@@ -116,12 +119,12 @@ export default function ProfileScreen() {
         handle,
       );
     } else {
-      Alert.alert("Profile photo", undefined, [
-        { text: "Choose from library", onPress: () => handle(0) },
+      Alert.alert(t("profile.profilePhoto", "Profile photo"), undefined, [
+        { text: t("profile.chooseFromLibrary", "Choose from library"), onPress: () => handle(0) },
         ...(hasPhoto
-          ? [{ text: "Remove photo", style: "destructive" as const, onPress: () => handle(1) }]
+          ? [{ text: t("profile.removePhoto", "Remove photo"), style: "destructive" as const, onPress: () => handle(1) }]
           : []),
-        { text: "Cancel", style: "cancel" as const },
+        { text: t("profile.cancel", "Cancel"), style: "cancel" as const },
       ]);
     }
   }, [user]);
@@ -131,7 +134,7 @@ export default function ProfileScreen() {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert("Photos", "Allow photo access to change your picture.");
+        Alert.alert(t("profile.photos", "Photos"), t("profile.allowPhotoAccess", "Allow photo access to change your picture."));
         return;
       }
       // Set busy BEFORE the picker so the camera badge shows a spinner during
@@ -153,7 +156,7 @@ export default function ProfileScreen() {
       await user.reload();
       setLocalAvatarUri(null);
     } catch (err) {
-      Alert.alert("Couldn't update photo", friendlyAuthError(err));
+      Alert.alert(t("profile.couldntUpdatePhoto", "Couldn't update photo"), friendlyAuthError(err));
     } finally {
       setAvatarBusy(false);
     }
@@ -167,7 +170,7 @@ export default function ProfileScreen() {
       await user.reload();
       setLocalAvatarUri(null);
     } catch (err) {
-      Alert.alert("Couldn't remove photo", friendlyAuthError(err));
+      Alert.alert(t("profile.couldntRemovePhoto", "Couldn't remove photo"), friendlyAuthError(err));
     } finally {
       setAvatarBusy(false);
     }
@@ -192,7 +195,7 @@ export default function ProfileScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <SubHeader title="Profile" onBack={() => router.back()} />
+        <SubHeader title={t("profile.title", "Profile")} onBack={() => router.back()} />
 
         {/* Identity card with tappable avatar */}
         <View
@@ -279,19 +282,19 @@ export default function ProfileScreen() {
 
         <EditableRow
           icon="user"
-          label="Display Name"
+          label={t("profile.displayName", "Display Name")}
           value={fullName}
           onPress={() => setField("name")}
         />
         <EditableRow
           icon="mail"
-          label="Email"
+          label={t("profile.email", "Email")}
           value={email}
           onPress={() => setField("email")}
         />
         <EditableRow
           icon="phone"
-          label="Phone"
+          label={t("profile.phone", "Phone")}
           value={phone}
           onPress={() => setField("phone")}
         />
@@ -301,23 +304,23 @@ export default function ProfileScreen() {
         >
           <DetailRow
             icon="globe"
-            label="Language"
+            label={t("profile.language", "Language")}
             value={account.preferredLanguage}
             colors={colors}
             chevron
           />
         </Pressable>
 
-        <SectionLabel text="SECURITY" />
+        <SectionLabel text={t("profile.security", "SECURITY")} />
         <EditableRow
           icon="lock"
-          label={user?.passwordEnabled ? "Update password" : "Set password"}
-          value={user?.passwordEnabled ? "••••••••" : "Not set"}
+          label={user?.passwordEnabled ? t("profile.updatePassword", "Update password") : t("profile.setPassword", "Set password")}
+          value={user?.passwordEnabled ? "••••••••" : t("profile.notSet", "Not set")}
           onPress={() => setField("password")}
         />
 
         {/* ── PREFERENCES ── */}
-        <SectionLabel text="PREFERENCES" />
+        <SectionLabel text={t("profile.preferences", "PREFERENCES")} />
         <SettingsGroup>
           <Pressable
             onLongPress={onAppearanceLongPress}
@@ -330,14 +333,14 @@ export default function ProfileScreen() {
               </View>
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={[pStyles.settingsTitle, { color: colors.foreground }]}>
-                  Appearance
+                  {t("profile.appearance", "Appearance")}
                 </Text>
                 <Text style={[pStyles.settingsSubtitle, { color: colors.mutedForeground }]}>
                   {account.themeOverride === "system"
-                    ? `System (${isDark ? "Dark" : "Light"})`
+                    ? t("profile.systemTheme", "System ({{mode}})", { mode: isDark ? t("profile.dark", "Dark") : t("profile.light", "Light") })
                     : isDark
-                      ? "Dark"
-                      : "Light"}
+                      ? t("profile.dark", "Dark")
+                      : t("profile.light", "Light")}
                 </Text>
               </View>
               <Switch
@@ -351,25 +354,25 @@ export default function ProfileScreen() {
           <SettingsDivider />
           <SettingsNavRow
             icon="bell"
-            title="Notifications"
-            subtitle="Smart timing for nudges"
+            title={t("profile.notifications", "Notifications")}
+            subtitle={t("profile.notificationsSubtitle", "Smart timing for nudges")}
             onPress={() => router.push("/account/notifications")}
             colors={colors}
           />
         </SettingsGroup>
 
         {/* ── ACCOUNT ── */}
-        <SectionLabel text="ACCOUNT" />
+        <SectionLabel text={t("profile.account", "ACCOUNT")} />
         <SettingsGroup>
           <SettingsNavRow
             icon="calendar"
-            title="Calendar sync"
+            title={t("profile.calendarSync", "Calendar sync")}
             subtitle={
               account.calendarSync.enabled && account.calendarSync.calendarTitle
-                ? `On · ${account.calendarSync.calendarTitle}`
+                ? t("profile.calendarOnTitle", "On · {{title}}", { title: account.calendarSync.calendarTitle })
                 : account.calendarSync.enabled
-                  ? "On · pick a calendar"
-                  : "Off"
+                  ? t("profile.calendarOnPick", "On · pick a calendar")
+                  : t("profile.calendarOff", "Off")
             }
             onPress={() => router.push("/account/calendar")}
             colors={colors}
@@ -377,31 +380,31 @@ export default function ProfileScreen() {
           <SettingsDivider />
           <SettingsNavRow
             icon="zap"
-            title="Behavioral memory"
-            subtitle="What rubai remembers about you"
+            title={t("profile.behavioralMemory", "Behavioral memory")}
+            subtitle={t("profile.behavioralMemorySubtitle", "What rubai remembers about you")}
             onPress={() => router.push("/behavioral-insights")}
             colors={colors}
           />
           <SettingsDivider />
           <SettingsNavRow
             icon="shield"
-            title="Privacy & data"
-            subtitle="Control what's stored"
+            title={t("profile.privacyData", "Privacy & data")}
+            subtitle={t("profile.privacyDataSubtitle", "Control what's stored")}
             onPress={() => router.push("/account/privacy")}
             colors={colors}
           />
           <SettingsDivider />
           <SettingsNavRow
             icon="file-text"
-            title="Legal"
-            subtitle="Privacy Policy & Terms of Service"
+            title={t("profile.legal", "Legal")}
+            subtitle={t("profile.legalSubtitle", "Privacy Policy & Terms of Service")}
             onPress={() => router.push("/legal/document?type=privacy_policy")}
             colors={colors}
           />
         </SettingsGroup>
 
         {/* ── SUBSCRIPTION ── */}
-        <SectionLabel text="SUBSCRIPTION" />
+        <SectionLabel text={t("profile.subscription", "SUBSCRIPTION")} />
         <SettingsGroup>
           <View style={pStyles.subscriptionHeader}>
             <View style={[pStyles.settingsIcon, { backgroundColor: colors.primary + "14" }]}>
@@ -409,7 +412,7 @@ export default function ProfileScreen() {
             </View>
             <View style={{ flex: 1, gap: 2 }}>
               <Text style={[pStyles.settingsTitle, { color: colors.foreground }]}>
-                {tierInfo.label} plan
+                {t("profile.tierPlan", "{{label}} plan", { label: tierInfo.label })}
               </Text>
               <Text style={[pStyles.settingsSubtitle, { color: colors.mutedForeground }]}>
                 {tierInfo.price} · {tierInfo.tagline}
@@ -426,7 +429,7 @@ export default function ProfileScreen() {
               ]}
             >
               <Text style={{ color: colors.primaryForeground, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>
-                Manage
+                {t("profile.manage", "Manage")}
               </Text>
             </Pressable>
           </View>
@@ -435,7 +438,7 @@ export default function ProfileScreen() {
           <SettingsDivider />
           <View style={pStyles.historyLabelRow}>
             <Text style={[pStyles.historyLabel, { color: colors.mutedForeground }]}>
-              HISTORY
+              {t("profile.history", "HISTORY")}
             </Text>
           </View>
           {tierHistoryLoading ? (
@@ -445,7 +448,7 @@ export default function ProfileScreen() {
           ) : !tierHistoryData?.transitions?.length ? (
             <View style={pStyles.historyPlaceholder}>
               <Text style={{ color: colors.mutedForeground, fontFamily: "Inter_400Regular", fontSize: 13 }}>
-                No subscription changes yet.
+                {t("profile.noSubscriptionChanges", "No subscription changes yet.")}
               </Text>
             </View>
           ) : (
@@ -459,7 +462,7 @@ export default function ProfileScreen() {
         </SettingsGroup>
 
         {/* ── SESSION ── */}
-        <SectionLabel text="SESSION" />
+        <SectionLabel text={t("profile.session", "SESSION")} />
         <Pressable
           onPress={onSignOut}
           android_ripple={{ color: colors.destructive + "20" }}
@@ -477,7 +480,7 @@ export default function ProfileScreen() {
             <Feather name="log-out" size={15} color={colors.destructive} />
           </View>
           <Text style={{ color: colors.destructive, fontFamily: "Inter_600SemiBold", fontSize: 14.5 }}>
-            Sign out
+            {t("profile.signOut", "Sign out")}
           </Text>
         </Pressable>
       </ScrollView>
@@ -604,23 +607,28 @@ const TIER_RANK: Record<string, number> = { free: 0, pro: 1, premium: 2 };
 function transitionDir(from: string, to: string) {
   const f = TIER_RANK[from] ?? 0;
   const t = TIER_RANK[to] ?? 0;
-  if (t > f) return { label: "Upgraded", icon: "arrow-up-circle" as const, positive: true };
-  if (t < f) return { label: "Downgraded", icon: "arrow-down-circle" as const, positive: false };
-  return { label: "Changed", icon: "refresh-cw" as const, positive: true };
+  if (t > f) return { label: i18n.t("profile.upgraded", "Upgraded"), icon: "arrow-up-circle" as const, positive: true };
+  if (t < f) return { label: i18n.t("profile.downgraded", "Downgraded"), icon: "arrow-down-circle" as const, positive: false };
+  return { label: i18n.t("profile.changed", "Changed"), icon: "refresh-cw" as const, positive: true };
 }
 function tierName(t: string): string {
   const k = t as SubscriptionTier;
   return TIER_INFO[k]?.label ?? (t.charAt(0).toUpperCase() + t.slice(1));
 }
 function historyTrigger(triggeredBy: string, eventType: string | null): string {
-  if (triggeredBy === "sync-tier") return "App sync";
-  if (!eventType) return "Purchase";
+  if (triggeredBy === "sync-tier") return i18n.t("profile.triggerAppSync", "App sync");
+  if (!eventType) return i18n.t("profile.triggerPurchase", "Purchase");
   const m: Record<string, string> = {
-    INITIAL_PURCHASE: "Purchase", RENEWAL: "Renewal", CANCELLATION: "Cancelled",
-    EXPIRATION: "Expired", BILLING_ISSUE: "Billing issue", PRODUCT_CHANGE: "Plan change",
-    TRANSFER: "Transfer", SUBSCRIBER_ALIAS: "Account merge",
+    INITIAL_PURCHASE: i18n.t("profile.triggerPurchase", "Purchase"),
+    RENEWAL: i18n.t("profile.triggerRenewal", "Renewal"),
+    CANCELLATION: i18n.t("profile.triggerCancelled", "Cancelled"),
+    EXPIRATION: i18n.t("profile.triggerExpired", "Expired"),
+    BILLING_ISSUE: i18n.t("profile.triggerBillingIssue", "Billing issue"),
+    PRODUCT_CHANGE: i18n.t("profile.triggerPlanChange", "Plan change"),
+    TRANSFER: i18n.t("profile.triggerTransfer", "Transfer"),
+    SUBSCRIBER_ALIAS: i18n.t("profile.triggerAccountMerge", "Account merge"),
   };
-  return m[eventType] ?? "Purchase";
+  return m[eventType] ?? i18n.t("profile.triggerPurchase", "Purchase");
 }
 function historyDate(raw: Date | string): string {
   const d = typeof raw === "string" ? new Date(raw) : raw;
@@ -635,6 +643,7 @@ function HistoryRow({
   entry: TierTransitionEntry;
   colors: ReturnType<typeof useColors>;
 }) {
+  const { t } = useTranslation();
   const dir = transitionDir(entry.fromTier, entry.toTier);
   const trigger = historyTrigger(entry.triggeredBy, entry.eventType);
   const accent = dir.positive ? colors.primary : colors.destructive;
@@ -645,7 +654,7 @@ function HistoryRow({
       </View>
       <View style={{ flex: 1, gap: 2 }}>
         <Text numberOfLines={1} style={[pStyles.settingsTitle, { color: colors.foreground }]}>
-          {dir.label} to {tierName(entry.toTier)}
+          {t("profile.historyTo", "{{label}} to {{tier}}", { label: dir.label, tier: tierName(entry.toTier) })}
         </Text>
         <Text numberOfLines={1} style={[pStyles.settingsSubtitle, { color: colors.mutedForeground }]}>
           {trigger}{historyDate(entry.createdAt) ? `  ·  ${historyDate(entry.createdAt)}` : ""}
@@ -875,7 +884,14 @@ function ModalShell(props: {
    * an apparently-broken Save button.
    */
   error?: string | null;
+  /**
+   * Optional full-screen overlay rendered *inside* this modal (e.g. a country
+   * picker). Rendered as a sibling of the card so it stacks reliably without
+   * nesting a second React Native <Modal>, which is non-interactive on iOS.
+   */
+  overlay?: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   const colors = useColors();
   return (
     <Modal
@@ -957,7 +973,7 @@ function ModalShell(props: {
                   fontSize: 14,
                 }}
               >
-                Cancel
+                {t("profile.cancel", "Cancel")}
               </Text>
             </Pressable>
             <Pressable
@@ -987,6 +1003,11 @@ function ModalShell(props: {
             </Pressable>
           </View>
         </View>
+        {props.overlay ? (
+          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+            {props.overlay}
+          </View>
+        ) : null}
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -1054,6 +1075,7 @@ function NameModal(props: {
   lastName: string;
   onSave: (first: string, last: string) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [first, setFirst] = useState(props.firstName);
   const [last, setLast] = useState(props.lastName);
   const [busy, setBusy] = useState(false);
@@ -1074,8 +1096,8 @@ function NameModal(props: {
     <ModalShell
       visible={props.visible}
       onClose={props.onClose}
-      title="Edit display name"
-      primaryLabel="Save"
+      title={t("profile.editDisplayName", "Edit display name")}
+      primaryLabel={t("profile.save", "Save")}
       primaryDisabled={!dirty || (!first.trim() && !last.trim())}
       busy={busy}
       error={error}
@@ -1094,14 +1116,14 @@ function NameModal(props: {
       }}
     >
       <FieldInput
-        label="First name"
+        label={t("profile.firstName", "First name")}
         value={first}
         onChangeText={setFirst}
         autoCapitalize="words"
         autoFocus
       />
       <FieldInput
-        label="Last name"
+        label={t("profile.lastName", "Last name")}
         value={last}
         onChangeText={setLast}
         autoCapitalize="words"
@@ -1130,6 +1152,7 @@ function VerifyModal(props: {
   kind: "email" | "phone";
   currentValue: string;
 }) {
+  const { t } = useTranslation();
   const { user } = useUser();
   const colors = useColors();
   const isEmail = props.kind === "email";
@@ -1209,7 +1232,7 @@ function VerifyModal(props: {
       await pending.attempt(code.trim());
       await pending.reload();
       if (!pending.isVerified()) {
-        throw new Error("Verification did not complete. Please try again.");
+        throw new Error(t("profile.verificationIncomplete", "Verification did not complete. Please try again."));
       }
       await user.update(
         isEmail
@@ -1237,10 +1260,10 @@ function VerifyModal(props: {
   };
 
   const title = isEmail
-    ? step === "input" ? "Change email" : "Verify email"
-    : step === "input" ? "Change phone number" : "Verify phone number";
+    ? step === "input" ? t("profile.changeEmail", "Change email") : t("profile.verifyEmail", "Verify email")
+    : step === "input" ? t("profile.changePhone", "Change phone number") : t("profile.verifyPhone", "Verify phone number");
 
-  const primaryLabel = step === "input" ? "Send code" : "Verify & save";
+  const primaryLabel = step === "input" ? t("profile.sendCode", "Send code") : t("profile.verifySave", "Verify & save");
   const primaryDisabled =
     step === "input"
       ? isEmail
@@ -1249,7 +1272,6 @@ function VerifyModal(props: {
       : code.trim().length < 6;
 
   return (
-    <>
       <ModalShell
         visible={props.visible}
         onClose={props.onClose}
@@ -1259,25 +1281,37 @@ function VerifyModal(props: {
         busy={busy}
         error={error}
         onPrimary={step === "input" ? sendCode : verifyAndPromote}
+        overlay={
+          showCountryPicker ? (
+            <CountryPickerPanel
+              selected={country}
+              onSelect={(c) => {
+                setCountry(c);
+                setShowCountryPicker(false);
+              }}
+              onClose={() => setShowCountryPicker(false)}
+            />
+          ) : undefined
+        }
       >
         {step === "input" ? (
           <>
             <Text style={styles.modalHelper}>
-              Current: {props.currentValue}
+              {t("profile.current", "Current: {{value}}", { value: props.currentValue })}
             </Text>
             {isEmail ? (
               <FieldInput
-                label="New email"
+                label={t("profile.newEmail", "New email")}
                 value={value}
                 onChangeText={setValue}
-                placeholder="you@example.com"
+                placeholder={t("profile.emailPlaceholder", "you@example.com")}
                 keyboardType="email-address"
                 autoFocus
               />
             ) : (
               <>
                 <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
-                  COUNTRY CODE
+                  {t("profile.countryCode", "COUNTRY CODE")}
                 </Text>
                 <Pressable
                   onPress={() => setShowCountryPicker(true)}
@@ -1315,7 +1349,7 @@ function VerifyModal(props: {
                   <Feather name="chevron-down" size={16} color={colors.mutedForeground} />
                 </Pressable>
                 <FieldInput
-                  label="PHONE NUMBER"
+                  label={t("profile.phoneNumber", "PHONE NUMBER")}
                   value={value}
                   onChangeText={setValue}
                   placeholder="501234567"
@@ -1328,10 +1362,10 @@ function VerifyModal(props: {
         ) : (
           <>
             <Text style={styles.modalHelper}>
-              We sent a code to {isEmail ? value.trim() : fullPhone}. Enter it below to confirm.
+              {t("profile.codeSentHelper", "We sent a code to {{target}}. Enter it below to confirm.", { target: isEmail ? value.trim() : fullPhone })}
             </Text>
             <FieldInput
-              label="Verification code"
+              label={t("profile.verificationCode", "Verification code")}
               value={code}
               onChangeText={setCode}
               placeholder="123456"
@@ -1341,13 +1375,6 @@ function VerifyModal(props: {
           </>
         )}
       </ModalShell>
-      <CountryPickerModal
-        visible={showCountryPicker}
-        selected={country}
-        onSelect={(c) => { setCountry(c); setShowCountryPicker(false); }}
-        onClose={() => setShowCountryPicker(false)}
-      />
-    </>
   );
 }
 
@@ -1358,6 +1385,7 @@ function PasswordModal(props: {
   onClose: () => void;
   passwordEnabled: boolean;
 }) {
+  const { t } = useTranslation();
   const { user } = useUser();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -1396,8 +1424,8 @@ function PasswordModal(props: {
       props.onClose();
       if (Platform.OS !== "web") {
         Alert.alert(
-          "Password updated",
-          "You have been signed out of other devices.",
+          t("profile.passwordUpdated", "Password updated"),
+          t("profile.signedOutOtherDevices", "You have been signed out of other devices."),
         );
       }
     } catch (err) {
@@ -1412,8 +1440,8 @@ function PasswordModal(props: {
     <ModalShell
       visible={props.visible}
       onClose={props.onClose}
-      title={props.passwordEnabled ? "Update password" : "Set password"}
-      primaryLabel="Save"
+      title={props.passwordEnabled ? t("profile.updatePassword", "Update password") : t("profile.setPassword", "Set password")}
+      primaryLabel={t("profile.save", "Save")}
       primaryDisabled={disabled}
       busy={busy}
       error={error}
@@ -1421,7 +1449,7 @@ function PasswordModal(props: {
     >
       {props.passwordEnabled && (
         <FieldInput
-          label="Current password"
+          label={t("profile.currentPassword", "Current password")}
           value={current}
           onChangeText={setCurrent}
           secureTextEntry
@@ -1429,25 +1457,25 @@ function PasswordModal(props: {
         />
       )}
       <FieldInput
-        label="New password"
+        label={t("profile.newPassword", "New password")}
         value={next}
         onChangeText={setNext}
         secureTextEntry
         autoFocus={!props.passwordEnabled}
       />
       <FieldInput
-        label="Confirm new password"
+        label={t("profile.confirmNewPassword", "Confirm new password")}
         value={confirm}
         onChangeText={setConfirm}
         secureTextEntry
       />
       {(mismatch || tooShort) && (
         <Text style={{ color: "#B43E3E", fontFamily: "Inter_500Medium", fontSize: 12 }}>
-          {tooShort ? "Use at least 8 characters." : "Passwords don't match."}
+          {tooShort ? t("profile.useAtLeast8", "Use at least 8 characters.") : t("profile.passwordsDontMatch", "Passwords don't match.")}
         </Text>
       )}
       <Text style={[styles.modalHelper, { marginTop: 6, marginBottom: 0 }]}>
-        Saving will sign you out of all other devices.
+        {t("profile.savingSignsOut", "Saving will sign you out of all other devices.")}
       </Text>
     </ModalShell>
   );
@@ -1463,6 +1491,7 @@ function LanguageModal(props: {
   onSelect: (lang: string) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const colors = useColors();
   const insets = useSafeAreaInsets();
 
@@ -1496,7 +1525,7 @@ function LanguageModal(props: {
             marginBottom: 16,
           }}
         >
-          Language
+          {t("profile.language", "Language")}
         </Text>
         <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
           {LANGUAGES.map((lang, i) => {
@@ -1580,12 +1609,12 @@ const langStyles = StyleSheet.create({
 // CountryPickerModal — searchable list of countries with dial codes
 // ---------------------------------------------------------------------------
 
-function CountryPickerModal(props: {
-  visible: boolean;
+function CountryPickerPanel(props: {
   selected: CountryCode;
   onSelect: (c: CountryCode) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
@@ -1601,27 +1630,18 @@ function CountryPickerModal(props: {
     );
   }, [query]);
 
-  React.useEffect(() => {
-    if (!props.visible) setQuery("");
-  }, [props.visible]);
-
   return (
-    <Modal
-      visible={props.visible}
-      animationType="slide"
-      transparent={false}
-      onRequestClose={props.onClose}
+    <View
+      style={[
+        StyleSheet.absoluteFill,
+        cpStyles.root,
+        {
+          backgroundColor: colors.background,
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom,
+        },
+      ]}
     >
-      <View
-        style={[
-          cpStyles.root,
-          {
-            backgroundColor: colors.background,
-            paddingTop: insets.top,
-            paddingBottom: insets.bottom,
-          },
-        ]}
-      >
         {/* Header */}
         <View style={[cpStyles.header, { borderBottomColor: colors.border }]}>
           <Pressable
@@ -1640,7 +1660,7 @@ function CountryPickerModal(props: {
               fontSize: 16,
             }}
           >
-            Select country
+            {t("profile.selectCountry", "Select country")}
           </Text>
           <View style={{ width: 30 }} />
         </View>
@@ -1656,7 +1676,7 @@ function CountryPickerModal(props: {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Search country or code…"
+            placeholder={t("profile.searchCountry", "Search country or code…")}
             placeholderTextColor={colors.mutedForeground}
             autoCorrect={false}
             autoCapitalize="none"
@@ -1737,7 +1757,6 @@ function CountryPickerModal(props: {
           }}
         />
       </View>
-    </Modal>
   );
 }
 

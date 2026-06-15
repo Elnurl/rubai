@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { useTranslation } from "react-i18next";
 import React, { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -13,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import i18n from "@/lib/i18n";
 import { AreaChart } from "@/components/charts/AreaChart";
 import { BarChart } from "@/components/charts/BarChart";
 import { FocusPulseCard } from "@/components/FocusPulseCard";
@@ -23,15 +25,23 @@ import {
   type BehavioralProfileRequestRecentHistoryItem,
 } from "@workspace/api-client-react";
 
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_LABELS = [
+  i18n.t("behavioralInsights.dayMon", "Mon"),
+  i18n.t("behavioralInsights.dayTue", "Tue"),
+  i18n.t("behavioralInsights.dayWed", "Wed"),
+  i18n.t("behavioralInsights.dayThu", "Thu"),
+  i18n.t("behavioralInsights.dayFri", "Fri"),
+  i18n.t("behavioralInsights.daySat", "Sat"),
+  i18n.t("behavioralInsights.daySun", "Sun"),
+];
 const FULL_DAY_NAMES = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
+  i18n.t("behavioralInsights.sunday", "Sunday"),
+  i18n.t("behavioralInsights.monday", "Monday"),
+  i18n.t("behavioralInsights.tuesday", "Tuesday"),
+  i18n.t("behavioralInsights.wednesday", "Wednesday"),
+  i18n.t("behavioralInsights.thursday", "Thursday"),
+  i18n.t("behavioralInsights.friday", "Friday"),
+  i18n.t("behavioralInsights.saturday", "Saturday"),
 ];
 
 function isoForDaysAgo(daysAgo: number): string {
@@ -42,6 +52,7 @@ function isoForDaysAgo(daysAgo: number): string {
 }
 
 export default function BehavioralInsightsScreen() {
+  const { t } = useTranslation();
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -231,7 +242,7 @@ export default function BehavioralInsightsScreen() {
       avgFocusHours: avgFocus,
       avgFocusDelta: avgDelta,
       bars14: finalBars,
-      barsStartLabel: "Earlier this month",
+      barsStartLabel: t("behavioralInsights.earlierThisMonth", "Earlier this month"),
     };
   }, [activeTaskHistory]);
 
@@ -244,38 +255,38 @@ export default function BehavioralInsightsScreen() {
         time: ["08", "11", "14"][i] ?? "—",
         title: label,
         description: [
-          "Highest creative output detected",
-          "Best for complex problem solving",
-          "Recommended for light admin/wellness",
-        ][i] ?? "Suggested focus window",
+          t("behavioralInsights.peakDesc1", "Highest creative output detected"),
+          t("behavioralInsights.peakDesc2", "Best for complex problem solving"),
+          t("behavioralInsights.peakDesc3", "Recommended for light admin/wellness"),
+        ][i] ?? t("behavioralInsights.peakDescDefault", "Suggested focus window"),
         score: [96, 88, 62][i] ?? 70,
       }));
     }
     return [
       {
         time: "08",
-        title: "Morning Clarity",
-        description: "Highest creative output detected",
+        title: t("behavioralInsights.peakTitle1", "Morning Clarity"),
+        description: t("behavioralInsights.peakDesc1", "Highest creative output detected"),
         score: 96,
       },
       {
         time: "11",
-        title: "Strategic Logic",
-        description: "Best for complex problem solving",
+        title: t("behavioralInsights.peakTitle2", "Strategic Logic"),
+        description: t("behavioralInsights.peakDesc2", "Best for complex problem solving"),
         score: 88,
       },
       {
         time: "14",
-        title: "Afternoon Dip",
-        description: "Recommended for light admin/wellness",
+        title: t("behavioralInsights.peakTitle3", "Afternoon Dip"),
+        description: t("behavioralInsights.peakDesc3", "Recommended for light admin/wellness"),
         score: 62,
       },
     ];
-  }, [activeBehavioralProfile]);
+  }, [activeBehavioralProfile, t]);
 
   const observation =
     activeBehavioralProfile?.summary ??
-    "You tend to lose momentum after long stretches of uninterrupted work. Try inserting a 'micro-recovery' break to sustain your peak focus longer.";
+    t("behavioralInsights.observationDefault", "You tend to lose momentum after long stretches of uninterrupted work. Try inserting a 'micro-recovery' break to sustain your peak focus longer.");
 
   const handleRefresh = React.useCallback(async () => {
     if (!activeProfile) return;
@@ -377,10 +388,10 @@ export default function BehavioralInsightsScreen() {
 
   const subtitleCopy =
     activeBehavioral.currentStreakDays >= 7
-      ? "Your rhythm is stabilizing"
+      ? t("behavioralInsights.subtitleStabilizing", "Your rhythm is stabilizing")
       : activeBehavioral.currentStreakDays >= 3
-        ? "Your rhythm is taking shape"
-        : "Building your baseline";
+        ? t("behavioralInsights.subtitleTakingShape", "Your rhythm is taking shape")
+        : t("behavioralInsights.subtitleBaseline", "Building your baseline");
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -404,7 +415,7 @@ export default function BehavioralInsightsScreen() {
                 { color: colors.foreground, fontFamily: "Inter_700Bold" },
               ]}
             >
-              Behavioral Insights
+              {t("behavioralInsights.headerTitle", "Behavioral Insights")}
             </Text>
             <Text
               style={[
@@ -432,7 +443,7 @@ export default function BehavioralInsightsScreen() {
                       : 1,
                 },
               ]}
-              accessibilityLabel="Refresh insights"
+              accessibilityLabel={t("behavioralInsights.refreshInsights", "Refresh insights")}
               accessibilityRole="button"
             >
               <Feather
@@ -450,7 +461,7 @@ export default function BehavioralInsightsScreen() {
                   opacity: pressed ? 0.7 : 1,
                 },
               ]}
-              accessibilityLabel="Close"
+              accessibilityLabel={t("behavioralInsights.close", "Close")}
               accessibilityRole="button"
             >
               <Feather name="x" size={18} color={colors.foreground} />
@@ -477,29 +488,29 @@ export default function BehavioralInsightsScreen() {
                 { color: colors.foreground, fontFamily: "Inter_700Bold", marginBottom: 12 },
               ]}
             >
-              Live State
+              {t("behavioralInsights.liveState", "Live State")}
             </Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
               <LiveChip
-                label="Energy"
+                label={t("behavioralInsights.liveEnergy", "Energy")}
                 value={`${Math.round(live.energyLevel * 100)}%`}
                 color={live.energyLevel >= 0.6 ? "#34d399" : live.energyLevel >= 0.35 ? "#fbbf24" : "#f87171"}
                 colors={colors}
               />
               <LiveChip
-                label="Procrastination"
+                label={t("behavioralInsights.liveProcrastination", "Procrastination")}
                 value={live.procrastinationRisk}
                 color={live.procrastinationRisk === "low" ? "#34d399" : live.procrastinationRisk === "medium" ? "#fbbf24" : "#f87171"}
                 colors={colors}
               />
               <LiveChip
-                label="Flow"
-                value={live.flowDetected ? "Active ⚡" : "Not detected"}
+                label={t("behavioralInsights.liveFlow", "Flow")}
+                value={live.flowDetected ? t("behavioralInsights.flowActive", "Active ⚡") : t("behavioralInsights.flowNotDetected", "Not detected")}
                 color={live.flowDetected ? "#34d399" : colors.mutedForeground}
                 colors={colors}
               />
               <LiveChip
-                label="Drive"
+                label={t("behavioralInsights.liveDrive", "Drive")}
                 value={live.motivationType.replace("_", " ")}
                 color={colors.primary}
                 colors={colors}
@@ -515,14 +526,14 @@ export default function BehavioralInsightsScreen() {
         <View style={styles.statRow}>
           <StatCard
             icon="activity"
-            label="Consistency"
+            label={t("behavioralInsights.consistency", "Consistency")}
             value={`${consistencyPct}%`}
             delta={consistencyDelta}
             deltaSuffix="%"
           />
           <StatCard
             icon="clock"
-            label="Avg. Focus"
+            label={t("behavioralInsights.avgFocus", "Avg. Focus")}
             value={`${avgFocusHours}h`}
             delta={avgFocusDelta}
             deltaSuffix="m"
@@ -548,7 +559,7 @@ export default function BehavioralInsightsScreen() {
                   { color: colors.foreground, fontFamily: "Inter_700Bold" },
                 ]}
               >
-                Focus Intensity
+                {t("behavioralInsights.focusIntensity", "Focus Intensity")}
               </Text>
               <Text
                 style={[
@@ -559,7 +570,7 @@ export default function BehavioralInsightsScreen() {
                   },
                 ]}
               >
-                7-day rolling average
+                {t("behavioralInsights.rollingAverage", "7-day rolling average")}
               </Text>
             </View>
             <View
@@ -580,7 +591,7 @@ export default function BehavioralInsightsScreen() {
                   },
                 ]}
               >
-                Weekly
+                {t("behavioralInsights.weekly", "Weekly")}
               </Text>
               <Feather
                 name="chevron-down"
@@ -604,11 +615,11 @@ export default function BehavioralInsightsScreen() {
               { borderTopColor: colors.border },
             ]}
           >
-            <SubStat label="Best Day" value={bestDay} />
+            <SubStat label={t("behavioralInsights.bestDay", "Best Day")} value={bestDay} />
             <View
               style={[styles.subStatDivider, { backgroundColor: colors.border }]}
             />
-            <SubStat label="Deep Work" value={`${deepWorkHours} Hours`} />
+            <SubStat label={t("behavioralInsights.deepWork", "Deep Work")} value={t("behavioralInsights.hoursValue", "{{count}} Hours", { count: deepWorkHours })} />
           </View>
         </View>
 
@@ -620,7 +631,7 @@ export default function BehavioralInsightsScreen() {
               { color: colors.foreground, fontFamily: "Inter_700Bold" },
             ]}
           >
-            Peak Performance Hours
+            {t("behavioralInsights.peakPerformanceHours", "Peak Performance Hours")}
           </Text>
           <Text
             style={[
@@ -628,7 +639,7 @@ export default function BehavioralInsightsScreen() {
               { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
             ]}
           >
-            View Trends
+            {t("behavioralInsights.viewTrends", "View Trends")}
           </Text>
         </View>
 
@@ -728,7 +739,7 @@ export default function BehavioralInsightsScreen() {
                 },
               ]}
             >
-              Coach's Observation
+              {t("behavioralInsights.coachObservation", "Coach's Observation")}
             </Text>
           </View>
           <Text
@@ -744,7 +755,7 @@ export default function BehavioralInsightsScreen() {
           </Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Adopt this rhythm"
+            accessibilityLabel={t("behavioralInsights.adoptThisRhythm", "Adopt this rhythm")}
             onPress={handleAdoptRhythm}
             style={({ pressed }) => [
               styles.observationCta,
@@ -770,7 +781,7 @@ export default function BehavioralInsightsScreen() {
                 },
               ]}
             >
-              {adopted ? "Rhythm adopted — daily plans will favor these windows" : "Adopt This Rhythm"}
+              {adopted ? t("behavioralInsights.rhythmAdopted", "Rhythm adopted — daily plans will favor these windows") : t("behavioralInsights.adoptRhythmBtn", "Adopt This Rhythm")}
             </Text>
           </Pressable>
         </View>
@@ -792,13 +803,13 @@ export default function BehavioralInsightsScreen() {
               { color: colors.foreground, fontFamily: "Inter_700Bold" },
             ]}
           >
-            Habit Consistency (Last 14 Days)
+            {t("behavioralInsights.habitConsistency", "Habit Consistency (Last 14 Days)")}
           </Text>
           <BarChart
             data={bars14}
             height={130}
             startLabel={barsStartLabel}
-            endLabel="Today"
+            endLabel={t("behavioralInsights.today", "Today")}
           />
         </View>
       </ScrollView>

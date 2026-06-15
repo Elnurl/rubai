@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Platform,
   ScrollView,
@@ -21,16 +22,19 @@ import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { useAtlasGenerateTitle, type GoalType } from "@workspace/api-client-react";
 
+import i18n from "@/lib/i18n";
+
 const PLACEHOLDERS = [
-  "Launch my freelance design studio by October",
-  "Run my first half marathon in 6 months",
-  "Read 30 books and journal weekly this year",
-  "Move to Berlin and find a job by June",
-  "Save 15,000 for a down payment in 9 months",
+  i18n.t("welcome.placeholder1", "Launch my freelance design studio by October"),
+  i18n.t("welcome.placeholder2", "Run my first half marathon in 6 months"),
+  i18n.t("welcome.placeholder3", "Read 30 books and journal weekly this year"),
+  i18n.t("welcome.placeholder4", "Move to Berlin and find a job by June"),
+  i18n.t("welcome.placeholder5", "Save 15,000 for a down payment in 9 months"),
 ];
 
 export default function WelcomeScreen() {
   const colors = useColors();
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { setPendingDraft } = useAtlas();
@@ -97,10 +101,12 @@ export default function WelcomeScreen() {
   };
 
   const buttonLabel = hasCustom
-    ? "Build my plan"
+    ? t("welcome.buildPlanBtn", "Build my plan")
     : selected
-      ? `Continue with ${GOAL_META[selected].label}`
-      : "Describe a goal or pick a template";
+      ? t("welcome.continueWith", "Continue with {{label}}", {
+          label: GOAL_META[selected].label,
+        })
+      : t("welcome.describeOrPick", "Describe a goal or pick a template");
 
   return (
     <KeyboardAvoidingView
@@ -127,7 +133,7 @@ export default function WelcomeScreen() {
               { color: colors.primary, fontFamily: "Inter_600SemiBold" },
             ]}
           >
-            EXECUTION COACH
+            {t("welcome.eyebrow", "EXECUTION COACH")}
           </Text>
           <Text
             style={[
@@ -135,7 +141,7 @@ export default function WelcomeScreen() {
               { color: colors.foreground, fontFamily: "Inter_700Bold" },
             ]}
           >
-            What do you want{"\n"}to make happen?
+            {t("welcome.title", "What do you want\nto make happen?")}
           </Text>
           <Text
             style={[
@@ -143,9 +149,10 @@ export default function WelcomeScreen() {
               { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
             ]}
           >
-            Tell rubai any goal — career, fitness, study, money, creative,
-            personal — and it will generate a smart intake form, then build a
-            real plan around your time and how you actually behave.
+            {t(
+              "welcome.subtitle",
+              "Tell rubai any goal — career, fitness, study, money, creative, personal — and it will generate a smart intake form, then build a real plan around your time and how you actually behave.",
+            )}
           </Text>
         </Animated.View>
 
@@ -173,7 +180,7 @@ export default function WelcomeScreen() {
                 { color: colors.primary, fontFamily: "Inter_600SemiBold" },
               ]}
             >
-              YOUR GOAL
+              {t("welcome.yourGoalLabel", "YOUR GOAL")}
             </Text>
           </View>
           <TextInput
@@ -193,8 +200,10 @@ export default function WelcomeScreen() {
               { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
             ]}
           >
-            Be specific if you can. rubai will generate a tailored intake form
-            for your exact goal.
+            {t(
+              "welcome.customHint",
+              "Be specific if you can. rubai will generate a tailored intake form for your exact goal.",
+            )}
           </Text>
         </Animated.View>
 
@@ -206,7 +215,7 @@ export default function WelcomeScreen() {
               { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
             ]}
           >
-            OR PICK A TEMPLATE
+            {t("welcome.orPickTemplate", "OR PICK A TEMPLATE")}
           </Text>
           <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
         </View>
@@ -234,8 +243,10 @@ export default function WelcomeScreen() {
               { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
             ]}
           >
-            rubai adapts as you go. Skip a day and the plan softens. Stack wins
-            and it pushes you.
+            {t(
+              "welcome.noteText",
+              "rubai adapts as you go. Skip a day and the plan softens. Stack wins and it pushes you.",
+            )}
           </Text>
         </View>
       </ScrollView>
@@ -251,7 +262,7 @@ export default function WelcomeScreen() {
         ]}
       >
         <AtlasButton
-          label={isGeneratingTitle ? "Naming your goal…" : buttonLabel}
+          label={isGeneratingTitle ? t("welcome.namingGoal", "Naming your goal…") : buttonLabel}
           onPress={onContinue}
           disabled={!canContinue}
           loading={isGeneratingTitle}

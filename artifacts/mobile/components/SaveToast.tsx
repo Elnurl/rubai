@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Platform, StyleSheet, Text, View } from "react-native";
 import Animated, {
   Easing,
@@ -24,9 +25,11 @@ const HOLD_MS = 1800;
 const IN_MS = 200;
 const OUT_MS = 180;
 
-export function SaveToast({ visible, message = "Saved", onDismiss }: Props) {
+export function SaveToast({ visible, message, onDismiss }: Props) {
   const colors = useColors();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const resolvedMessage = message ?? t("saveToast.saved", "Saved");
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(12);
 
@@ -91,7 +94,7 @@ export function SaveToast({ visible, message = "Saved", onDismiss }: Props) {
             { color: colors.background, fontFamily: "Inter_600SemiBold" },
           ]}
         >
-          {message}
+          {resolvedMessage}
         </Text>
       </View>
     </Animated.View>

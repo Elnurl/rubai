@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { useAuth } from "@clerk/expo";
 import { useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
+import { useTranslation } from "react-i18next";
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -31,6 +32,7 @@ import {
 } from "@/lib/legalUi";
 
 export default function LegalConsentScreen() {
+  const { t } = useTranslation();
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { signOut } = useAuth();
@@ -84,7 +86,7 @@ export default function LegalConsentScreen() {
       router.replace("/");
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Unknown error";
+        err instanceof Error ? err.message : t("consent.unknownError", "Unknown error");
       if (Platform.OS === "web" && typeof window !== "undefined") {
         window.alert(`${ui.errorTitle}\n\n${ui.errorBody}\n\n${message}`);
       } else {

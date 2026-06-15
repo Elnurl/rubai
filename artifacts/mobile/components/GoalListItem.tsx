@@ -1,5 +1,6 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
@@ -25,9 +26,10 @@ export function GoalListItem({
   onDelete,
 }: Props) {
   const colors = useColors();
+  const { t } = useTranslation();
   const meta = GOAL_META[goal.profile.goalType];
   const label = profileGoalLabel(goal.profile);
-  const headline = goal.roadmap?.headline ?? "Roadmap pending";
+  const headline = goal.roadmap?.headline ?? t("goalListItem.roadmapPending", "Roadmap pending");
 
   return (
     <Animated.View entering={FadeInDown.delay(index * 50).duration(280)}>
@@ -86,7 +88,7 @@ export function GoalListItem({
                   { color: colors.primary, fontFamily: "Inter_600SemiBold" },
                 ]}
               >
-                ACTIVE
+                {t("goalListItem.active", "ACTIVE")}
               </Text>
             </View>
           ) : null}
@@ -107,7 +109,10 @@ export function GoalListItem({
               { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
             ]}
           >
-            Week {weekProgress.current} of {weekProgress.total}
+            {t("goalListItem.weekProgress", "Week {{current}} of {{total}}", {
+              current: weekProgress.current,
+              total: weekProgress.total,
+            })}
           </Text>
         ) : null}
       </View>

@@ -5,6 +5,7 @@ import { Tabs } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import {
   Platform,
   Pressable,
@@ -44,33 +45,35 @@ function AnimatedTabIcon({
 }
 
 function NativeTabLayout() {
+  const { t } = useTranslation();
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
         <Icon sf={{ default: "sun.max", selected: "sun.max.fill" }} />
-        <Label>Today</Label>
+        <Label>{t("tabsLayout.today", "Today")}</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="roadmap">
         <Icon sf={{ default: "map", selected: "map.fill" }} />
-        <Label>Roadmap</Label>
+        <Label>{t("tabsLayout.roadmap", "Roadmap")}</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="coach">
         <Icon sf={{ default: "sparkles", selected: "sparkles" }} />
-        <Label>Coach</Label>
+        <Label>{t("tabsLayout.coach", "Coach")}</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="goals">
         <Icon sf={{ default: "list.bullet", selected: "list.bullet.indent" }} />
-        <Label>Goals</Label>
+        <Label>{t("tabsLayout.goals", "Goals")}</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="account">
         <Icon sf={{ default: "person.crop.circle", selected: "person.crop.circle.fill" }} />
-        <Label>Account</Label>
+        <Label>{t("tabsLayout.account", "Account")}</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
 
 function ClassicTabLayout() {
+  const { t } = useTranslation();
   const colors = useColors();
   const scheme = useColorScheme();
   const isDark = scheme === "dark";
@@ -117,7 +120,7 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Today",
+          title: t("tabsLayout.today", "Today"),
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon focused={focused}>
               {isIOS ? (
@@ -132,7 +135,7 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="roadmap"
         options={{
-          title: "Roadmap",
+          title: t("tabsLayout.roadmap", "Roadmap"),
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon focused={focused}>
               {isIOS ? (
@@ -155,7 +158,7 @@ function ClassicTabLayout() {
                 onPress={props.onPress}
                 onLongPress={props.onLongPress}
                 accessibilityRole="button"
-                accessibilityLabel="Coach"
+                accessibilityLabel={t("tabsLayout.coach", "Coach")}
                 accessibilityState={props.accessibilityState}
                 testID={props.testID ?? "coach-tab-button"}
                 style={({ pressed }) => [

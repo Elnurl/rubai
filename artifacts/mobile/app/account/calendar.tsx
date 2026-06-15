@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
@@ -41,6 +42,7 @@ export default function CalendarSyncScreen() {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const { account, updateAccount } = useAtlas();
 
   const sync = account.calendarSync;
@@ -102,7 +104,7 @@ export default function CalendarSyncScreen() {
         });
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Couldn't reach Google.";
+      const msg = e instanceof Error ? e.message : t("calendar.couldntReachGoogle", "Couldn't reach Google.");
       setGoogleError(msg);
     }
   }, [sync, provider, updateAccount]);
@@ -145,8 +147,8 @@ export default function CalendarSyncScreen() {
   const onConnectNative = async () => {
     if (Platform.OS === "web") {
       Alert.alert(
-        "Mobile only",
-        "Native calendar sync is available on iOS and Android. Switch to Google Calendar for web.",
+        t("calendar.mobileOnlyTitle", "Mobile only"),
+        t("calendar.mobileOnlyBody", "Native calendar sync is available on iOS and Android. Switch to Google Calendar for web."),
       );
       return;
     }
@@ -166,11 +168,11 @@ export default function CalendarSyncScreen() {
         });
       } else {
         Alert.alert(
-          "Permission needed",
-          "Allow calendar access in Settings to let rubai see your day.",
+          t("calendar.permissionTitle", "Permission needed"),
+          t("calendar.permissionBody", "Allow calendar access in Settings to let rubai see your day."),
           [
-            { text: "Cancel", style: "cancel" },
-            { text: "Open Settings", onPress: () => Linking.openSettings() },
+            { text: t("calendar.cancel", "Cancel"), style: "cancel" },
+            { text: t("calendar.openSettings", "Open Settings"), onPress: () => Linking.openSettings() },
           ],
         );
       }
@@ -187,15 +189,15 @@ export default function CalendarSyncScreen() {
         setGoogleAvailable(ok);
         if (!ok) {
           Alert.alert(
-            "Google Calendar unavailable",
-            "The workspace owner needs to connect Google Calendar in Replit first.",
+            t("calendar.googleUnavailableTitle", "Google Calendar unavailable"),
+            t("calendar.googleUnavailableBody", "The workspace owner needs to connect Google Calendar in Replit first."),
           );
           return;
         }
       } else if (!googleAvailable) {
         Alert.alert(
-          "Google Calendar unavailable",
-          "The workspace owner needs to connect Google Calendar in Replit first.",
+          t("calendar.googleUnavailableTitle", "Google Calendar unavailable"),
+          t("calendar.googleUnavailableBody", "The workspace owner needs to connect Google Calendar in Replit first."),
         );
         return;
       }
@@ -272,7 +274,7 @@ export default function CalendarSyncScreen() {
               marginRight: 24,
             }}
           >
-            Calendar sync
+            {t("calendar.headerTitle", "Calendar sync")}
           </Text>
         </View>
 
@@ -285,10 +287,7 @@ export default function CalendarSyncScreen() {
             paddingHorizontal: 4,
           }}
         >
-          rubai uses your calendar only as raw signal — to understand your day,
-          find ideal time slots, and plan tasks around real meetings.
-          Connecting only grants access. Reading events and writing tasks are
-          two separate switches below, both off by default.
+          {t("calendar.intro", "rubai uses your calendar only as raw signal — to understand your day, find ideal time slots, and plan tasks around real meetings. Connecting only grants access. Reading events and writing tasks are two separate switches below, both off by default.")}
         </Text>
 
         {/* Provider toggle */}
@@ -305,7 +304,7 @@ export default function CalendarSyncScreen() {
         >
           {(["native", "google"] as CalendarProvider[]).map((p) => {
             const active = provider === p;
-            const label = p === "google" ? "Google Calendar" : "Device";
+            const label = p === "google" ? t("calendar.providerGoogle", "Google Calendar") : t("calendar.providerDevice", "Device");
             return (
               <Pressable
                 key={p}
@@ -347,9 +346,7 @@ export default function CalendarSyncScreen() {
               paddingHorizontal: 4,
             }}
           >
-            Google Calendar runs through your workspace's Replit connector and
-            works on web too. Heads up: it's currently shared at the workspace
-            level — fine for personal use, not for multi-user accounts.
+            {t("calendar.googleNote", "Google Calendar runs through your workspace's Replit connector and works on web too. Heads up: it's currently shared at the workspace level — fine for personal use, not for multi-user accounts.")}
           </Text>
         )}
 
@@ -377,7 +374,7 @@ export default function CalendarSyncScreen() {
                   fontSize: 14.5,
                 }}
               >
-                {provider === "google" ? "Google Calendar" : "Device calendar"}
+                {provider === "google" ? t("calendar.googleCalendar", "Google Calendar") : t("calendar.deviceCalendar", "Device calendar")}
               </Text>
               <Text
                 style={{
@@ -388,23 +385,23 @@ export default function CalendarSyncScreen() {
               >
                 {provider === "google"
                   ? googleAvailable === null
-                    ? "Checking…"
+                    ? t("calendar.checking", "Checking…")
                     : googleConnected
-                      ? "Connected"
+                      ? t("calendar.connected", "Connected")
                       : googleAvailable
                         ? sync.enabled && sync.provider === "google"
-                          ? "Paused"
-                          : "Not connected"
-                        : "Workspace not linked"
+                          ? t("calendar.paused", "Paused")
+                          : t("calendar.notConnected", "Not connected")
+                        : t("calendar.workspaceNotLinked", "Workspace not linked")
                   : permission === "loading"
-                    ? "Checking…"
+                    ? t("calendar.checking", "Checking…")
                     : nativeConnected
-                      ? "Connected"
+                      ? t("calendar.connected", "Connected")
                       : granted
                         ? sync.enabled && sync.provider === "native"
-                          ? "Paused"
-                          : "Not connected"
-                        : "Not connected"}
+                          ? t("calendar.paused", "Paused")
+                          : t("calendar.notConnected", "Not connected")
+                        : t("calendar.notConnected", "Not connected")}
               </Text>
             </View>
             {connected ? (
@@ -429,7 +426,7 @@ export default function CalendarSyncScreen() {
                     fontSize: 12,
                   }}
                 >
-                  Disconnect
+                  {t("calendar.disconnect", "Disconnect")}
                 </Text>
               </Pressable>
             ) : (
@@ -463,11 +460,11 @@ export default function CalendarSyncScreen() {
                   >
                     {provider === "google"
                       ? googleAvailable && sync.enabled
-                        ? "Resume"
-                        : "Connect"
+                        ? t("calendar.resume", "Resume")
+                        : t("calendar.connect", "Connect")
                       : granted
-                        ? "Resume"
-                        : "Connect"}
+                        ? t("calendar.resume", "Resume")
+                        : t("calendar.connect", "Connect")}
                   </Text>
                 )}
               </Pressable>
@@ -505,7 +502,7 @@ export default function CalendarSyncScreen() {
                 paddingHorizontal: 4,
               }}
             >
-              WHAT TO SHARE
+              {t("calendar.whatToShare", "WHAT TO SHARE")}
             </Text>
             <View
               style={{
@@ -533,7 +530,7 @@ export default function CalendarSyncScreen() {
                     fontSize: 14.5,
                   }}
                 >
-                  Let AI read today's events
+                  {t("calendar.letAiReadTitle", "Let AI read today's events")}
                 </Text>
                 <Text
                   style={{
@@ -542,7 +539,7 @@ export default function CalendarSyncScreen() {
                     fontSize: 12,
                   }}
                 >
-                  Used as context to find free time and plan around meetings
+                  {t("calendar.letAiReadSubtitle", "Used as context to find free time and plan around meetings")}
                 </Text>
               </View>
               <Switch
@@ -582,7 +579,7 @@ export default function CalendarSyncScreen() {
                     fontSize: 14.5,
                   }}
                 >
-                  Auto-write daily tasks
+                  {t("calendar.autoWriteTitle", "Auto-write daily tasks")}
                 </Text>
                 <Text
                   style={{
@@ -591,7 +588,7 @@ export default function CalendarSyncScreen() {
                     fontSize: 12,
                   }}
                 >
-                  Each generated task becomes a reminder in your calendar
+                  {t("calendar.autoWriteSubtitle", "Each generated task becomes a reminder in your calendar")}
                 </Text>
               </View>
               <Switch
@@ -599,8 +596,8 @@ export default function CalendarSyncScreen() {
                 onValueChange={(v) => {
                   if (v && !sync.calendarId) {
                     Alert.alert(
-                      "Pick a calendar",
-                      "Choose which calendar to write to first.",
+                      t("calendar.pickCalendarTitle", "Pick a calendar"),
+                      t("calendar.pickCalendarBody", "Choose which calendar to write to first."),
                     );
                     return;
                   }
@@ -622,8 +619,7 @@ export default function CalendarSyncScreen() {
                 paddingHorizontal: 4,
               }}
             >
-              Both off by default. Turn on only what you're comfortable
-              sharing — you can disconnect anytime to stop everything.
+              {t("calendar.togglesFootnote", "Both off by default. Turn on only what you're comfortable sharing — you can disconnect anytime to stop everything.")}
             </Text>
           </View>
         )}
@@ -647,7 +643,7 @@ export default function CalendarSyncScreen() {
                 marginBottom: 4,
               }}
             >
-              No writable Google calendars found
+              {t("calendar.noWritableTitle", "No writable Google calendars found")}
             </Text>
             <Text
               style={{
@@ -657,8 +653,7 @@ export default function CalendarSyncScreen() {
                 lineHeight: 17,
               }}
             >
-              The connector is reachable but no calendars allow writes. Check
-              the workspace's Google account permissions, then retry.
+              {t("calendar.noWritableBody", "The connector is reachable but no calendars allow writes. Check the workspace's Google account permissions, then retry.")}
             </Text>
             <Pressable
               onPress={() => void refreshGoogle()}
@@ -682,7 +677,7 @@ export default function CalendarSyncScreen() {
                   fontSize: 12,
                 }}
               >
-                Retry
+                {t("calendar.retry", "Retry")}
               </Text>
             </Pressable>
           </View>
@@ -700,7 +695,7 @@ export default function CalendarSyncScreen() {
                 paddingHorizontal: 4,
               }}
             >
-              WRITE TO
+              {t("calendar.writeTo", "WRITE TO")}
             </Text>
             <View
               style={{

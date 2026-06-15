@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Platform,
@@ -27,6 +28,7 @@ import {
 
 export default function IntakeScreen() {
   const colors = useColors();
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
@@ -205,7 +207,7 @@ export default function IntakeScreen() {
               { color: colors.primary, fontFamily: "Inter_600SemiBold" },
             ]}
           >
-            INTAKE FORM
+            {t("intake.eyebrow", "INTAKE FORM")}
           </Text>
           {/* Show the user's goal as a chat bubble, not a large heading. */}
           <View style={[styles.userBubble, { backgroundColor: colors.primary + "18", borderColor: colors.primary + "30" }]}>
@@ -240,7 +242,7 @@ export default function IntakeScreen() {
                 { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
               ]}
             >
-              rubai is designing your intake form
+              {t("intake.loadingText", "rubai is designing your intake form")}
             </Text>
           </View>
         ) : hasError ? (
@@ -260,10 +262,10 @@ export default function IntakeScreen() {
                 { color: colors.destructive, fontFamily: "Inter_500Medium" },
               ]}
             >
-              Couldn't reach the planner. Try again.
+              {t("intake.errorText", "Couldn't reach the planner. Try again.")}
             </Text>
             <AtlasButton
-              label="Retry"
+              label={t("intake.retryBtn", "Retry")}
               variant="secondary"
               onPress={() => {
                 requestedRef.current = false;
@@ -294,8 +296,17 @@ export default function IntakeScreen() {
                     { color: colors.destructive, fontFamily: "Inter_500Medium" },
                   ]}
                 >
-                  Please answer the {missing.length} highlighted question
-                  {missing.length === 1 ? "" : "s"}.
+                  {missing.length === 1
+                    ? t(
+                        "intake.missingBannerOne",
+                        "Please answer the {{count}} highlighted question.",
+                        { count: missing.length },
+                      )
+                    : t(
+                        "intake.missingBannerMany",
+                        "Please answer the {{count}} highlighted questions.",
+                        { count: missing.length },
+                      )}
                 </Text>
               </View>
             ) : null}
@@ -344,13 +355,20 @@ export default function IntakeScreen() {
                 }}
               >
                 {missing.length === 1
-                  ? "1 required question is missing — scroll up to find the highlighted card."
-                  : `${missing.length} required questions are missing — scroll up to find them.`}
+                  ? t(
+                      "intake.footerMissingOne",
+                      "1 required question is missing — scroll up to find the highlighted card.",
+                    )
+                  : t(
+                      "intake.footerMissingMany",
+                      "{{count}} required questions are missing — scroll up to find them.",
+                      { count: missing.length },
+                    )}
               </Text>
             </View>
           ) : null}
           <AtlasButton
-            label={submit.isPending ? "Building your profile" : "Build my plan"}
+            label={submit.isPending ? t("intake.buildingProfile", "Building your profile") : t("intake.buildPlanBtn", "Build my plan")}
             onPress={onSubmit}
             loading={submit.isPending}
             disabled={submit.isPending}

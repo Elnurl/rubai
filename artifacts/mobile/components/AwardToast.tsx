@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   Easing,
@@ -19,6 +20,7 @@ const AUTO_DISMISS_MS = 3200;
 
 export function AwardToast() {
   const colors = useColors();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { pendingAwardToast, dismissAwardToast } = useAtlas();
   const opacity = useSharedValue(0);
@@ -70,7 +72,7 @@ export function AwardToast() {
           },
         ]}
         accessibilityRole="button"
-        accessibilityLabel={`Award unlocked: ${def.title}`}
+        accessibilityLabel={t("awardToast.unlockedA11y", "Award unlocked: {{title}}", { title: def.title })}
       >
         <View style={[styles.iconWrap, { backgroundColor: colors.accent }]}>
           <Feather name={def.icon} size={16} color={colors.primaryForeground} />
@@ -82,7 +84,7 @@ export function AwardToast() {
               { color: colors.accent, fontFamily: "Inter_600SemiBold" },
             ]}
           >
-            AWARD UNLOCKED
+            {t("awardToast.eyebrow", "AWARD UNLOCKED")}
           </Text>
           <Text
             style={[

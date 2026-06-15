@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
@@ -20,6 +21,7 @@ type Props = {
  */
 export function TodayAnchorsCard({ tasks, completions, onPressTask }: Props) {
   const colors = useColors();
+  const { t } = useTranslation();
   if (tasks.length === 0) return null;
 
   return (
@@ -41,7 +43,7 @@ export function TodayAnchorsCard({ tasks, completions, onPressTask }: Props) {
             { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
           ]}
         >
-          Today's anchors
+          {t("todayAnchorsCard.title", "Today's anchors")}
         </Text>
       </View>
 
@@ -94,7 +96,7 @@ export function TodayAnchorsCard({ tasks, completions, onPressTask }: Props) {
                     { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
                   ]}
                 >
-                  {task.durationMinutes}m
+                  {t("todayAnchorsCard.durationMinutes", "{{minutes}}m", { minutes: task.durationMinutes })}
                 </Text>
               ) : null}
             </Pressable>

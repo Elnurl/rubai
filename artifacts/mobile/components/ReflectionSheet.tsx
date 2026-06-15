@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Alert,
@@ -18,6 +19,7 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
+import i18n from "@/lib/i18n";
 import { useVoiceRecorder, type RecordedClip } from "@/hooks/useVoiceRecorder";
 import {
   customFetch,
@@ -32,21 +34,21 @@ type ReasonOption = {
 };
 
 const COMPLETED_TAGS: ReasonOption[] = [
-  { value: "easy", label: "Easy", icon: "smile" },
-  { value: "just_right", label: "Just right", icon: "check-circle" },
-  { value: "tough", label: "Tough", icon: "alert-triangle" },
-  { value: "energized", label: "Energized", icon: "zap" },
-  { value: "focused", label: "Focused", icon: "target" },
-  { value: "tired", label: "Tired", icon: "moon" },
+  { value: "easy", label: i18n.t("reflectionSheet.tagEasy", "Easy"), icon: "smile" },
+  { value: "just_right", label: i18n.t("reflectionSheet.tagJustRight", "Just right"), icon: "check-circle" },
+  { value: "tough", label: i18n.t("reflectionSheet.tagTough", "Tough"), icon: "alert-triangle" },
+  { value: "energized", label: i18n.t("reflectionSheet.tagEnergized", "Energized"), icon: "zap" },
+  { value: "focused", label: i18n.t("reflectionSheet.tagFocused", "Focused"), icon: "target" },
+  { value: "tired", label: i18n.t("reflectionSheet.tagTired", "Tired"), icon: "moon" },
 ];
 
 const SKIPPED_TAGS: ReasonOption[] = [
-  { value: "no_time", label: "No time", icon: "clock" },
-  { value: "tired", label: "Too tired", icon: "moon" },
-  { value: "distracted", label: "Distracted", icon: "shuffle" },
-  { value: "blocked", label: "Blocked", icon: "x-octagon" },
-  { value: "skipped", label: "Skipped on purpose", icon: "skip-forward" },
-  { value: "tough", label: "Too hard", icon: "alert-triangle" },
+  { value: "no_time", label: i18n.t("reflectionSheet.tagNoTime", "No time"), icon: "clock" },
+  { value: "tired", label: i18n.t("reflectionSheet.tagTooTired", "Too tired"), icon: "moon" },
+  { value: "distracted", label: i18n.t("reflectionSheet.tagDistracted", "Distracted"), icon: "shuffle" },
+  { value: "blocked", label: i18n.t("reflectionSheet.tagBlocked", "Blocked"), icon: "x-octagon" },
+  { value: "skipped", label: i18n.t("reflectionSheet.tagSkippedOnPurpose", "Skipped on purpose"), icon: "skip-forward" },
+  { value: "tough", label: i18n.t("reflectionSheet.tagTooHard", "Too hard"), icon: "alert-triangle" },
 ];
 
 type Props = {
@@ -103,6 +105,7 @@ export function ReflectionSheet({
   onSubmit,
 }: Props) {
   const colors = useColors();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [reasonTag, setReasonTag] = useState<ReflectionEntry["reasonTag"]>(initialReasonTag);
   const [note, setNote] = useState(initialNote ?? "");
@@ -151,7 +154,7 @@ export function ReflectionSheet({
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
         if (Platform.OS !== "web") {
-          Alert.alert("Photos", "Allow photo access to attach an image.");
+          Alert.alert(t("reflectionSheet.photosTitle", "Photos"), t("reflectionSheet.photosPermission", "Allow photo access to attach an image."));
         }
         return;
       }
@@ -176,7 +179,7 @@ export function ReflectionSheet({
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert("Camera", "Allow camera access to snap a photo.");
+        Alert.alert(t("reflectionSheet.cameraTitle", "Camera"), t("reflectionSheet.cameraPermission", "Allow camera access to snap a photo."));
         return;
       }
       const res = await ImagePicker.launchCameraAsync({
@@ -198,12 +201,12 @@ export function ReflectionSheet({
       return;
     }
     Alert.alert(
-      "Add media",
-      "Snap a photo with the camera or pick one from your library.",
+      t("reflectionSheet.addMediaTitle", "Add media"),
+      t("reflectionSheet.addMediaBody", "Snap a photo with the camera or pick one from your library."),
       [
-        { text: "Take photo", onPress: () => void pickFromCamera() },
-        { text: "Photo Library", onPress: () => void pickFromLibrary() },
-        { text: "Cancel", style: "cancel" },
+        { text: t("reflectionSheet.takePhoto", "Take photo"), onPress: () => void pickFromCamera() },
+        { text: t("reflectionSheet.photoLibrary", "Photo Library"), onPress: () => void pickFromLibrary() },
+        { text: t("reflectionSheet.cancel", "Cancel"), style: "cancel" },
       ],
       { cancelable: true },
     );
@@ -225,12 +228,12 @@ export function ReflectionSheet({
       } catch (err) {
         if (!mountedRef.current) return;
         const message =
-          err instanceof Error ? err.message : "Couldn't transcribe that clip.";
+          err instanceof Error ? err.message : t("reflectionSheet.transcribeError", "Couldn't transcribe that clip.");
         if (Platform.OS === "web") {
           // eslint-disable-next-line no-alert
           window.alert(message);
         } else {
-          Alert.alert("Voice", message);
+          Alert.alert(t("reflectionSheet.voiceTitle", "Voice"), message);
         }
       } finally {
         if (mountedRef.current) setTranscribing(false);
@@ -291,12 +294,12 @@ export function ReflectionSheet({
     onClose();
     if (analysisFailed) {
       const msg =
-        "Saved your reflection, but couldn't analyse the photo this time.";
+        t("reflectionSheet.analysisFailed", "Saved your reflection, but couldn't analyse the photo this time.");
       if (Platform.OS === "web") {
         // eslint-disable-next-line no-alert
         window.alert(msg);
       } else {
-        Alert.alert("Photo", msg);
+        Alert.alert(t("reflectionSheet.photoTitle", "Photo"), msg);
       }
     }
   };
@@ -374,7 +377,7 @@ export function ReflectionSheet({
                     },
                   ]}
                 >
-                  {completed ? "Marked done" : "Not done"}
+                  {completed ? t("reflectionSheet.markedDone", "Marked done") : t("reflectionSheet.notDone", "Not done")}
                 </Text>
               </View>
               <Pressable onPress={safeClose} hitSlop={10} disabled={isBusy}>
@@ -392,7 +395,7 @@ export function ReflectionSheet({
                 { color: colors.foreground, fontFamily: "Inter_700Bold" },
               ]}
             >
-              {completed ? "How did this go?" : "Why didn't this happen?"}
+              {completed ? t("reflectionSheet.titleCompleted", "How did this go?") : t("reflectionSheet.titleSkipped", "Why didn't this happen?")}
             </Text>
             <Text
               style={[
@@ -448,8 +451,8 @@ export function ReflectionSheet({
               multiline
               placeholder={
                 completed
-                  ? "Optional note — what helped, what made it click?"
-                  : "Optional note — what got in the way?"
+                  ? t("reflectionSheet.notePlaceholderCompleted", "Optional note — what helped, what made it click?")
+                  : t("reflectionSheet.notePlaceholderSkipped", "Optional note — what got in the way?")
               }
               placeholderTextColor={colors.mutedForeground}
               style={[
@@ -495,7 +498,7 @@ export function ReflectionSheet({
                     },
                   ]}
                 >
-                  {pendingImage ? "Photo attached" : "Add media"}
+                  {pendingImage ? t("reflectionSheet.photoAttached", "Photo attached") : t("reflectionSheet.addMediaBtn", "Add media")}
                 </Text>
               </Pressable>
 
@@ -546,14 +549,14 @@ export function ReflectionSheet({
                   numberOfLines={1}
                 >
                   {isRecording
-                    ? `Recording ${recordingSeconds}s — tap to stop`
+                    ? t("reflectionSheet.recording", "Recording {{seconds}}s — tap to stop", { seconds: recordingSeconds })
                     : transcribing
-                    ? "Transcribing…"
+                    ? t("reflectionSheet.transcribing", "Transcribing…")
                     : recorder.state === "error"
-                    ? (recorder.errorMessage ?? "Mic unavailable — tap to retry")
+                    ? (recorder.errorMessage ?? t("reflectionSheet.micUnavailable", "Mic unavailable — tap to retry"))
                     : voiceTranscript
-                    ? "Add more voice"
-                    : "Voice note"}
+                    ? t("reflectionSheet.addMoreVoice", "Add more voice")
+                    : t("reflectionSheet.voiceNote", "Voice note")}
                 </Text>
               </Pressable>
             </View>
@@ -584,7 +587,7 @@ export function ReflectionSheet({
                       },
                     ]}
                   >
-                    rubai will analyse this photo when you save.
+                    {t("reflectionSheet.photoCaption", "rubai will analyse this photo when you save.")}
                   </Text>
                 </View>
                 <Pressable
@@ -623,7 +626,7 @@ export function ReflectionSheet({
                       },
                     ]}
                   >
-                    VOICE NOTE
+                    {t("reflectionSheet.voiceNoteLabel", "VOICE NOTE")}
                   </Text>
                   <Pressable
                     onPress={() => setVoiceTranscript("")}
@@ -670,7 +673,7 @@ export function ReflectionSheet({
                     },
                   ]}
                 >
-                  Skip
+                  {t("reflectionSheet.skip", "Skip")}
                 </Text>
               </Pressable>
               <Pressable
@@ -697,7 +700,7 @@ export function ReflectionSheet({
                       },
                     ]}
                   >
-                    {pendingImage ? "Analyse & save" : "Save reflection"}
+                    {pendingImage ? t("reflectionSheet.analyseAndSave", "Analyse & save") : t("reflectionSheet.saveReflection", "Save reflection")}
                   </Text>
                 )}
               </Pressable>

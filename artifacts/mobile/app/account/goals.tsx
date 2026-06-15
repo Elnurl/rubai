@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInDown } from "react-native-reanimated";
+import { useTranslation } from "react-i18next";
 
 import { GOAL_META, profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
@@ -41,6 +42,7 @@ export default function AccountGoalsScreen() {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 0 : insets.top;
 
@@ -93,7 +95,7 @@ export default function AccountGoalsScreen() {
             { color: colors.foreground, fontFamily: "Inter_700Bold" },
           ]}
         >
-          My Goals
+          {t("goals.headerTitle", "My Goals")}
         </Text>
         <View style={styles.backBtn} />
       </View>
@@ -117,7 +119,7 @@ export default function AccountGoalsScreen() {
                 },
               ]}
             >
-              No goals yet. Add one from the Goals tab.
+              {t("goals.emptyText", "No goals yet. Add one from the Goals tab.")}
             </Text>
           </View>
         ) : (
@@ -153,6 +155,7 @@ function GoalRow({
   onMakeActive,
 }: GoalRowProps) {
   const colors = useColors();
+  const { t } = useTranslation();
   const meta = GOAL_META[goal.profile.goalType];
   const label = profileGoalLabel(goal.profile);
   const currentWeek = computeCurrentWeek(goal.startDate ?? null);
@@ -220,7 +223,7 @@ function GoalRow({
                   { color: colors.primary, fontFamily: "Inter_600SemiBold" },
                 ]}
               >
-                ACTIVE
+                {t("goals.activeBadge", "ACTIVE")}
               </Text>
             </View>
           )}
@@ -238,7 +241,7 @@ function GoalRow({
                   },
                 ]}
               >
-                Week {currentWeek} of {totalWeeks}
+                {t("goals.weekOf", "Week {{currentWeek}} of {{totalWeeks}}", { currentWeek, totalWeeks })}
               </Text>
               <Text
                 style={[
@@ -249,7 +252,7 @@ function GoalRow({
                   },
                 ]}
               >
-                {pct}% complete
+                {t("goals.pctComplete", "{{pct}}% complete", { pct })}
               </Text>
             </View>
 
@@ -282,7 +285,7 @@ function GoalRow({
               },
             ]}
           >
-            Roadmap pending
+            {t("goals.roadmapPending", "Roadmap pending")}
           </Text>
         )}
 
@@ -313,7 +316,7 @@ function GoalRow({
                     { color: colors.primary, fontFamily: "Inter_600SemiBold" },
                   ]}
                 >
-                  Make active
+                  {t("goals.makeActive", "Make active")}
                 </Text>
               </>
             )}

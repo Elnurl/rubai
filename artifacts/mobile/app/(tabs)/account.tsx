@@ -16,14 +16,16 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 
 import { AskCoachPill } from "@/components/AskCoachPill";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { TIER_INFO, type SubscriptionTier } from "@/types/atlas";
 import type { TaskHistoryEntry } from "@/lib/storage";
+import i18n from "@/lib/i18n";
 
-const APP_VERSION = "rubai · v1.0 · designed for execution";
+const APP_VERSION = i18n.t("accountTab.appVersion", "rubai · v1.0 · designed for execution");
 
 function computeBestStreak(history: TaskHistoryEntry[]): number {
   const daySet = new Set(history.filter((h) => h.completed).map((h) => h.date));
@@ -45,6 +47,7 @@ export default function AccountScreen() {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 8;
   const bottomTab = isWeb ? 84 : 90;
@@ -73,12 +76,12 @@ export default function AccountScreen() {
   const onSignOut = () => {
     const doSignOut = async () => { await signOut(); };
     if (Platform.OS === "web") {
-      if (typeof window !== "undefined" && window.confirm("Sign out of rubai?"))
+      if (typeof window !== "undefined" && window.confirm(t("accountTab.signOutConfirmWeb", "Sign out of rubai?")))
         void doSignOut();
     } else {
-      Alert.alert("Sign out?", "You can sign back in any time.", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Sign out", style: "destructive", onPress: doSignOut },
+      Alert.alert(t("accountTab.signOutTitle", "Sign out?"), t("accountTab.signOutBody", "You can sign back in any time."), [
+        { text: t("accountTab.cancel", "Cancel"), style: "cancel" },
+        { text: t("accountTab.signOut", "Sign out"), style: "destructive", onPress: doSignOut },
       ]);
     }
   };
@@ -97,12 +100,12 @@ export default function AccountScreen() {
   const tierKey =
     (tier as SubscriptionTier) in TIER_INFO ? (tier as SubscriptionTier) : "free";
 
-  const accountEmail = user?.primaryEmailAddress?.emailAddress ?? "Signed in";
+  const accountEmail = user?.primaryEmailAddress?.emailAddress ?? t("accountTab.signedIn", "Signed in");
   const fullName =
     [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() ||
     user?.username ||
     accountEmail.split("@")[0] ||
-    "Your account";
+    t("accountTab.yourAccount", "Your account");
   const initials =
     (user?.firstName?.[0] ?? "") + (user?.lastName?.[0] ?? "") ||
     fullName.slice(0, 2);
@@ -168,7 +171,7 @@ export default function AccountScreen() {
         ? "#10B981"
         : colors.mutedForeground;
   const tierBadgeText =
-    tierKey === "premium" ? "PREMIUM" : tierKey === "pro" ? "PRO MEMBER" : "FREE";
+    tierKey === "premium" ? t("accountTab.tierPremium", "PREMIUM") : tierKey === "pro" ? t("accountTab.tierProMember", "PRO MEMBER") : t("accountTab.tierFree", "FREE");
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -311,7 +314,7 @@ export default function AccountScreen() {
         {activeGoal && goalTitle ? (
           <>
             <View style={styles.sectionLabelRow}>
-              <SectionLabel>ACTIVE GOAL</SectionLabel>
+              <SectionLabel>{t("accountTab.activeGoalLabel", "ACTIVE GOAL")}</SectionLabel>
               <Pressable
                 onPress={() => router.push("/account/goals" as never)}
                 hitSlop={8}
@@ -324,7 +327,7 @@ export default function AccountScreen() {
                     letterSpacing: 0.2,
                   }}
                 >
-                  {goals.length > 1 ? "Switch goal" : "See all"}
+                  {goals.length > 1 ? t("accountTab.switchGoal", "Switch goal") : t("accountTab.seeAll", "See all")}
                 </Text>
               </Pressable>
             </View>
@@ -377,7 +380,7 @@ export default function AccountScreen() {
                     fontSize: 11.5,
                   }}
                 >
-                  Week {activeCurrentWeek} of {totalWeeks}
+                  {t("accountTab.weekOf", "Week {{currentWeek}} of {{totalWeeks}}", { currentWeek: activeCurrentWeek, totalWeeks })}
                 </Text>
                 <Text
                   style={{
@@ -386,7 +389,7 @@ export default function AccountScreen() {
                     fontSize: 11,
                   }}
                 >
-                  {Math.round(progress * 100)}%
+                  {t("accountTab.percent", "{{pct}}%", { pct: Math.round(progress * 100) })}
                 </Text>
               </View>
 
@@ -412,28 +415,28 @@ export default function AccountScreen() {
         ) : null}
 
         {/* ── Stats & Streaks ── */}
-        <SectionLabel>STATS & STREAKS</SectionLabel>
+        <SectionLabel>{t("accountTab.statsStreaks", "STATS & STREAKS")}</SectionLabel>
         <View style={styles.statsGrid}>
           <StatBlock
-            label="Current Streak"
+            label={t("accountTab.currentStreak", "Current Streak")}
             value={`${currentStreak}d`}
             icon="zap"
             colors={colors}
           />
           <StatBlock
-            label="Best Streak"
+            label={t("accountTab.bestStreak", "Best Streak")}
             value={`${bestStreak}d`}
             icon="award"
             colors={colors}
           />
           <StatBlock
-            label="Tasks Done"
+            label={t("accountTab.tasksDone", "Tasks Done")}
             value={String(tasksDone)}
             icon="check-circle"
             colors={colors}
           />
           <StatBlock
-            label="Goals Active"
+            label={t("accountTab.goalsActive", "Goals Active")}
             value={String(activeGoalCount)}
             icon="flag"
             colors={colors}
@@ -463,7 +466,7 @@ export default function AccountScreen() {
                 letterSpacing: -0.1,
               }}
             >
-              Breakdown by goal
+              {t("accountTab.breakdownByGoal", "Breakdown by goal")}
             </Text>
             <Text
               style={{
@@ -473,7 +476,9 @@ export default function AccountScreen() {
                 marginRight: 6,
               }}
             >
-              {perGoalStats.length} goal{perGoalStats.length !== 1 ? "s" : ""}
+              {perGoalStats.length === 1
+                ? t("accountTab.goalCountOne", "{{count}} goal", { count: perGoalStats.length })
+                : t("accountTab.goalCountOther", "{{count}} goals", { count: perGoalStats.length })}
             </Text>
             <Feather
               name={goalBreakdownExpanded ? "chevron-up" : "chevron-down"}
@@ -564,7 +569,7 @@ export default function AccountScreen() {
         )}
 
         {/* ── Preferences ── */}
-        <SectionLabel>PREFERENCES</SectionLabel>
+        <SectionLabel>{t("accountTab.preferences", "PREFERENCES")}</SectionLabel>
         <View
           style={[
             styles.group,
@@ -577,15 +582,23 @@ export default function AccountScreen() {
         >
           <AcctRow
             icon="bell"
-            title="Notifications"
+            title={t("accountTab.notifications", "Notifications")}
             onPress={() => router.push("/account/notifications")}
             chevron
             colors={colors}
           />
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <AcctRow
+            icon="award"
+            title={t("accountTab.rewards", "Rewards")}
+            onPress={() => router.push("/account/rewards")}
+            chevron
+            colors={colors}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <AcctRow
             icon="moon"
-            title="Dark Mode"
+            title={t("accountTab.darkMode", "Dark Mode")}
             colors={colors}
             trailing={
               <Switch
@@ -601,7 +614,7 @@ export default function AccountScreen() {
         </View>
 
         {/* ── Account ── */}
-        <SectionLabel>ACCOUNT</SectionLabel>
+        <SectionLabel>{t("accountTab.account", "ACCOUNT")}</SectionLabel>
         <View
           style={[
             styles.group,
@@ -614,7 +627,7 @@ export default function AccountScreen() {
         >
           <AcctRow
             icon="shield"
-            title="Privacy & Security"
+            title={t("accountTab.privacySecurity", "Privacy & Security")}
             onPress={() => router.push("/account/privacy")}
             chevron
             colors={colors}
@@ -622,7 +635,7 @@ export default function AccountScreen() {
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <AcctRow
             icon="help-circle"
-            title="Help & Support"
+            title={t("accountTab.helpSupport", "Help & Support")}
             onPress={() =>
               void Linking.openURL("mailto:support@rubai.app")
             }
@@ -652,7 +665,7 @@ export default function AccountScreen() {
                   letterSpacing: -0.2,
                 }}
               >
-                {tierKey === "premium" ? "rubai Premium" : "rubai Pro"}
+                {tierKey === "premium" ? t("accountTab.rubaiPremium", "rubai Premium") : t("accountTab.rubaiPro", "rubai Pro")}
               </Text>
               <Text
                 style={{
@@ -662,7 +675,7 @@ export default function AccountScreen() {
                   marginTop: 2,
                 }}
               >
-                Active subscription
+                {t("accountTab.activeSubscription", "Active subscription")}
               </Text>
             </View>
             <Pressable
@@ -682,7 +695,7 @@ export default function AccountScreen() {
                   fontSize: 13,
                 }}
               >
-                Manage
+                {t("accountTab.manage", "Manage")}
               </Text>
             </Pressable>
           </View>
@@ -711,7 +724,7 @@ export default function AccountScreen() {
               marginLeft: 8,
             }}
           >
-            Sign Out
+            {t("accountTab.signOutBtn", "Sign Out")}
           </Text>
         </Pressable>
 

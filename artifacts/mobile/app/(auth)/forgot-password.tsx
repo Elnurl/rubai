@@ -1,5 +1,6 @@
 import { useSignIn } from "@clerk/expo";
 import { useRouter } from "expo-router";
+import { useTranslation } from "react-i18next";
 import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -37,6 +38,7 @@ function debug(...args: unknown[]) {
 type Step = "request" | "reset";
 
 export default function ForgotPasswordScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { signIn, fetchStatus } = useSignIn();
   const isFetching = fetchStatus === "fetching";
@@ -54,7 +56,7 @@ export default function ForgotPasswordScreen() {
     setSubmitError(null);
     setInfo(null);
     if (!emailAddress) {
-      setSubmitError("Enter the email on your account.");
+      setSubmitError(t("forgotPassword.enterEmailError", "Enter the email on your account."));
       return;
     }
     setBusy(true);
@@ -76,7 +78,7 @@ export default function ForgotPasswordScreen() {
         setSubmitError(friendlyAuthError(sent.error));
         return;
       }
-      setInfo(`We just emailed a 6-digit reset code to ${emailAddress}.`);
+      setInfo(t("forgotPassword.codeSent", "We just emailed a 6-digit reset code to {{email}}.", { email: emailAddress }));
       setStep("reset");
     } catch (err) {
       debug("request threw", err);
@@ -92,11 +94,11 @@ export default function ForgotPasswordScreen() {
     setInfo(null);
     const trimmedCode = code.trim().replace(/\s+/g, "");
     if (trimmedCode.length === 0) {
-      setSubmitError("Enter the 6-digit code we emailed you.");
+      setSubmitError(t("forgotPassword.enterCodeError", "Enter the 6-digit code we emailed you."));
       return;
     }
     if (newPassword.length < 8) {
-      setSubmitError("New password must be at least 8 characters.");
+      setSubmitError(t("forgotPassword.passwordTooShort", "New password must be at least 8 characters."));
       return;
     }
     setBusy(true);
@@ -133,7 +135,7 @@ export default function ForgotPasswordScreen() {
         return;
       }
       setSubmitError(
-        `Couldn't finish reset (${signIn.status ?? "unknown"}). Try again.`,
+        t("forgotPassword.resetIncomplete", "Couldn't finish reset ({{status}}). Try again.", { status: signIn.status ?? "unknown" }),
       );
     } catch (err) {
       debug("reset threw", err);
@@ -157,19 +159,19 @@ export default function ForgotPasswordScreen() {
               <AtlasLogo size="lg" />
             </View>
             <Text style={styles.title} maxFontSizeMultiplier={1.4}>
-              {step === "request" ? "Reset your password" : "Choose a new password"}
+              {step === "request" ? t("forgotPassword.requestTitle", "Reset your password") : t("forgotPassword.resetTitle", "Choose a new password")}
             </Text>
             <Text style={styles.subtitle} maxFontSizeMultiplier={1.4}>
               {step === "request"
-                ? "Enter the email on your account and we'll send you a 6-digit code."
-                : `Enter the code we emailed to ${emailAddress} and pick a new password.`}
+                ? t("forgotPassword.requestSubtitle", "Enter the email on your account and we'll send you a 6-digit code.")
+                : t("forgotPassword.resetSubtitle", "Enter the code we emailed to {{email}} and pick a new password.", { email: emailAddress })}
             </Text>
           </View>
 
           {step === "request" ? (
             <>
               <Text style={styles.label} maxFontSizeMultiplier={1.3}>
-                Email
+                {t("forgotPassword.email", "Email")}
               </Text>
               <TextInput
                 style={styles.input}
@@ -216,7 +218,7 @@ export default function ForgotPasswordScreen() {
                     style={styles.primaryBtnText}
                     maxFontSizeMultiplier={1.3}
                   >
-                    Send reset code
+                    {t("forgotPassword.sendCodeBtn", "Send reset code")}
                   </Text>
                 )}
               </Pressable>
@@ -224,7 +226,7 @@ export default function ForgotPasswordScreen() {
           ) : (
             <>
               <Text style={styles.label} maxFontSizeMultiplier={1.3}>
-                Reset code
+                {t("forgotPassword.resetCode", "Reset code")}
               </Text>
               <TextInput
                 style={[styles.input, styles.codeInput]}
@@ -244,13 +246,13 @@ export default function ForgotPasswordScreen() {
                 style={[styles.label, { marginTop: 12 }]}
                 maxFontSizeMultiplier={1.3}
               >
-                New password
+                {t("forgotPassword.newPassword", "New password")}
               </Text>
               <TextInput
                 style={styles.input}
                 value={newPassword}
                 onChangeText={setNewPassword}
-                placeholder="At least 8 characters"
+                placeholder={t("forgotPassword.passwordPlaceholder", "At least 8 characters")}
                 placeholderTextColor={BRAND.muted}
                 secureTextEntry
                 autoComplete="password-new"
@@ -292,7 +294,7 @@ export default function ForgotPasswordScreen() {
                     style={styles.primaryBtnText}
                     maxFontSizeMultiplier={1.3}
                   >
-                    Set new password
+                    {t("forgotPassword.setPasswordBtn", "Set new password")}
                   </Text>
                 )}
               </Pressable>
@@ -304,7 +306,7 @@ export default function ForgotPasswordScreen() {
                 style={{ alignSelf: "center", marginTop: 14 }}
               >
                 <Text style={styles.linkText} maxFontSizeMultiplier={1.3}>
-                  Resend code
+                  {t("forgotPassword.resendCode", "Resend code")}
                 </Text>
               </Pressable>
             </>
@@ -316,7 +318,7 @@ export default function ForgotPasswordScreen() {
             accessibilityRole="button"
           >
             <Text style={styles.backText} maxFontSizeMultiplier={1.3}>
-              Back to sign in
+              {t("forgotPassword.backToSignIn", "Back to sign in")}
             </Text>
           </Pressable>
         </ScrollView>

@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Platform,
@@ -38,6 +39,7 @@ import {
 } from "@workspace/api-client-react";
 
 export default function TodayScreen() {
+  const { t } = useTranslation();
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
@@ -216,8 +218,11 @@ export default function TodayScreen() {
       >
         <EmptyState
           icon="sun"
-          title="No active goal"
-          description="Add a goal in the Goals tab to see today's plan."
+          title={t("today.noActiveGoalTitle", "No active goal")}
+          description={t(
+            "today.noActiveGoalDesc",
+            "Add a goal in the Goals tab to see today's plan.",
+          )}
         />
       </View>
     );
@@ -267,8 +272,8 @@ export default function TodayScreen() {
             {heroDate.toUpperCase()}
           </Text>
           <SectionHeader
-            title={activeDailyPlan?.plan.focusOfTheDay ?? "Today's plan is loading"}
-            subtitle={goalLabel ? `Week ${activeCurrentWeek} • ${goalLabel}` : undefined}
+            title={activeDailyPlan?.plan.focusOfTheDay ?? t("today.planLoading", "Today's plan is loading")}
+            subtitle={goalLabel ? t("today.weekGoal", "Week {{week}} • {{goal}}", { week: activeCurrentWeek, goal: goalLabel }) : undefined}
           />
         </View>
 
@@ -316,7 +321,7 @@ export default function TodayScreen() {
                   { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
                 ]}
               >
-                {completedCount} of {totalCount} done
+                {t("today.doneCount", "{{completed}} of {{total}} done", { completed: completedCount, total: totalCount })}
               </Text>
               <View style={styles.streakRow}>
                 <Feather name="zap" size={13} color={colors.primary} />
@@ -327,8 +332,8 @@ export default function TodayScreen() {
                   ]}
                 >
                   {activeBehavioral.currentStreakDays > 0
-                    ? `Day ${activeBehavioral.currentStreakDays} · streak`
-                    : "Day 1 · streak rebuilding"}
+                    ? t("today.dayStreak", "Day {{day}} · streak", { day: activeBehavioral.currentStreakDays })
+                    : t("today.streakRebuilding", "Day 1 · streak rebuilding")}
                 </Text>
               </View>
             </View>
@@ -358,7 +363,7 @@ export default function TodayScreen() {
                   { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
                 ]}
               >
-                rubai is preparing today's tasks
+                {t("today.preparingTasks", "rubai is preparing today's tasks")}
               </Text>
             </View>
           ) : activeDailyPlan ? (
@@ -389,11 +394,14 @@ export default function TodayScreen() {
           ) : (
             <EmptyState
               icon="cloud-off"
-              title="We couldn't reach the planner"
-              description="Pull down to refresh and we'll generate today's plan."
+              title={t("today.plannerErrorTitle", "We couldn't reach the planner")}
+              description={t(
+                "today.plannerErrorDesc",
+                "Pull down to refresh and we'll generate today's plan.",
+              )}
               action={
                 <AtlasButton
-                  label="Try again"
+                  label={t("today.tryAgain", "Try again")}
                   variant="secondary"
                   onPress={refresh}
                   icon={
@@ -459,7 +467,7 @@ export default function TodayScreen() {
 
       <SaveToast
         visible={showSaveToast}
-        message="Reflection saved"
+        message={t("today.reflectionSaved", "Reflection saved")}
         onDismiss={() => setShowSaveToast(false)}
       />
     </View>

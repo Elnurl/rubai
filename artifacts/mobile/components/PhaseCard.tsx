@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   FadeIn,
@@ -24,6 +25,7 @@ type Props = {
 
 export function PhaseCard({ phase, index, status, updated = false }: Props) {
   const colors = useColors();
+  const { t } = useTranslation();
   const isActive = status === "active";
   const isCompleted = status === "completed";
   // Every phase starts collapsed so the roadmap reads as a clean, scannable
@@ -71,7 +73,10 @@ export function PhaseCard({ phase, index, status, updated = false }: Props) {
         onPress={toggle}
         accessibilityRole="button"
         accessibilityState={{ expanded }}
-        accessibilityLabel={`${phase.title}, ${expanded ? "collapse" : "expand"}`}
+        accessibilityLabel={t("phaseCard.toggleA11y", "{{title}}, {{action}}", {
+          title: phase.title,
+          action: expanded ? t("phaseCard.collapse", "collapse") : t("phaseCard.expand", "expand"),
+        })}
         android_ripple={{ color: colors.muted }}
         style={({ pressed }) => [styles.header, pressed && { opacity: 0.7 }]}
       >
@@ -103,7 +108,7 @@ export function PhaseCard({ phase, index, status, updated = false }: Props) {
                   { color: colors.accent, fontFamily: "Inter_600SemiBold" },
                 ]}
               >
-                UPDATED
+                {t("phaseCard.updated", "UPDATED")}
               </Text>
             </View>
           )}
@@ -129,7 +134,7 @@ export function PhaseCard({ phase, index, status, updated = false }: Props) {
                     },
                   ]}
                 >
-                  NOW
+                  {t("phaseCard.now", "NOW")}
                 </Text>
               </View>
             ) : (
@@ -149,7 +154,7 @@ export function PhaseCard({ phase, index, status, updated = false }: Props) {
                     { color: colors.primary, fontFamily: "Inter_600SemiBold" },
                   ]}
                 >
-                  DONE
+                  {t("phaseCard.done", "DONE")}
                 </Text>
               </View>
             )}
@@ -163,9 +168,18 @@ export function PhaseCard({ phase, index, status, updated = false }: Props) {
           ]}
           numberOfLines={1}
         >
-          Week {phase.startWeek} — Week {phase.endWeek}
+          {t("phaseCard.weekRange", "Week {{startWeek}} — Week {{endWeek}}", {
+            startWeek: phase.startWeek,
+            endWeek: phase.endWeek,
+          })}
           {milestoneCount > 0
-            ? ` · ${milestoneCount} milestone${milestoneCount === 1 ? "" : "s"}`
+            ? milestoneCount === 1
+              ? t("phaseCard.milestoneCountSingular", " · {{count}} milestone", {
+                  count: milestoneCount,
+                })
+              : t("phaseCard.milestoneCountPlural", " · {{count}} milestones", {
+                  count: milestoneCount,
+                })
             : ""}
         </Text>
       </Pressable>
@@ -227,7 +241,9 @@ export function PhaseCard({ phase, index, status, updated = false }: Props) {
                           },
                         ]}
                       >
-                        Week {m.weekNumber}
+                        {t("phaseCard.milestoneWeek", "Week {{weekNumber}}", {
+                          weekNumber: m.weekNumber,
+                        })}
                       </Text>
                     </View>
                   </View>

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
@@ -20,6 +21,7 @@ export default function CoachMemoryScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { t } = useTranslation();
   const { activeCoachMemory, setActiveCoachMemory, activeGoal } = useAtlas();
 
   const [clearing, setClearing] = useState(false);
@@ -36,18 +38,18 @@ export default function CoachMemoryScreen() {
 
   const handleClear = () => {
     if (Platform.OS === "web") {
-      if (window.confirm("Coach memory will be cleared. This cannot be undone.")) {
+      if (window.confirm(t("coachMemory.confirmClearWeb", "Coach memory will be cleared. This cannot be undone."))) {
         void doClear();
       }
       return;
     }
     Alert.alert(
-      "Clear all memory?",
-      "RubAI will forget everything it has learned about you. This cannot be undone.",
+      t("coachMemory.confirmClearTitle", "Clear all memory?"),
+      t("coachMemory.confirmClearBody", "RubAI will forget everything it has learned about you. This cannot be undone."),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("coachMemory.cancel", "Cancel"), style: "cancel" },
         {
-          text: "Clear memory",
+          text: t("coachMemory.clearMemory", "Clear memory"),
           style: "destructive",
           onPress: () => void doClear(),
         },
@@ -90,7 +92,7 @@ export default function CoachMemoryScreen() {
               { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
             ]}
           >
-            Coach Memory
+            {t("coachMemory.headerTitle", "Coach Memory")}
           </Text>
           <View style={{ width: 24 }} />
         </View>
@@ -117,7 +119,7 @@ export default function CoachMemoryScreen() {
                 { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
               ]}
             >
-              What RubAI remembers
+              {t("coachMemory.whatRemembers", "What RubAI remembers")}
             </Text>
           </View>
           <Text
@@ -129,9 +131,7 @@ export default function CoachMemoryScreen() {
               },
             ]}
           >
-            Your coach builds a private memory of facts and context you share
-            across conversations. This helps it give you more relevant, personal
-            guidance over time — without you having to repeat yourself.
+            {t("coachMemory.cardBody", "Your coach builds a private memory of facts and context you share across conversations. This helps it give you more relevant, personal guidance over time — without you having to repeat yourself.")}
           </Text>
         </View>
 
@@ -145,7 +145,7 @@ export default function CoachMemoryScreen() {
                   { color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
                 ]}
               >
-                SUMMARY
+                {t("coachMemory.summary", "SUMMARY")}
               </Text>
               <View
                 style={[
@@ -171,7 +171,7 @@ export default function CoachMemoryScreen() {
                       },
                     ]}
                   >
-                    Last updated {updatedAt}
+                    {t("coachMemory.lastUpdated", "Last updated {{updatedAt}}", { updatedAt })}
                   </Text>
                 ) : null}
               </View>
@@ -192,7 +192,7 @@ export default function CoachMemoryScreen() {
                     },
                   ]}
                 >
-                  REMEMBERED FACTS ({facts.length})
+                  {t("coachMemory.rememberedFacts", "REMEMBERED FACTS ({{count}})", { count: facts.length })}
                 </Text>
                 <View style={styles.factsList}>
                   {facts.map((fact, i) => (
@@ -242,7 +242,7 @@ export default function CoachMemoryScreen() {
                     },
                   ]}
                 >
-                  ACTIVE GOAL
+                  {t("coachMemory.activeGoal", "ACTIVE GOAL")}
                 </Text>
                 <View
                   style={[
@@ -303,7 +303,7 @@ export default function CoachMemoryScreen() {
                     },
                   ]}
                 >
-                  {clearing ? "Clearing…" : "Clear all memory"}
+                  {clearing ? t("coachMemory.clearing", "Clearing…") : t("coachMemory.clearAllMemory", "Clear all memory")}
                 </Text>
               </Pressable>
             </Animated.View>
@@ -331,7 +331,7 @@ export default function CoachMemoryScreen() {
                 { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
               ]}
             >
-              No memory yet
+              {t("coachMemory.emptyTitle", "No memory yet")}
             </Text>
             <Text
               style={[
@@ -342,8 +342,7 @@ export default function CoachMemoryScreen() {
                 },
               ]}
             >
-              Start a conversation with your coach. As you chat, RubAI will
-              quietly build up a memory of what matters most to you.
+              {t("coachMemory.emptyBody", "Start a conversation with your coach. As you chat, RubAI will quietly build up a memory of what matters most to you.")}
             </Text>
           </Animated.View>
         )}

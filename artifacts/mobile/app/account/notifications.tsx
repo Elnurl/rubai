@@ -16,10 +16,12 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { formatTime } from "@/lib/languageLocales";
+import i18n from "@/lib/i18n";
 
 const REMINDER_TAG = "rubai-daily-reminder";
 
@@ -36,8 +38,8 @@ async function scheduleReminder(timeStr: string): Promise<void> {
   }
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: "rubai",
-      body: "Time to check your daily tasks and keep moving forward. 🎯",
+      title: i18n.t("notifications.reminderTitle", "rubai"),
+      body: i18n.t("notifications.reminderBody", "Time to check your daily tasks and keep moving forward. 🎯"),
       data: { [REMINDER_TAG]: true },
     },
     trigger: {
@@ -62,6 +64,7 @@ export default function NotificationsScreen() {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const { account, updateAccount } = useAtlas();
   const [showPicker, setShowPicker] = useState(false);
 
@@ -100,7 +103,7 @@ export default function NotificationsScreen() {
               marginRight: 24,
             }}
           >
-            Notifications
+            {t("notifications.headerTitle", "Notifications")}
           </Text>
         </View>
 
@@ -127,7 +130,7 @@ export default function NotificationsScreen() {
                   fontSize: 14.5,
                 }}
               >
-                Smart Nudges
+                {t("notifications.smartNudges", "Smart Nudges")}
               </Text>
               <Text
                 style={{
@@ -136,7 +139,7 @@ export default function NotificationsScreen() {
                   fontSize: 12,
                 }}
               >
-                AI-timed reminders adapted to your rhythm
+                {t("notifications.smartNudgesSubtitle", "AI-timed reminders adapted to your rhythm")}
               </Text>
             </View>
             <Switch
@@ -146,8 +149,8 @@ export default function NotificationsScreen() {
                   const { status } = await Notifications.requestPermissionsAsync();
                   if (status !== "granted") {
                     Alert.alert(
-                      "Permission needed",
-                      "Enable notifications in your device Settings to receive reminders.",
+                      t("notifications.permissionTitle", "Permission needed"),
+                      t("notifications.permissionBody", "Enable notifications in your device Settings to receive reminders."),
                     );
                     return;
                   }
@@ -192,7 +195,7 @@ export default function NotificationsScreen() {
                     fontSize: 14.5,
                   }}
                 >
-                  Set alarm
+                  {t("notifications.setAlarm", "Set alarm")}
                 </Text>
                 <Text
                   style={{
@@ -249,6 +252,7 @@ function TimePickerModal(props: {
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   const [h, m] = props.value.split(":").map(Number);
   const initH = isNaN(h) ? 8 : h;
@@ -339,7 +343,7 @@ function TimePickerModal(props: {
             marginBottom: 4,
           }}
         >
-          Daily reminder
+          {t("notifications.dailyReminder", "Daily reminder")}
         </Text>
         <Text
           style={{
@@ -358,7 +362,7 @@ function TimePickerModal(props: {
           {/* Hour column */}
           <View style={styles2.col}>
             <Text style={[styles2.colLabel, { color: colors.mutedForeground }]}>
-              Hour
+              {t("notifications.hour", "Hour")}
             </Text>
             <View style={{ position: "relative", height: ITEM_H * (PAD_ITEMS * 2 + 1) }}>
               <View
@@ -415,7 +419,7 @@ function TimePickerModal(props: {
           {/* Minute column */}
           <View style={styles2.col}>
             <Text style={[styles2.colLabel, { color: colors.mutedForeground }]}>
-              Min
+              {t("notifications.min", "Min")}
             </Text>
             <View style={{ position: "relative", height: ITEM_H * (PAD_ITEMS * 2 + 1) }}>
               <View
@@ -476,7 +480,7 @@ function TimePickerModal(props: {
                 fontSize: 15,
               }}
             >
-              Cancel
+              {t("notifications.cancel", "Cancel")}
             </Text>
           </Pressable>
           <Pressable
@@ -502,7 +506,7 @@ function TimePickerModal(props: {
                 fontSize: 15,
               }}
             >
-              Set alarm
+              {t("notifications.setAlarmBtn", "Set alarm")}
             </Text>
           </Pressable>
         </View>

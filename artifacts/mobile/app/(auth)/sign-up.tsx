@@ -3,6 +3,7 @@ import { Feather } from "@expo/vector-icons";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import { Link, useRouter } from "expo-router";
+import { useTranslation } from "react-i18next";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -66,6 +67,7 @@ function useWarmUpBrowser() {
 }
 
 export default function SignUpScreen() {
+  const { t } = useTranslation();
   useWarmUpBrowser();
   const router = useRouter();
   const { signUp, errors, fetchStatus } = useSignUp();
@@ -83,7 +85,7 @@ export default function SignUpScreen() {
     if (!signUp) return;
     setSubmitError(null);
     if (password.length < 8) {
-      setSubmitError("Password must be at least 8 characters long.");
+      setSubmitError(t("signUp.passwordTooShort", "Password must be at least 8 characters long."));
       return;
     }
     setSubmitting(true);
@@ -113,7 +115,7 @@ export default function SignUpScreen() {
         return;
       }
       setSubmitError(
-        "We couldn't finish creating your account. Email verification appears to still be required on the server. Please contact support.",
+        t("signUp.verificationRequired", "We couldn't finish creating your account. Email verification appears to still be required on the server. Please contact support."),
       );
     } catch (err) {
       debug("submit threw", err);
@@ -148,11 +150,11 @@ export default function SignUpScreen() {
         debug("google sso cancelled or missing requirements");
         if (isWebInIframe()) {
           setSubmitError(
-            "Google sign-up didn't complete. Inside the workspace preview, OAuth popups can be blocked — open this page in a new browser tab and try again.",
+            t("signUp.googleIncompleteIframe", "Google sign-up didn't complete. Inside the workspace preview, OAuth popups can be blocked — open this page in a new browser tab and try again."),
           );
         } else {
           setSubmitError(
-            "Google sign-up didn't complete. Please try again.",
+            t("signUp.googleIncomplete", "Google sign-up didn't complete. Please try again."),
           );
         }
       }
@@ -191,10 +193,10 @@ export default function SignUpScreen() {
               <AtlasLogo size="lg" />
             </View>
             <Text style={styles.title} maxFontSizeMultiplier={1.4}>
-              Create your account
+              {t("signUp.title", "Create your account")}
             </Text>
             <Text style={styles.subtitle} maxFontSizeMultiplier={1.4}>
-              Start your AI-coached journey toward your biggest goal.
+              {t("signUp.subtitle", "Start your AI-coached journey toward your biggest goal.")}
             </Text>
           </View>
 
@@ -206,9 +208,7 @@ export default function SignUpScreen() {
                     style={styles.iframeNoticeText}
                     maxFontSizeMultiplier={1.3}
                   >
-                    Tip: Google sign-up opens a popup. To use it from the
-                    workspace preview, open this page in a new browser tab
-                    first.
+                    {t("signUp.iframeNotice", "Tip: Google sign-up opens a popup. To use it from the workspace preview, open this page in a new browser tab first.")}
                   </Text>
                 </View>
               )}
@@ -223,7 +223,7 @@ export default function SignUpScreen() {
                 onPress={handleGoogle}
                 disabled={oauthLoading}
                 accessibilityRole="button"
-                accessibilityLabel="Sign up with Google"
+                accessibilityLabel={t("signUp.signUpWithGoogle", "Sign up with Google")}
               >
                 {oauthLoading ? (
                   <ActivityIndicator color={BRAND.fg} />
@@ -235,7 +235,7 @@ export default function SignUpScreen() {
                       maxFontSizeMultiplier={1.3}
                       numberOfLines={1}
                     >
-                      Sign up with Google
+                      {t("signUp.signUpWithGoogle", "Sign up with Google")}
                     </Text>
                   </>
                 )}
@@ -244,13 +244,13 @@ export default function SignUpScreen() {
               <View style={styles.dividerRow}>
                 <View style={styles.divider} />
                 <Text style={styles.dividerText} maxFontSizeMultiplier={1.2}>
-                  or
+                  {t("signUp.or", "or")}
                 </Text>
                 <View style={styles.divider} />
               </View>
 
               <Text style={styles.label} maxFontSizeMultiplier={1.3}>
-                Email
+                {t("signUp.email", "Email")}
               </Text>
               <TextInput
                 style={styles.input}
@@ -274,14 +274,14 @@ export default function SignUpScreen() {
                 style={[styles.label, { marginTop: 12 }]}
                 maxFontSizeMultiplier={1.3}
               >
-                Password
+                {t("signUp.password", "Password")}
               </Text>
               <View style={styles.passwordRow}>
                 <TextInput
                   style={[styles.input, styles.passwordInput]}
                   value={password}
                   onChangeText={setPassword}
-                  placeholder="At least 8 characters"
+                  placeholder={t("signUp.passwordPlaceholder", "At least 8 characters")}
                   placeholderTextColor={BRAND.muted}
                   secureTextEntry={!showPassword}
                   autoComplete="password-new"
@@ -294,7 +294,7 @@ export default function SignUpScreen() {
                   hitSlop={10}
                   accessibilityRole="button"
                   accessibilityLabel={
-                    showPassword ? "Hide password" : "Show password"
+                    showPassword ? t("signUp.hidePassword", "Hide password") : t("signUp.showPassword", "Show password")
                   }
                   style={styles.eyeBtn}
                 >
@@ -342,7 +342,7 @@ export default function SignUpScreen() {
                     style={styles.primaryBtnText}
                     maxFontSizeMultiplier={1.3}
                   >
-                    Create account
+                    {t("signUp.createAccount", "Create account")}
                   </Text>
                 )}
               </Pressable>
@@ -352,12 +352,12 @@ export default function SignUpScreen() {
 
               <View style={styles.linkRow}>
                 <Text style={styles.linkRowText} maxFontSizeMultiplier={1.3}>
-                  Already have an account?
+                  {t("signUp.haveAccount", "Already have an account?")}
                 </Text>
                 <Link href="/(auth)/sign-in" asChild>
                   <Pressable hitSlop={8} accessibilityRole="link">
                     <Text style={styles.linkText} maxFontSizeMultiplier={1.3}>
-                      Sign in
+                      {t("signUp.signInLink", "Sign in")}
                     </Text>
                   </Pressable>
                 </Link>

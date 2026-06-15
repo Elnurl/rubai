@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeIn } from "react-native-reanimated";
@@ -15,6 +16,7 @@ import { useAtlas } from "@/providers/AtlasProvider";
 import { TIER_INFO } from "@/types/atlas";
 
 export default function GoalsScreen() {
+  const { t } = useTranslation();
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -46,16 +48,16 @@ export default function GoalsScreen() {
   const onDelete = (goalId: string, label: string) => {
     const doDelete = () => void removeGoal(goalId);
     if (Platform.OS === "web") {
-      if (typeof window !== "undefined" && window.confirm(`Delete "${label}" and all its progress?`)) {
+      if (typeof window !== "undefined" && window.confirm(t("goals.deleteConfirmWeb", 'Delete "{{label}}" and all its progress?', { label }))) {
         doDelete();
       }
     } else {
       Alert.alert(
-        "Delete this goal?",
-        `"${label}" and all of its roadmap, history, and progress will be removed.`,
+        t("goals.deleteTitle", "Delete this goal?"),
+        t("goals.deleteMessage", '"{{label}}" and all of its roadmap, history, and progress will be removed.', { label }),
         [
-          { text: "Cancel", style: "cancel" },
-          { text: "Delete", style: "destructive", onPress: doDelete },
+          { text: t("goals.cancel", "Cancel"), style: "cancel" },
+          { text: t("goals.delete", "Delete"), style: "destructive", onPress: doDelete },
         ],
       );
     }
@@ -75,19 +77,19 @@ export default function GoalsScreen() {
         </View>
 
         <SectionHeader
-          eyebrow="GOALS"
-          title="Your active goals"
-          subtitle={`${goals.length} of ${goalLimit} on the ${TIER_INFO[subscription.tier].label} plan`}
+          eyebrow={t("goals.eyebrow", "GOALS")}
+          title={t("goals.title", "Your active goals")}
+          subtitle={t("goals.subtitle", "{{count}} of {{limit}} on the {{plan}} plan", { count: goals.length, limit: goalLimit, plan: TIER_INFO[subscription.tier].label })}
         />
 
         {goals.length === 0 ? (
           <EmptyState
             icon="plus-circle"
-            title="No goals yet"
-            description="Add your first goal to start building a roadmap."
+            title={t("goals.emptyTitle", "No goals yet")}
+            description={t("goals.emptyDesc", "Add your first goal to start building a roadmap.")}
             action={
               <AtlasButton
-                label="Add a goal"
+                label={t("goals.addGoal", "Add a goal")}
                 onPress={onAdd}
                 icon={
                   <Feather name="plus" size={16} color={colors.primaryForeground} />
@@ -163,7 +165,7 @@ export default function GoalsScreen() {
                 },
               ]}
             >
-              {canAddMoreGoals ? "Add another goal" : "Replace a goal"}
+              {canAddMoreGoals ? t("goals.addAnother", "Add another goal") : t("goals.replaceGoal", "Replace a goal")}
             </Text>
           </Pressable>
         )}
@@ -188,7 +190,7 @@ export default function GoalsScreen() {
                 { color: colors.foreground, fontFamily: "Inter_500Medium" },
               ]}
             >
-              Upgrade your plan to run more goals in parallel
+              {t("goals.upgrade", "Upgrade your plan to run more goals in parallel")}
             </Text>
           </Pressable>
         )}

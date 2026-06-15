@@ -4,6 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import { Link, useRouter } from "expo-router";
+import { useTranslation } from "react-i18next";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -73,6 +74,7 @@ function useWarmUpBrowser() {
 }
 
 export default function SignInScreen() {
+  const { t } = useTranslation();
   useWarmUpBrowser();
   const router = useRouter();
   const { signIn, errors, fetchStatus } = useSignIn();
@@ -248,7 +250,7 @@ export default function SignInScreen() {
       // Catch-all: surface the actual status code so we never silently
       // dead-end the user.
       setSubmitError(
-        `Sign-in didn't complete (${signIn.status ?? "unknown"}). Please try again.`,
+        t("signIn.signInIncomplete", "Sign-in didn't complete ({{status}}). Please try again.", { status: signIn.status ?? "unknown" }),
       );
     } catch (err) {
       debug("password threw", err);
@@ -285,11 +287,11 @@ export default function SignInScreen() {
         debug("google sso cancelled or missing requirements");
         if (isWebInIframe()) {
           setSubmitError(
-            "Google sign-in didn't complete. Inside the workspace preview, OAuth popups can be blocked — open this page in a new browser tab and try again.",
+            t("signIn.googleIncompleteIframe", "Google sign-in didn't complete. Inside the workspace preview, OAuth popups can be blocked — open this page in a new browser tab and try again."),
           );
         } else {
           setSubmitError(
-            "Google sign-in didn't complete. Please try again.",
+            t("signIn.googleIncomplete", "Google sign-in didn't complete. Please try again."),
           );
         }
       }
@@ -371,18 +373,17 @@ export default function SignInScreen() {
               <AtlasLogo size="lg" />
             </View>
             <Text style={styles.title} maxFontSizeMultiplier={1.4}>
-              Welcome back
+              {t("signIn.title", "Welcome back")}
             </Text>
             <Text style={styles.subtitle} maxFontSizeMultiplier={1.4}>
-              Sign in to continue with your AI goal coach.
+              {t("signIn.subtitle", "Sign in to continue with your AI goal coach.")}
             </Text>
           </View>
 
           {isWebInIframe() && (
             <View style={styles.iframeNotice}>
               <Text style={styles.iframeNoticeText} maxFontSizeMultiplier={1.3}>
-                Tip: Google sign-in opens a popup. To use it from the workspace
-                preview, open this page in a new browser tab first.
+                {t("signIn.iframeNotice", "Tip: Google sign-in opens a popup. To use it from the workspace preview, open this page in a new browser tab first.")}
               </Text>
             </View>
           )}
@@ -397,7 +398,7 @@ export default function SignInScreen() {
             onPress={handleGoogle}
             disabled={oauthLoading}
             accessibilityRole="button"
-            accessibilityLabel="Continue with Google"
+            accessibilityLabel={t("signIn.continueWithGoogle", "Continue with Google")}
             accessibilityState={{ disabled: oauthLoading }}
           >
             {oauthLoading ? (
@@ -410,7 +411,7 @@ export default function SignInScreen() {
                   maxFontSizeMultiplier={1.3}
                   numberOfLines={1}
                 >
-                  Continue with Google
+                  {t("signIn.continueWithGoogle", "Continue with Google")}
                 </Text>
               </>
             )}
@@ -422,20 +423,20 @@ export default function SignInScreen() {
               <View style={styles.twoFactorInfo}>
                 <Text style={styles.twoFactorTitle} maxFontSizeMultiplier={1.3}>
                   {twoFactorKind === "client_trust" || twoFactorStrategy === "email_code"
-                    ? "Check your email"
-                    : "Two-factor verification"}
+                    ? t("signIn.checkEmail", "Check your email")
+                    : t("signIn.twoFactorVerification", "Two-factor verification")}
                 </Text>
                 <Text style={styles.twoFactorSubtitle} maxFontSizeMultiplier={1.3}>
                   {twoFactorKind === "client_trust" || twoFactorStrategy === "email_code"
-                    ? "We sent a 6-digit code to your email address. Enter it below to sign in."
+                    ? t("signIn.twoFactorEmailHint", "We sent a 6-digit code to your email address. Enter it below to sign in.")
                     : twoFactorStrategy === "phone_code"
-                      ? "Enter the 6-digit code sent to your phone number."
-                      : "Enter the 6-digit code from your authenticator app (e.g. Google Authenticator, Authy)."}
+                      ? t("signIn.twoFactorPhoneHint", "Enter the 6-digit code sent to your phone number.")
+                      : t("signIn.twoFactorAppHint", "Enter the 6-digit code from your authenticator app (e.g. Google Authenticator, Authy).")}
                 </Text>
               </View>
 
               <Text style={styles.label} maxFontSizeMultiplier={1.3}>
-                Verification code
+                {t("signIn.verificationCode", "Verification code")}
               </Text>
               <TextInput
                 style={styles.input}
@@ -472,7 +473,7 @@ export default function SignInScreen() {
                   <ActivityIndicator color="#FAF6EE" />
                 ) : (
                   <Text style={styles.primaryBtnText} maxFontSizeMultiplier={1.3}>
-                    Verify
+                    {t("signIn.verify", "Verify")}
                   </Text>
                 )}
               </Pressable>
@@ -489,7 +490,7 @@ export default function SignInScreen() {
               >
                 <Feather name="arrow-left" size={14} color={BRAND.primary} />
                 <Text style={styles.backText} maxFontSizeMultiplier={1.3}>
-                  Back to sign in
+                  {t("signIn.backToSignIn", "Back to sign in")}
                 </Text>
               </Pressable>
             </>
@@ -499,13 +500,13 @@ export default function SignInScreen() {
               <View style={styles.dividerRow}>
                 <View style={styles.divider} />
                 <Text style={styles.dividerText} maxFontSizeMultiplier={1.2}>
-                  or
+                  {t("signIn.or", "or")}
                 </Text>
                 <View style={styles.divider} />
               </View>
 
               <Text style={styles.label} maxFontSizeMultiplier={1.3}>
-                Email
+                {t("signIn.email", "Email")}
               </Text>
               <TextInput
                 style={styles.input}
@@ -527,12 +528,12 @@ export default function SignInScreen() {
 
               <View style={styles.passwordHeaderRow}>
                 <Text style={styles.label} maxFontSizeMultiplier={1.3}>
-                  Password
+                  {t("signIn.password", "Password")}
                 </Text>
                 <Link href="/(auth)/forgot-password" asChild>
                   <Pressable hitSlop={8} accessibilityRole="link">
                     <Text style={styles.forgotText} maxFontSizeMultiplier={1.3}>
-                      Forgot?
+                      {t("signIn.forgot", "Forgot?")}
                     </Text>
                   </Pressable>
                 </Link>
@@ -542,7 +543,7 @@ export default function SignInScreen() {
                   style={[styles.input, styles.passwordInput]}
                   value={password}
                   onChangeText={setPassword}
-                  placeholder="Your password"
+                  placeholder={t("signIn.passwordPlaceholder", "Your password")}
                   placeholderTextColor={BRAND.muted}
                   secureTextEntry={!showPassword}
                   autoComplete="password"
@@ -554,7 +555,7 @@ export default function SignInScreen() {
                   onPress={() => setShowPassword((v) => !v)}
                   hitSlop={10}
                   accessibilityRole="button"
-                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                  accessibilityLabel={showPassword ? t("signIn.hidePassword", "Hide password") : t("signIn.showPassword", "Show password")}
                   style={styles.eyeBtn}
                 >
                   <Feather
@@ -588,7 +589,7 @@ export default function SignInScreen() {
                   )}
                 </View>
                 <Text style={styles.rememberText} maxFontSizeMultiplier={1.3}>
-                  Remember me on this device
+                  {t("signIn.rememberMe", "Remember me on this device")}
                 </Text>
               </Pressable>
 
@@ -614,19 +615,19 @@ export default function SignInScreen() {
                   <ActivityIndicator color="#FAF6EE" />
                 ) : (
                   <Text style={styles.primaryBtnText} maxFontSizeMultiplier={1.3}>
-                    Sign in
+                    {t("signIn.signInBtn", "Sign in")}
                   </Text>
                 )}
               </Pressable>
 
               <View style={styles.linkRow}>
                 <Text style={styles.linkRowText} maxFontSizeMultiplier={1.3}>
-                  Don&apos;t have an account?
+                  {t("signIn.noAccount", "Don't have an account?")}
                 </Text>
                 <Link href="/(auth)/sign-up" asChild>
                   <Pressable hitSlop={8} accessibilityRole="link">
                     <Text style={styles.linkText} maxFontSizeMultiplier={1.3}>
-                      Sign up
+                      {t("signIn.signUpLink", "Sign up")}
                     </Text>
                   </Pressable>
                 </Link>

@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
@@ -27,16 +28,17 @@ export default function SettingsScreen() {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const { account, updateAccount, syncStatus, syncMessage, activeCoachMemory } = useAtlas();
 
   const comingSoon = (label: string) => {
     if (Platform.OS === "web") {
       if (typeof window !== "undefined") {
-        window.alert(`${label} is on the way.`);
+        window.alert(t("settings.comingSoonWeb", "{{label}} is on the way.", { label }));
       }
       return;
     }
-    Alert.alert(`${label} — coming soon`, "We're building this for the next release.");
+    Alert.alert(t("settings.comingSoonTitle", "{{label}} — coming soon", { label }), t("settings.comingSoonBody", "We're building this for the next release."));
   };
 
   const cyclePersona = () => {
@@ -47,10 +49,10 @@ export default function SettingsScreen() {
 
   const syncSubtitle =
     syncStatus === "error"
-      ? "Sync error — tap to retry"
+      ? t("settings.syncError", "Sync error — tap to retry")
       : syncStatus === "syncing"
-        ? "Syncing now…"
-        : syncMessage ?? "Last synced just now";
+        ? t("settings.syncing", "Syncing now…")
+        : syncMessage ?? t("settings.syncedJustNow", "Last synced just now");
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -63,12 +65,12 @@ export default function SettingsScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <SubHeader title="Settings" onBack={() => router.back()} />
+        <SubHeader title={t("settings.headerTitle", "Settings")} onBack={() => router.back()} />
 
         <Group>
           <Row
             icon="refresh-cw"
-            title="Real-time Sync"
+            title={t("settings.realtimeSync", "Real-time Sync")}
             subtitle={syncSubtitle}
             trailing={
               <Switch
@@ -82,19 +84,21 @@ export default function SettingsScreen() {
           <Divider />
           <Row
             icon="smartphone"
-            title="Connected Devices"
-            subtitle="iPhone, Web"
+            title={t("settings.connectedDevices", "Connected Devices")}
+            subtitle={t("settings.connectedDevicesSubtitle", "iPhone, Web")}
             chevron
-            onPress={() => comingSoon("Connected Devices")}
+            onPress={() => comingSoon(t("settings.connectedDevices", "Connected Devices"))}
           />
           <Divider />
           <Row
             icon="cloud"
-            title="Coach Memory"
+            title={t("settings.coachMemory", "Coach Memory")}
             subtitle={
               activeCoachMemory
-                ? `${activeCoachMemory.facts.length} fact${activeCoachMemory.facts.length === 1 ? "" : "s"} remembered`
-                : "No memory yet"
+                ? activeCoachMemory.facts.length === 1
+                  ? t("settings.factRemembered", "{{count}} fact remembered", { count: activeCoachMemory.facts.length })
+                  : t("settings.factsRemembered", "{{count}} facts remembered", { count: activeCoachMemory.facts.length })
+                : t("settings.noMemoryYet", "No memory yet")
             }
             chevron
             onPress={() => router.push("/account/coach-memory")}
@@ -102,8 +106,8 @@ export default function SettingsScreen() {
           <Divider />
           <Row
             icon="bell"
-            title="Smart Nudges"
-            subtitle={`AI-timed reminders at ${account.reminderTime}`}
+            title={t("settings.smartNudges", "Smart Nudges")}
+            subtitle={t("settings.smartNudgesSubtitle", "AI-timed reminders at {{time}}", { time: account.reminderTime })}
             trailing={
               <Switch
                 value={account.notificationsEnabled}
@@ -118,7 +122,7 @@ export default function SettingsScreen() {
           <Divider />
           <Row
             icon="message-circle"
-            title="Coach Persona"
+            title={t("settings.coachPersona", "Coach Persona")}
             subtitle={account.coachPersona}
             chevron
             onPress={cyclePersona}

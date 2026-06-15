@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
@@ -21,6 +22,7 @@ export default function PrivacyScreen() {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const {
     account,
     updateAccount,
@@ -62,10 +64,10 @@ export default function PrivacyScreen() {
     try {
       await Share.share({
         message: json,
-        title: "rubai patterns export",
+        title: t("privacy.shareTitle", "rubai patterns export"),
       });
     } catch {
-      Alert.alert("Export failed", "Please try again.");
+      Alert.alert(t("privacy.exportFailedTitle", "Export failed"), t("privacy.exportFailedBody", "Please try again."));
     }
   };
 
@@ -77,17 +79,17 @@ export default function PrivacyScreen() {
     if (Platform.OS === "web") {
       if (
         typeof window !== "undefined" &&
-        window.confirm("Erase ALL goals, history and progress?")
+        window.confirm(t("privacy.confirmResetWeb", "Erase ALL goals, history and progress?"))
       ) {
         void doReset();
       }
     } else {
       Alert.alert(
-        "Reset everything?",
-        "This permanently deletes every goal, roadmap, history entry and preference.",
+        t("privacy.confirmResetTitle", "Reset everything?"),
+        t("privacy.confirmResetBody", "This permanently deletes every goal, roadmap, history entry and preference."),
         [
-          { text: "Cancel", style: "cancel" },
-          { text: "Reset", style: "destructive", onPress: doReset },
+          { text: t("privacy.cancel", "Cancel"), style: "cancel" },
+          { text: t("privacy.reset", "Reset"), style: "destructive", onPress: doReset },
         ],
       );
     }
@@ -104,16 +106,16 @@ export default function PrivacyScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <SubHeader title="Privacy & data" onBack={() => router.back()} />
+        <SubHeader title={t("privacy.headerTitle", "Privacy & data")} onBack={() => router.back()} />
 
         <Group>
           <Row
             icon="shield"
-            title="Privacy Shield"
+            title={t("privacy.shieldTitle", "Privacy Shield")}
             subtitle={
               account.privacyShield
-                ? "Biometric lock enabled"
-                : "Biometric lock off"
+                ? t("privacy.shieldOn", "Biometric lock enabled")
+                : t("privacy.shieldOff", "Biometric lock off")
             }
             trailing={
               <Switch
@@ -122,8 +124,8 @@ export default function PrivacyScreen() {
                   void updateAccount({ privacyShield: v });
                   if (v && Platform.OS !== "web") {
                     Alert.alert(
-                      "Privacy Shield",
-                      "Biometric lock will activate the next time you open rubai.",
+                      t("privacy.shieldAlertTitle", "Privacy Shield"),
+                      t("privacy.shieldAlertBody", "Biometric lock will activate the next time you open rubai."),
                     );
                   }
                 }}
@@ -135,16 +137,16 @@ export default function PrivacyScreen() {
           <Divider />
           <Row
             icon="download"
-            title="Export My Patterns"
-            subtitle="Download your data as JSON"
+            title={t("privacy.exportTitle", "Export My Patterns")}
+            subtitle={t("privacy.exportSubtitle", "Download your data as JSON")}
             chevron
             onPress={onExport}
           />
           <Divider />
           <Row
             icon="trash-2"
-            title="Reset All Data"
-            subtitle="Erase every goal, roadmap, and reflection"
+            title={t("privacy.resetTitle", "Reset All Data")}
+            subtitle={t("privacy.resetSubtitle", "Erase every goal, roadmap, and reflection")}
             chevron
             destructive
             onPress={onReset}

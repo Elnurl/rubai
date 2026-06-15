@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
@@ -19,6 +20,7 @@ type Props = {
  */
 export function ProposedActionCard({ action, pending, onConfirm, onCancel }: Props) {
   const colors = useColors();
+  const { t } = useTranslation();
 
   // Per-kind subtitle gives the user a concrete preview of the change so they
   // know exactly what they're agreeing to. label/rationale are model-authored
@@ -27,16 +29,18 @@ export function ProposedActionCard({ action, pending, onConfirm, onCancel }: Pro
     switch (action.kind) {
       case "addTaskToday":
         if (action.task) {
-          return `Add: ${action.task.title} (${action.task.durationMinutes} min)`;
+          return t("proposedActionCard.addTask", "Add: {{title}} ({{minutes}} min)", { title: action.task.title, minutes: action.task.durationMinutes });
         }
-        return "Add a new task to today";
+        return t("proposedActionCard.addTaskGeneric", "Add a new task to today");
       case "removeTaskToday":
-        return action.taskTitle ? `Remove: ${action.taskTitle}` : "Remove a task from today";
+        return action.taskTitle ? t("proposedActionCard.removeTask", "Remove: {{title}}", { title: action.taskTitle }) : t("proposedActionCard.removeTaskGeneric", "Remove a task from today");
       case "renameGoal":
-        return action.newTitle ? `Rename goal to "${action.newTitle}"` : "Rename your goal";
+        return action.newTitle ? t("proposedActionCard.renameGoal", "Rename goal to \"{{title}}\"", { title: action.newTitle }) : t("proposedActionCard.renameGoalGeneric", "Rename your goal");
       case "lightenToday": {
         const n = action.removeTaskIds?.length ?? 0;
-        return `Drop ${n} task${n === 1 ? "" : "s"} from today`;
+        return n === 1
+          ? t("proposedActionCard.dropTaskOne", "Drop {{count}} task from today", { count: n })
+          : t("proposedActionCard.dropTaskOther", "Drop {{count}} tasks from today", { count: n });
       }
       // exhaustive guard — keeps TS satisfied if a new kind appears via codegen
       // before the UI is updated.
@@ -61,7 +65,7 @@ export function ProposedActionCard({ action, pending, onConfirm, onCancel }: Pro
             { color: colors.primary, fontFamily: "Inter_700Bold" },
           ]}
         >
-          PROPOSED CHANGE
+          {t("proposedActionCard.eyebrow", "PROPOSED CHANGE")}
         </Text>
       </View>
       <Text
@@ -104,7 +108,7 @@ export function ProposedActionCard({ action, pending, onConfirm, onCancel }: Pro
               { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
             ]}
           >
-            Cancel
+            {t("proposedActionCard.cancel", "Cancel")}
           </Text>
         </Pressable>
         <Pressable
@@ -129,7 +133,7 @@ export function ProposedActionCard({ action, pending, onConfirm, onCancel }: Pro
                 },
               ]}
             >
-              Confirm
+              {t("proposedActionCard.confirm", "Confirm")}
             </Text>
           )}
         </Pressable>

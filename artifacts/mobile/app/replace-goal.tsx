@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Alert,
   Platform,
@@ -18,6 +19,7 @@ import { TIER_INFO } from "@/types/atlas";
 
 export default function ReplaceGoalScreen() {
   const colors = useColors();
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
@@ -45,23 +47,27 @@ export default function ReplaceGoalScreen() {
         }
       };
 
-      const message = `"${label}" and all of its progress will be replaced with your new goal. This can't be undone.`;
+      const message = t(
+        "replaceGoal.confirmMessage",
+        '"{{label}}" and all of its progress will be replaced with your new goal. This can\'t be undone.',
+        { label },
+      );
       if (Platform.OS === "web") {
         if (typeof window !== "undefined" && window.confirm(message)) {
           void performReplace();
         }
         return;
       }
-      Alert.alert("Replace this goal?", message, [
-        { text: "Cancel", style: "cancel" },
+      Alert.alert(t("replaceGoal.confirmTitle", "Replace this goal?"), message, [
+        { text: t("replaceGoal.cancelBtn", "Cancel"), style: "cancel" },
         {
-          text: "Replace",
+          text: t("replaceGoal.replaceBtn", "Replace"),
           style: "destructive",
           onPress: () => void performReplace(),
         },
       ]);
     },
-    [removeGoal, router],
+    [removeGoal, router, t],
   );
 
   const onCancel = useCallback(() => {
@@ -94,7 +100,7 @@ export default function ReplaceGoalScreen() {
               { color: colors.foreground, fontFamily: "Inter_500Medium" },
             ]}
           >
-            Back
+            {t("replaceGoal.backBtn", "Back")}
           </Text>
         </Pressable>
 
@@ -104,7 +110,7 @@ export default function ReplaceGoalScreen() {
             { color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
           ]}
         >
-          REPLACE A GOAL
+          {t("replaceGoal.eyebrow", "REPLACE A GOAL")}
         </Text>
         <Text
           style={[
@@ -112,7 +118,7 @@ export default function ReplaceGoalScreen() {
             { color: colors.foreground, fontFamily: "Inter_700Bold" },
           ]}
         >
-          Pick a goal to swap out
+          {t("replaceGoal.title", "Pick a goal to swap out")}
         </Text>
         <Text
           style={[
@@ -120,9 +126,17 @@ export default function ReplaceGoalScreen() {
             { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
           ]}
         >
-          You're on the {planLabel} plan ({completedGoals.length} of {goalLimit}{" "}
-          goal{goalLimit === 1 ? "" : "s"} used). Removing one frees a slot for
-          your new goal.
+          {goalLimit === 1
+            ? t(
+                "replaceGoal.subtitleOne",
+                "You're on the {{plan}} plan ({{used}} of {{limit}} goal used). Removing one frees a slot for your new goal.",
+                { plan: planLabel, used: completedGoals.length, limit: goalLimit },
+              )
+            : t(
+                "replaceGoal.subtitleMany",
+                "You're on the {{plan}} plan ({{used}} of {{limit}} goals used). Removing one frees a slot for your new goal.",
+                { plan: planLabel, used: completedGoals.length, limit: goalLimit },
+              )}
         </Text>
 
         {!hasPending && (
@@ -146,8 +160,10 @@ export default function ReplaceGoalScreen() {
                 },
               ]}
             >
-              No new goal queued — deletions here will simply remove the
-              selected goal.
+              {t(
+                "replaceGoal.warningText",
+                "No new goal queued — deletions here will simply remove the selected goal.",
+              )}
             </Text>
           </View>
         )}
@@ -160,7 +176,10 @@ export default function ReplaceGoalScreen() {
                 { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
               ]}
             >
-              You don't have any completed goals to replace yet.
+              {t(
+                "replaceGoal.emptyBody",
+                "You don't have any completed goals to replace yet.",
+              )}
             </Text>
           ) : (
             completedGoals.map((g) => {
@@ -202,7 +221,9 @@ export default function ReplaceGoalScreen() {
                           },
                         ]}
                       >
-                        {g.roadmap.totalWeeks}-week roadmap
+                        {t("replaceGoal.weekRoadmap", "{{weeks}}-week roadmap", {
+                          weeks: g.roadmap.totalWeeks,
+                        })}
                       </Text>
                     )}
                   </View>
@@ -217,7 +238,7 @@ export default function ReplaceGoalScreen() {
                       },
                     ]}
                     accessibilityRole="button"
-                    accessibilityLabel={`Replace ${label}`}
+                    accessibilityLabel={t("replaceGoal.replaceA11y", "Replace {{label}}", { label })}
                   >
                     <Feather
                       name="refresh-ccw"
@@ -230,7 +251,9 @@ export default function ReplaceGoalScreen() {
                         { fontFamily: "Inter_700Bold" },
                       ]}
                     >
-                      {isPending ? "Replacing…" : "Replace"}
+                      {isPending
+                        ? t("replaceGoal.replacing", "Replacing…")
+                        : t("replaceGoal.replaceCardBtn", "Replace")}
                     </Text>
                   </Pressable>
                 </View>
@@ -259,7 +282,7 @@ export default function ReplaceGoalScreen() {
               { color: colors.foreground, fontFamily: "Inter_500Medium" },
             ]}
           >
-            Or upgrade your plan to keep all your goals
+            {t("replaceGoal.upgradeText", "Or upgrade your plan to keep all your goals")}
           </Text>
         </Pressable>
       </ScrollView>

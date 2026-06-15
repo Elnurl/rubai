@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 
@@ -17,6 +18,7 @@ type Props = {
 
 export function ChatBubble({ role, content, onSpeak, isSpeaking }: Props) {
   const colors = useColors();
+  const { t } = useTranslation();
   const isUser = role === "user";
 
   // Parse optional attachment header embedded in user messages.
@@ -107,7 +109,7 @@ export function ChatBubble({ role, content, onSpeak, isSpeaking }: Props) {
             hitSlop={8}
             style={styles.speakerButton}
             testID="chat-bubble-speak"
-            accessibilityLabel={isSpeaking ? "Stop speaking" : "Read aloud"}
+            accessibilityLabel={isSpeaking ? t("chatBubble.stopSpeaking", "Stop speaking") : t("chatBubble.readAloud", "Read aloud")}
           >
             <Feather
               name={isSpeaking ? "volume-2" : "volume-1"}

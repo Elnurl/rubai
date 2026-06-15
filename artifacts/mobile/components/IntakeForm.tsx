@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Pressable,
   StyleSheet,
@@ -186,6 +187,7 @@ function FieldRenderer({
   onChange: (v: string) => void;
 }) {
   const colors = useColors();
+  const { t } = useTranslation();
 
   switch (question.type) {
     case "short_text":
@@ -193,7 +195,7 @@ function FieldRenderer({
         <TextInput
           value={value}
           onChangeText={onChange}
-          placeholder={question.placeholder || "Type your answer"}
+          placeholder={question.placeholder || t("intakeForm.typeAnswer", "Type your answer")}
           placeholderTextColor={colors.mutedForeground}
           style={[
             styles.textInput,
@@ -211,7 +213,7 @@ function FieldRenderer({
         <TextInput
           value={value}
           onChangeText={onChange}
-          placeholder={question.placeholder || "Type your answer"}
+          placeholder={question.placeholder || t("intakeForm.typeAnswer", "Type your answer")}
           placeholderTextColor={colors.mutedForeground}
           multiline
           style={[
@@ -230,8 +232,8 @@ function FieldRenderer({
       const placeholder =
         question.placeholder ||
         (question.unit
-          ? `e.g. about 30 ${question.unit}`
-          : "Type your answer");
+          ? t("intakeForm.numberExample", "e.g. about 30 {{unit}}", { unit: question.unit })
+          : t("intakeForm.typeAnswer", "Type your answer"));
       return (
         <TextInput
           value={value}
@@ -397,6 +399,7 @@ function OtherChip({
   onPress: () => void;
 }) {
   const colors = useColors();
+  const { t } = useTranslation();
   return (
     <Pressable
       onPress={onPress}
@@ -425,7 +428,7 @@ function OtherChip({
           },
         ]}
       >
-        Other
+        {t("intakeForm.other", "Other")}
       </Text>
     </Pressable>
   );
@@ -439,6 +442,7 @@ function OtherInput({
   onChange: (v: string) => void;
 }) {
   const colors = useColors();
+  const { t } = useTranslation();
   // Keep a local copy so the parent's splitMulti → trim round-trip cannot
   // strip trailing spaces while the user is still typing between words.
   const [localValue, setLocalValue] = useState(value);
@@ -452,7 +456,7 @@ function OtherInput({
     <TextInput
       value={localValue}
       onChangeText={handleChange}
-      placeholder="Describe your own answer"
+      placeholder={t("intakeForm.describeAnswer", "Describe your own answer")}
       placeholderTextColor={colors.mutedForeground}
       multiline
       style={[

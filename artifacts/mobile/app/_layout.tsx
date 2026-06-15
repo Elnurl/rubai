@@ -27,6 +27,7 @@ import {
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import colors from "@/constants/colors";
+import { setAppLanguage } from "@/lib/i18n";
 import { AtlasProvider, useAtlas } from "@/providers/AtlasProvider";
 import { initializeRevenueCat, SubscriptionProvider } from "@/lib/revenuecat";
 import {
@@ -285,6 +286,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function I18nLanguageSync() {
+  const { account } = useAtlas();
+  useEffect(() => {
+    setAppLanguage(account.preferredLanguage);
+  }, [account.preferredLanguage]);
+  return null;
+}
+
 function RootLayoutNav() {
   return (
     <Stack
@@ -358,6 +367,7 @@ export default function RootLayout() {
               <GestureHandlerRootView style={{ flex: 1 }}>
                 <KeyboardProvider>
                   <AtlasProvider>
+                    <I18nLanguageSync />
                     <SubscriptionProvider>
                       <AuthGate>
                         <RootLayoutNav />

@@ -1,11 +1,13 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Feather } from "@expo/vector-icons";
 
 import { GOAL_META, profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
+import i18n from "@/lib/i18n";
 import { GoalLimitError, useAtlas } from "@/providers/AtlasProvider";
 import { TIER_INFO } from "@/types/atlas";
 import {
@@ -14,16 +16,17 @@ import {
 } from "@workspace/api-client-react";
 
 const STEPS = [
-  "Reading your intake",
-  "Analyzing constraints and time",
-  "Selecting strategy",
-  "Drafting phases",
-  "Setting milestones",
-  "Stress-testing the plan",
+  i18n.t("generating.step1", "Reading your intake"),
+  i18n.t("generating.step2", "Analyzing constraints and time"),
+  i18n.t("generating.step3", "Selecting strategy"),
+  i18n.t("generating.step4", "Drafting phases"),
+  i18n.t("generating.step5", "Setting milestones"),
+  i18n.t("generating.step6", "Stress-testing the plan"),
 ];
 
 export default function GeneratingScreen() {
   const colors = useColors();
+  const { t } = useTranslation();
   const router = useRouter();
   const params = useLocalSearchParams<{ profile?: string }>();
   const {
@@ -150,14 +153,25 @@ export default function GeneratingScreen() {
         if (err instanceof GoalLimitError) {
           setErrorState({
             kind: "limit",
-            message: `You've reached your plan's limit of ${err.limit} active goal${err.limit === 1 ? "" : "s"}. Free up a slot by removing or replacing an existing goal.`,
+            message:
+              err.limit === 1
+                ? t(
+                    "generating.limitMessageOne",
+                    "You've reached your plan's limit of {{count}} active goal. Free up a slot by removing or replacing an existing goal.",
+                    { count: err.limit },
+                  )
+                : t(
+                    "generating.limitMessageMany",
+                    "You've reached your plan's limit of {{count}} active goals. Free up a slot by removing or replacing an existing goal.",
+                    { count: err.limit },
+                  ),
             limit: err.limit,
           });
         } else {
           const message =
             err instanceof Error
               ? err.message
-              : "Something went wrong building your roadmap.";
+              : t("generating.genericError", "Something went wrong building your roadmap.");
           setErrorState({ kind: "network", message });
         }
       }
@@ -218,9 +232,9 @@ export default function GeneratingScreen() {
         >
           {errorState
             ? errorState.kind === "limit"
-              ? "Plan limit reached."
-              : "Hit a snag."
-            : "Engineering your roadmap."}
+              ? t("generating.limitTitle", "Plan limit reached.")
+              : t("generating.snagTitle", "Hit a snag.")
+            : t("generating.title", "Engineering your roadmap.")}
         </Text>
         <Text
           style={[
@@ -230,8 +244,8 @@ export default function GeneratingScreen() {
         >
           {errorState
             ? errorState.kind === "limit"
-              ? `You're on the ${planLabel} plan`
-              : "Couldn't reach the server"
+              ? t("generating.onPlan", "You're on the {{plan}} plan", { plan: planLabel })
+              : t("generating.serverUnreachable", "Couldn't reach the server")
             : STEPS[stepIndex]}
         </Text>
 
@@ -261,7 +275,7 @@ export default function GeneratingScreen() {
                     { fontFamily: "Inter_700Bold" },
                   ]}
                 >
-                  Try again
+                  {t("generating.tryAgainBtn", "Try again")}
                 </Text>
               </Pressable>
               <Pressable
@@ -282,7 +296,7 @@ export default function GeneratingScreen() {
                     },
                   ]}
                 >
-                  Back to start
+                  {t("generating.backToStartBtn", "Back to start")}
                 </Text>
               </Pressable>
             </View>
@@ -310,7 +324,7 @@ export default function GeneratingScreen() {
                   },
                 ]}
               >
-                GOALS USED
+                {t("generating.goalsUsedLabel", "GOALS USED")}
               </Text>
               <Text
                 style={[
@@ -366,7 +380,7 @@ export default function GeneratingScreen() {
                     { fontFamily: "Inter_700Bold" },
                   ]}
                 >
-                  Replace a goal
+                  {t("generating.replaceGoalBtn", "Replace a goal")}
                 </Text>
               </Pressable>
 
@@ -389,7 +403,7 @@ export default function GeneratingScreen() {
                     },
                   ]}
                 >
-                  View my goals
+                  {t("generating.viewGoalsBtn", "View my goals")}
                 </Text>
               </Pressable>
 
@@ -408,7 +422,7 @@ export default function GeneratingScreen() {
                     { color: colors.accent, fontFamily: "Inter_600SemiBold" },
                   ]}
                 >
-                  Upgrade plan
+                  {t("generating.upgradePlanBtn", "Upgrade plan")}
                 </Text>
               </Pressable>
 
@@ -429,7 +443,7 @@ export default function GeneratingScreen() {
                     },
                   ]}
                 >
-                  Back to start
+                  {t("generating.backToStartBtn2", "Back to start")}
                 </Text>
               </Pressable>
             </View>

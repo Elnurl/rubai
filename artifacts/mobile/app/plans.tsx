@@ -17,29 +17,31 @@ import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { useSubscription, RC_OFFERING_PRO, RC_OFFERING_PREMIUM } from "@/lib/revenuecat";
 import { TIER_INFO, type SubscriptionTier } from "@/types/atlas";
+import i18n from "@/lib/i18n";
+import { useTranslation } from "react-i18next";
 
 const TIER_ORDER: SubscriptionTier[] = ["free", "pro", "premium"];
 
 const TIER_FEATURES: Record<SubscriptionTier, string[]> = {
   free: [
-    "1 active goal",
-    "AI-generated daily plan",
-    "Coach chat (Smart model)",
-    "Roadmap with phases",
+    i18n.t("plans.featFree1", "1 active goal"),
+    i18n.t("plans.featFree2", "AI-generated daily plan"),
+    i18n.t("plans.featFree3", "Coach chat (Smart model)"),
+    i18n.t("plans.featFree4", "Roadmap with phases"),
   ],
   pro: [
-    "Up to 5 parallel goals",
-    "Behavioral profile insights",
-    "Smart + Fast coach models",
-    "Voice coach (mic + speaker)",
-    "Weekly performance summary",
+    i18n.t("plans.featPro1", "Up to 5 parallel goals"),
+    i18n.t("plans.featPro2", "Behavioral profile insights"),
+    i18n.t("plans.featPro3", "Smart + Fast coach models"),
+    i18n.t("plans.featPro4", "Voice coach (mic + speaker)"),
+    i18n.t("plans.featPro5", "Weekly performance summary"),
   ],
   premium: [
-    "Up to 25 goals across life areas",
-    "Full Behavioral Orchestration AI",
-    "Multi-model adaptive coaching",
-    "Priority model access",
-    "Everything in Pro",
+    i18n.t("plans.featPremium1", "Up to 25 goals across life areas"),
+    i18n.t("plans.featPremium2", "Full Behavioral Orchestration AI"),
+    i18n.t("plans.featPremium3", "Multi-model adaptive coaching"),
+    i18n.t("plans.featPremium4", "Priority model access"),
+    i18n.t("plans.featPremium5", "Everything in Pro"),
   ],
 };
 
@@ -54,6 +56,7 @@ function isKnownTier(t: string): t is SubscriptionTier {
 }
 
 export default function PlansScreen() {
+  const { t } = useTranslation();
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -75,36 +78,39 @@ export default function PlansScreen() {
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const getPackageForTier = (t: SubscriptionTier) => {
-    if (t === "pro") return proOffering?.availablePackages[0] ?? null;
-    if (t === "premium") return premiumOffering?.availablePackages[0] ?? null;
+  const getPackageForTier = (tier: SubscriptionTier) => {
+    if (tier === "pro") return proOffering?.availablePackages[0] ?? null;
+    if (tier === "premium") return premiumOffering?.availablePackages[0] ?? null;
     return null;
   };
 
-  const getPriceForTier = (t: SubscriptionTier): string => {
-    const pkg = getPackageForTier(t);
-    if (pkg) return pkg.product.priceString + " / month";
-    return TIER_INFO[t].price;
+  const getPriceForTier = (tier: SubscriptionTier): string => {
+    const pkg = getPackageForTier(tier);
+    if (pkg)
+      return t("plans.perMonth", "{{price}} / month", {
+        price: pkg.product.priceString,
+      });
+    return TIER_INFO[tier].price;
   };
 
-  const onPick = (t: SubscriptionTier) => {
-    if (t === currentTier) {
+  const onPick = (tier: SubscriptionTier) => {
+    if (tier === currentTier) {
       router.back();
       return;
     }
-    if (t === "free") {
+    if (tier === "free") {
       router.back();
       return;
     }
     setErrorMsg(null);
-    setConfirmTier(t);
+    setConfirmTier(tier);
   };
 
   const onConfirmPurchase = async () => {
     if (!confirmTier) return;
     const pkg = getPackageForTier(confirmTier);
     if (!pkg) {
-      setErrorMsg("Product not available. Please try again.");
+      setErrorMsg(t("plans.productUnavailable", "Product not available. Please try again."));
       setConfirmTier(null);
       return;
     }
@@ -115,7 +121,7 @@ export default function PlansScreen() {
       await updateSubscription(confirmTier);
       router.back();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Purchase failed.";
+      const msg = err instanceof Error ? err.message : t("plans.purchaseFailed", "Purchase failed.");
       if (!msg.toLowerCase().includes("cancel")) {
         setErrorMsg(msg);
       }
@@ -130,7 +136,7 @@ export default function PlansScreen() {
     try {
       await restore();
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Restore failed.");
+      setErrorMsg(err instanceof Error ? err.message : t("plans.restoreFailed", "Restore failed."));
     } finally {
       setBusy(false);
     }
@@ -155,18 +161,18 @@ export default function PlansScreen() {
           hitSlop={8}
           style={styles.backBtn}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t("plans.goBack", "Go back")}
         >
           <Feather name="chevron-left" size={22} color={colors.foreground} />
           <Text style={[styles.backText, { color: colors.foreground, fontFamily: "Inter_500Medium" }]}>
-            Back
+            {t("plans.back", "Back")}
           </Text>
         </Pressable>
         <Text
           style={[styles.headerTitle, { color: colors.foreground, fontFamily: "Inter_700Bold" }]}
           maxFontSizeMultiplier={1.3}
         >
-          Choose your plan
+          {t("plans.headerTitle", "Choose your plan")}
         </Text>
         <View style={styles.headerSpacer} />
       </View>
@@ -181,7 +187,7 @@ export default function PlansScreen() {
           style={[styles.intro, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}
           maxFontSizeMultiplier={1.4}
         >
-          Pick the plan that matches how many goals you want rubai to coach you through. You can switch anytime.
+          {t("plans.intro", "Pick the plan that matches how many goals you want rubai to coach you through. You can switch anytime.")}
         </Text>
 
         {errorMsg ? (
@@ -190,16 +196,16 @@ export default function PlansScreen() {
           </View>
         ) : null}
 
-        {TIER_ORDER.map((t) => {
-          const info = TIER_INFO[t];
-          const features = TIER_FEATURES[t];
-          const isCurrent = t === currentTier;
-          const isHighlight = t === "pro";
-          const price = rcLoading && t !== "free" ? "Loading…" : getPriceForTier(t);
+        {TIER_ORDER.map((tier) => {
+          const info = TIER_INFO[tier];
+          const features = TIER_FEATURES[tier];
+          const isCurrent = tier === currentTier;
+          const isHighlight = tier === "pro";
+          const price = rcLoading && tier !== "free" ? t("plans.loading", "Loading…") : getPriceForTier(tier);
 
           return (
             <View
-              key={t}
+              key={tier}
               style={[
                 styles.card,
                 {
@@ -237,7 +243,7 @@ export default function PlansScreen() {
                       <Text
                         style={[styles.badgeText, { color: colors.primaryForeground, fontFamily: "Inter_700Bold" }]}
                       >
-                        POPULAR
+                        {t("plans.popular", "POPULAR")}
                       </Text>
                     </View>
                   ) : null}
@@ -259,7 +265,7 @@ export default function PlansScreen() {
               </View>
 
               <Pressable
-                onPress={() => onPick(t)}
+                onPress={() => onPick(tier)}
                 disabled={isBusy || rcLoading}
                 style={({ pressed }) => [
                   styles.cta,
@@ -268,13 +274,13 @@ export default function PlansScreen() {
                     borderColor: isCurrent ? colors.border : colors.primary,
                     borderWidth: isCurrent ? 1 : 0,
                     borderRadius: colors.radius,
-                    opacity: pressed || (isBusy && t !== currentTier) ? 0.7 : 1,
+                    opacity: pressed || (isBusy && tier !== currentTier) ? 0.7 : 1,
                   },
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel={isCurrent ? "Current plan" : `Choose ${info.label}`}
+                accessibilityLabel={isCurrent ? t("plans.currentPlan", "Current plan") : t("plans.choose", "Choose {{label}}", { label: info.label })}
               >
-                {isBusy && t !== "free" && t === currentTier ? (
+                {isBusy && tier !== "free" && tier === currentTier ? (
                   <ActivityIndicator size="small" color={colors.primaryForeground} />
                 ) : (
                   <Text
@@ -287,7 +293,7 @@ export default function PlansScreen() {
                     ]}
                     maxFontSizeMultiplier={1.3}
                   >
-                    {isCurrent ? "Current plan" : t === "free" ? "Downgrade to Free" : `Choose ${info.label}`}
+                    {isCurrent ? t("plans.currentPlan", "Current plan") : tier === "free" ? t("plans.downgradeFree", "Downgrade to Free") : t("plans.choose", "Choose {{label}}", { label: info.label })}
                   </Text>
                 )}
               </Pressable>
@@ -302,7 +308,7 @@ export default function PlansScreen() {
           accessibilityRole="button"
         >
           <Text style={[styles.restoreText, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
-            {isRestoring ? "Restoring…" : "Restore purchases"}
+            {isRestoring ? t("plans.restoring", "Restoring…") : t("plans.restorePurchases", "Restore purchases")}
           </Text>
         </Pressable>
       </ScrollView>
@@ -316,19 +322,19 @@ export default function PlansScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalBox, { backgroundColor: colors.card, borderRadius: colors.radius }]}>
             <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: "Inter_700Bold" }]}>
-              Confirm Purchase
+              {t("plans.confirmPurchase", "Confirm Purchase")}
             </Text>
             {confirmTier ? (
               <Text style={[styles.modalBody, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
-                You are about to purchase{" "}
+                {t("plans.aboutToPurchase", "You are about to purchase")}{" "}
                 <Text style={{ fontFamily: "Inter_600SemiBold", color: colors.foreground }}>
-                  RubAI {TIER_INFO[confirmTier]?.label}
+                  {t("plans.productName", "RubAI {{label}}", { label: TIER_INFO[confirmTier]?.label })}
                 </Text>{" "}
-                for{" "}
+                {t("plans.for", "for")}{" "}
                 <Text style={{ fontFamily: "Inter_600SemiBold", color: colors.foreground }}>
                   {getPriceForTier(confirmTier)}
                 </Text>
-                {__DEV__ ? `\n\nThis is a sandbox purchase — no real payment will be taken.` : ""}
+                {__DEV__ ? t("plans.sandboxNote", "\n\nThis is a sandbox purchase — no real payment will be taken.") : ""}
               </Text>
             ) : null}
             <View style={styles.modalActions}>
@@ -337,7 +343,7 @@ export default function PlansScreen() {
                 style={[styles.modalBtn, { borderColor: colors.border, borderWidth: 1, borderRadius: colors.radius }]}
               >
                 <Text style={[styles.modalBtnText, { color: colors.foreground, fontFamily: "Inter_500Medium" }]}>
-                  Cancel
+                  {t("plans.cancel", "Cancel")}
                 </Text>
               </Pressable>
               <Pressable
@@ -345,7 +351,7 @@ export default function PlansScreen() {
                 style={[styles.modalBtn, { backgroundColor: colors.primary, borderRadius: colors.radius }]}
               >
                 <Text style={[styles.modalBtnText, { color: colors.primaryForeground, fontFamily: "Inter_600SemiBold" }]}>
-                  Purchase
+                  {t("plans.purchase", "Purchase")}
                 </Text>
               </Pressable>
             </View>

@@ -1,12 +1,22 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { StyleSheet, Text, View } from "react-native";
 
 import { AreaChart } from "@/components/charts/AreaChart";
 import { useColors } from "@/hooks/useColors";
+import i18n from "@/lib/i18n";
 import { useAtlas } from "@/providers/AtlasProvider";
 
-const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
+const DAY_LABELS = [
+  i18n.t("focusPulseCard.dayMon", "M"),
+  i18n.t("focusPulseCard.dayTue", "T"),
+  i18n.t("focusPulseCard.dayWed", "W"),
+  i18n.t("focusPulseCard.dayThu", "T"),
+  i18n.t("focusPulseCard.dayFri", "F"),
+  i18n.t("focusPulseCard.daySat", "S"),
+  i18n.t("focusPulseCard.daySun", "S"),
+];
 
 function isoForDaysAgo(daysAgo: number): string {
   const d = new Date();
@@ -17,6 +27,7 @@ function isoForDaysAgo(daysAgo: number): string {
 
 export function FocusPulseCard() {
   const colors = useColors();
+  const { t } = useTranslation();
   const { activeTaskHistory } = useAtlas();
 
   const { data, deltaPct } = useMemo(() => {
@@ -50,7 +61,12 @@ export function FocusPulseCard() {
   }, [activeTaskHistory]);
 
   const deltaText =
-    deltaPct === 0 ? "steady vs last week" : `${deltaPct > 0 ? "+" : ""}${deltaPct}% vs last week`;
+    deltaPct === 0
+      ? t("focusPulseCard.steady", "steady vs last week")
+      : t("focusPulseCard.deltaVsLastWeek", "{{sign}}{{deltaPct}}% vs last week", {
+          sign: deltaPct > 0 ? "+" : "",
+          deltaPct,
+        });
   const deltaColor = deltaPct >= 0 ? colors.primary : colors.destructive;
 
   return (
@@ -72,7 +88,7 @@ export function FocusPulseCard() {
               { color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
             ]}
           >
-            FOCUS PULSE
+            {t("focusPulseCard.eyebrow", "FOCUS PULSE")}
           </Text>
           <Text
             style={[
@@ -80,7 +96,7 @@ export function FocusPulseCard() {
               { color: colors.foreground, fontFamily: "Inter_700Bold" },
             ]}
           >
-            This week's rhythm
+            {t("focusPulseCard.title", "This week's rhythm")}
           </Text>
         </View>
         <View

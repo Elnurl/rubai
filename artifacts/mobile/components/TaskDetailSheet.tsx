@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   AppState,
   type AppStateStatus,
@@ -50,6 +51,7 @@ export function TaskDetailSheet({
   onReflect,
 }: Props) {
   const colors = useColors();
+  const { t } = useTranslation();
   const { appendActiveFocusMinutes } = useAtlas();
 
   const [focus, setFocus] = useState<FocusState>({ kind: "idle" });
@@ -183,9 +185,9 @@ export function TaskDetailSheet({
 
   const priorityBadge = (() => {
     if (task.priority === "critical")
-      return { text: "Critical", color: colors.destructive };
+      return { text: t("taskDetailSheet.critical", "Critical"), color: colors.destructive };
     if (task.priority === "high")
-      return { text: "Priority", color: colors.accent };
+      return { text: t("taskDetailSheet.priority", "Priority"), color: colors.accent };
     return null;
   })();
 
@@ -233,7 +235,7 @@ export function TaskDetailSheet({
                   },
                 ]}
               >
-                {completed ? "Completed" : "To do"}
+                {completed ? t("taskDetailSheet.completed", "Completed") : t("taskDetailSheet.toDo", "To do")}
               </Text>
             </View>
             <Pressable onPress={onClose} hitSlop={10}>
@@ -259,7 +261,7 @@ export function TaskDetailSheet({
                   { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
                 ]}
               >
-                {task.durationMinutes} min
+                {t("taskDetailSheet.minutes", "{{count}} min", { count: task.durationMinutes })}
               </Text>
             </View>
             <View style={[styles.metaPill, { backgroundColor: colors.muted }]}>
@@ -359,10 +361,10 @@ export function TaskDetailSheet({
                   ]}
                 >
                   {focus.kind === "running"
-                    ? "FOCUSING"
+                    ? t("taskDetailSheet.focusing", "FOCUSING")
                     : focus.kind === "paused"
-                      ? "PAUSED"
-                      : "FOCUS TIMER"}
+                      ? t("taskDetailSheet.paused", "PAUSED")
+                      : t("taskDetailSheet.focusTimer", "FOCUS TIMER")}
                 </Text>
               </View>
               <Text
@@ -404,7 +406,7 @@ export function TaskDetailSheet({
                         },
                       ]}
                     >
-                      Pause
+                      {t("taskDetailSheet.pause", "Pause")}
                     </Text>
                   </Pressable>
                   <Pressable
@@ -432,7 +434,7 @@ export function TaskDetailSheet({
                         },
                       ]}
                     >
-                      Save session
+                      {t("taskDetailSheet.saveSession", "Save session")}
                     </Text>
                   </Pressable>
                 </>
@@ -464,7 +466,7 @@ export function TaskDetailSheet({
                         },
                       ]}
                     >
-                      {focus.kind === "paused" ? "Resume" : "Start focus"}
+                      {focus.kind === "paused" ? t("taskDetailSheet.resume", "Resume") : t("taskDetailSheet.startFocus", "Start focus")}
                     </Text>
                   </Pressable>
                   {focus.kind === "paused" && (
@@ -493,7 +495,7 @@ export function TaskDetailSheet({
                           },
                         ]}
                       >
-                        Save & stop
+                        {t("taskDetailSheet.saveAndStop", "Save & stop")}
                       </Text>
                     </Pressable>
                   )}
@@ -531,7 +533,7 @@ export function TaskDetailSheet({
                   },
                 ]}
               >
-                {hasReflection ? "Reflected" : "Reflect"}
+                {hasReflection ? t("taskDetailSheet.reflected", "Reflected") : t("taskDetailSheet.reflect", "Reflect")}
               </Text>
             </Pressable>
             <Pressable
@@ -561,7 +563,7 @@ export function TaskDetailSheet({
                   },
                 ]}
               >
-                {completed ? "Mark as undone" : "Mark complete"}
+                {completed ? t("taskDetailSheet.markUndone", "Mark as undone") : t("taskDetailSheet.markComplete", "Mark complete")}
               </Text>
             </Pressable>
           </View>

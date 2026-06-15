@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Platform,
   Pressable,
@@ -22,6 +23,7 @@ import { useAtlasGenerateTitle, type GoalType } from "@workspace/api-client-reac
 
 export default function NewGoalScreen() {
   const colors = useColors();
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { setPendingDraft, canAddMoreGoals, goalLimit } = useAtlas();
@@ -92,7 +94,7 @@ export default function NewGoalScreen() {
             { color: colors.foreground, fontFamily: "Inter_700Bold" },
           ]}
         >
-          Add a new goal
+          {t("newGoal.headerTitle", "Add a new goal")}
         </Text>
         <View style={{ width: 36 }} />
       </View>
@@ -123,8 +125,17 @@ export default function NewGoalScreen() {
                 { color: colors.destructive, fontFamily: "Inter_500Medium" },
               ]}
             >
-              You're at your plan limit of {goalLimit} active goal
-              {goalLimit === 1 ? "" : "s"}. Upgrade in Account or remove a goal first.
+              {goalLimit === 1
+                ? t(
+                    "newGoal.limitBannerOne",
+                    "You're at your plan limit of {{count}} active goal. Upgrade in Account or remove a goal first.",
+                    { count: goalLimit },
+                  )
+                : t(
+                    "newGoal.limitBannerMany",
+                    "You're at your plan limit of {{count}} active goals. Upgrade in Account or remove a goal first.",
+                    { count: goalLimit },
+                  )}
             </Text>
           </View>
         )}
@@ -152,7 +163,7 @@ export default function NewGoalScreen() {
                 { color: colors.primary, fontFamily: "Inter_600SemiBold" },
               ]}
             >
-              DESCRIBE THIS NEW GOAL
+              {t("newGoal.describeLabel", "DESCRIBE THIS NEW GOAL")}
             </Text>
           </View>
           <TextInput
@@ -161,7 +172,7 @@ export default function NewGoalScreen() {
               setCustomGoal(t);
               if (t.trim().length > 0) setSelected(null);
             }}
-            placeholder="e.g. Get promoted to senior engineer in 9 months"
+            placeholder={t("newGoal.placeholder", "e.g. Get promoted to senior engineer in 9 months")}
             placeholderTextColor={colors.mutedForeground}
             multiline
             editable={canAddMoreGoals}
@@ -180,7 +191,7 @@ export default function NewGoalScreen() {
               { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
             ]}
           >
-            OR PICK A TEMPLATE
+            {t("newGoal.orPickTemplate", "OR PICK A TEMPLATE")}
           </Text>
           <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
         </View>
@@ -212,7 +223,7 @@ export default function NewGoalScreen() {
         ]}
       >
         <AtlasButton
-          label={isGeneratingTitle ? "Naming your goal…" : "Continue to intake"}
+          label={isGeneratingTitle ? t("newGoal.namingGoal", "Naming your goal…") : t("newGoal.continueBtn", "Continue to intake")}
           onPress={onContinue}
           disabled={!canContinue}
           loading={isGeneratingTitle}

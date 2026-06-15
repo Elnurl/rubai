@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Platform,
@@ -19,23 +20,25 @@ import { SectionHeader } from "@/components/SectionHeader";
 import { profileGoalLabel } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { useEvolveRoadmap } from "@/hooks/useEvolveRoadmap";
+import i18n from "@/lib/i18n";
 import { useAtlas } from "@/providers/AtlasProvider";
 
 function formatRelative(iso: string | null): string {
-  if (!iso) return "Never";
+  if (!iso) return i18n.t("roadmap.never", "Never");
   const diffMs = Date.now() - new Date(iso).getTime();
   const minutes = Math.round(diffMs / 60000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return i18n.t("roadmap.justNow", "Just now");
+  if (minutes < 60) return i18n.t("roadmap.minutesAgo", "{{minutes}}m ago", { minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return i18n.t("roadmap.hoursAgo", "{{hours}}h ago", { hours });
   const days = Math.round(hours / 24);
-  if (days < 7) return `${days}d ago`;
+  if (days < 7) return i18n.t("roadmap.daysAgo", "{{days}}d ago", { days });
   const weeks = Math.round(days / 7);
-  return `${weeks}w ago`;
+  return i18n.t("roadmap.weeksAgo", "{{weeks}}w ago", { weeks });
 }
 
 export default function RoadmapScreen() {
+  const { t } = useTranslation();
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
@@ -90,7 +93,7 @@ export default function RoadmapScreen() {
         setLastNoChangeAt(null);
       }
     } catch {
-      setEvolveError("Couldn't evolve the roadmap right now. Try again in a moment.");
+      setEvolveError(t("roadmap.evolveError", "Couldn't evolve the roadmap right now. Try again in a moment."));
     }
   };
 
@@ -99,8 +102,8 @@ export default function RoadmapScreen() {
       <View style={[styles.root, { backgroundColor: colors.background, paddingTop: topPad }]}>
         <EmptyState
           icon="map"
-          title="No roadmap yet"
-          description="Finish intake and rubai will generate your personalized roadmap."
+          title={t("roadmap.emptyTitle", "No roadmap yet")}
+          description={t("roadmap.emptyDesc", "Finish intake and rubai will generate your personalized roadmap.")}
         />
       </View>
     );
@@ -128,12 +131,14 @@ export default function RoadmapScreen() {
             { color: colors.primary, fontFamily: "Inter_600SemiBold" },
           ]}
         >
-          ROADMAP
+          {t("roadmap.eyebrow", "ROADMAP")}
         </Text>
 
         <SectionHeader
           title={activeRoadmap.headline}
-          subtitle={`Week ${activeCurrentWeek} of ${activeRoadmap.totalWeeks}${goalLabel ? ` · ${goalLabel}` : ""}`}
+          subtitle={goalLabel
+            ? t("roadmap.weekOfWithGoal", "Week {{week}} of {{total}} · {{goal}}", { week: activeCurrentWeek, total: activeRoadmap.totalWeeks, goal: goalLabel })
+            : t("roadmap.weekOf", "Week {{week}} of {{total}}", { week: activeCurrentWeek, total: activeRoadmap.totalWeeks })}
         />
 
         <Text
@@ -142,7 +147,7 @@ export default function RoadmapScreen() {
             { color: colors.primary, fontFamily: "Inter_600SemiBold" },
           ]}
         >
-          {activeRoadmap.totalWeeks}-WEEK ARC
+          {t("roadmap.weekArc", "{{weeks}}-WEEK ARC", { weeks: activeRoadmap.totalWeeks })}
         </Text>
 
         <View style={styles.phases}>
@@ -190,7 +195,7 @@ export default function RoadmapScreen() {
                     { color: colors.accent, fontFamily: "Inter_600SemiBold" },
                   ]}
                 >
-                  ADAPTIVE ENGINE
+                  {t("roadmap.adaptiveEngine", "ADAPTIVE ENGINE")}
                 </Text>
                 <Text
                   style={[
@@ -198,7 +203,7 @@ export default function RoadmapScreen() {
                     { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
                   ]}
                 >
-                  Last evolved {formatRelative(activeLastEvolvedAt)}
+                  {t("roadmap.lastEvolved", "Last evolved {{when}}", { when: formatRelative(activeLastEvolvedAt) })}
                 </Text>
               </View>
             </View>
@@ -228,8 +233,7 @@ export default function RoadmapScreen() {
                     { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
                   ]}
                 >
-                  As you reflect on tasks, rubai learns how you actually execute and
-                  updates this roadmap to match.
+                  {t("roadmap.adaptiveEmpty", "As you reflect on tasks, rubai learns how you actually execute and updates this roadmap to match.")}
                 </Text>
               )}
 
@@ -247,7 +251,7 @@ export default function RoadmapScreen() {
                         { color: colors.primary, fontFamily: "Inter_600SemiBold" },
                       ]}
                     >
-                      {changesOpen ? "Hide what changed" : "View what changed"}
+                      {changesOpen ? t("roadmap.hideChanges", "Hide what changed") : t("roadmap.viewChanges", "View what changed")}
                     </Text>
                     <Feather
                       name={changesOpen ? "chevron-up" : "chevron-down"}
@@ -326,7 +330,7 @@ export default function RoadmapScreen() {
                               },
                             ]}
                           >
-                            WHY
+                            {t("roadmap.why", "WHY")}
                           </Text>
                           <Text
                             style={[
@@ -384,7 +388,7 @@ export default function RoadmapScreen() {
                       { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
                     ]}
                   >
-                    Checked — your roadmap is still the right shape for now.
+                    {t("roadmap.noChange", "Checked — your roadmap is still the right shape for now.")}
                   </Text>
                 </View>
               )}
@@ -392,7 +396,7 @@ export default function RoadmapScreen() {
               {/* Evolve button */}
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Evolve roadmap now"
+                accessibilityLabel={t("roadmap.evolveNowA11y", "Evolve roadmap now")}
                 disabled={!canEvolve || isEvolving}
                 onPress={onEvolve}
                 style={({ pressed }) => [
@@ -425,7 +429,7 @@ export default function RoadmapScreen() {
                     },
                   ]}
                 >
-                  {isEvolving ? "Evolving roadmap…" : "Evolve roadmap now"}
+                  {isEvolving ? t("roadmap.evolving", "Evolving roadmap…") : t("roadmap.evolveNow", "Evolve roadmap now")}
                 </Text>
               </Pressable>
 
@@ -436,7 +440,7 @@ export default function RoadmapScreen() {
                     { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
                   ]}
                 >
-                  Add a couple of reflections in Today first so rubai has signal to learn from.
+                  {t("roadmap.evolveHelper", "Add a couple of reflections in Today first so rubai has signal to learn from.")}
                 </Text>
               )}
             </View>
@@ -467,7 +471,7 @@ export default function RoadmapScreen() {
                   { color: colors.accent, fontFamily: "Inter_600SemiBold" },
                 ]}
               >
-                STRATEGY
+                {t("roadmap.strategy", "STRATEGY")}
               </Text>
             </View>
             <Feather
@@ -513,7 +517,7 @@ export default function RoadmapScreen() {
                     { color: colors.destructive, fontFamily: "Inter_600SemiBold" },
                   ]}
                 >
-                  RISKS TO WATCH
+                  {t("roadmap.risks", "RISKS TO WATCH")}
                 </Text>
               </View>
               <Feather

@@ -14,6 +14,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
+import i18n from "@/lib/i18n";
 import { useAtlas } from "@/providers/AtlasProvider";
 
 const AUTO_DISMISS_MS = 4000;
@@ -31,9 +32,9 @@ type TierMessageDef = {
 };
 
 function tierLabel(t: string): string {
-  if (t === "premium") return "Premium";
-  if (t === "pro") return "Pro";
-  return "Free";
+  if (t === "premium") return i18n.t("tierChangeToast.tierPremium", "Premium");
+  if (t === "pro") return i18n.t("tierChangeToast.tierPro", "Pro");
+  return i18n.t("tierChangeToast.tierFree", "Free");
 }
 
 function tierRank(t: string): number {
@@ -49,25 +50,25 @@ function buildMessage(fromTier: string, toTier: string): TierMessageDef {
 
   if (isUpgrade) {
     return {
-      eyebrow: "PLAN UPDATED",
-      title: `Welcome to ${to}!`,
-      subtitle: "Your new features are ready.",
+      eyebrow: i18n.t("tierChangeToast.eyebrow", "PLAN UPDATED"),
+      title: i18n.t("tierChangeToast.welcomeTitle", "Welcome to {{to}}!", { to }),
+      subtitle: i18n.t("tierChangeToast.welcomeSubtitle", "Your new features are ready."),
       icon: "star",
       isUpgrade: true,
     };
   } else if (toTier === "free") {
     return {
-      eyebrow: "PLAN UPDATED",
-      title: `Your ${from} plan has ended`,
-      subtitle: "You've been moved to the Free plan.",
+      eyebrow: i18n.t("tierChangeToast.eyebrow", "PLAN UPDATED"),
+      title: i18n.t("tierChangeToast.endedTitle", "Your {{from}} plan has ended", { from }),
+      subtitle: i18n.t("tierChangeToast.endedSubtitle", "You've been moved to the Free plan."),
       icon: "info",
       isUpgrade: false,
     };
   } else {
     return {
-      eyebrow: "PLAN UPDATED",
-      title: `Plan updated to ${to}`,
-      subtitle: `Changed from ${from} to ${to}.`,
+      eyebrow: i18n.t("tierChangeToast.eyebrow", "PLAN UPDATED"),
+      title: i18n.t("tierChangeToast.updatedTitle", "Plan updated to {{to}}", { to }),
+      subtitle: i18n.t("tierChangeToast.updatedSubtitle", "Changed from {{from}} to {{to}}.", { from, to }),
       icon: "info",
       isUpgrade: false,
     };

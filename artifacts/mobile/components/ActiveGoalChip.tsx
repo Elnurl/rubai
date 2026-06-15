@@ -1,5 +1,6 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { GOAL_META, profileGoalLabel } from "@/constants/atlas";
@@ -8,6 +9,7 @@ import { useAtlas } from "@/providers/AtlasProvider";
 
 export function ActiveGoalChip() {
   const colors = useColors();
+  const { t } = useTranslation();
   const { goals, activeGoal, activeGoalId, setActiveGoal } = useAtlas();
   const [open, setOpen] = useState(false);
 
@@ -80,7 +82,7 @@ export function ActiveGoalChip() {
                 },
               ]}
             >
-              Switch goal
+              {t("activeGoalChip.switchGoal", "Switch goal")}
             </Text>
             <ScrollView
               style={styles.list}

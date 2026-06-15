@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 
@@ -34,6 +35,7 @@ export function TaskCard({
   index,
 }: Props) {
   const colors = useColors();
+  const { t } = useTranslation();
 
   const handleCheckboxPress = () => {
     if (Platform.OS !== "web") {
@@ -64,9 +66,9 @@ export function TaskCard({
 
   const priorityBadge = (() => {
     if (task.priority === "critical")
-      return { text: "Critical", color: colors.destructive };
+      return { text: t("taskCard.priorityCritical", "Critical"), color: colors.destructive };
     if (task.priority === "high")
-      return { text: "Priority", color: colors.accent };
+      return { text: t("taskCard.priorityHigh", "Priority"), color: colors.accent };
     return null;
   })();
 
@@ -136,7 +138,7 @@ export function TaskCard({
                   { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
                 ]}
               >
-                {task.durationMinutes} min
+                {t("taskCard.durationMin", "{{minutes}} min", { minutes: task.durationMinutes })}
               </Text>
             </View>
             <View style={styles.metaPill}>
@@ -195,7 +197,7 @@ export function TaskCard({
                     },
                   ]}
                 >
-                  {hasReflection ? "Reflected" : "Reflect"}
+                  {hasReflection ? t("taskCard.reflected", "Reflected") : t("taskCard.reflect", "Reflect")}
                 </Text>
               </Pressable>
             )}

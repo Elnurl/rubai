@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Pressable,
@@ -9,6 +10,7 @@ import {
 } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
+import i18n from "@/lib/i18n";
 import type { RoadmapEvolutionEntry } from "@/types/atlas";
 
 type Props = {
@@ -20,17 +22,17 @@ type Props = {
 };
 
 function formatRelative(iso: string | null): string {
-  if (!iso) return "Never";
+  if (!iso) return i18n.t("adaptiveEngineCard.never", "Never");
   const diffMs = Date.now() - new Date(iso).getTime();
   const minutes = Math.round(diffMs / 60000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return i18n.t("adaptiveEngineCard.justNow", "Just now");
+  if (minutes < 60) return i18n.t("adaptiveEngineCard.minutesAgo", "{{count}}m ago", { count: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return i18n.t("adaptiveEngineCard.hoursAgo", "{{count}}h ago", { count: hours });
   const days = Math.round(hours / 24);
-  if (days < 7) return `${days}d ago`;
+  if (days < 7) return i18n.t("adaptiveEngineCard.daysAgo", "{{count}}d ago", { count: days });
   const weeks = Math.round(days / 7);
-  return `${weeks}w ago`;
+  return i18n.t("adaptiveEngineCard.weeksAgo", "{{count}}w ago", { count: weeks });
 }
 
 export function AdaptiveEngineCard({
@@ -41,6 +43,7 @@ export function AdaptiveEngineCard({
   onEvolve,
 }: Props) {
   const colors = useColors();
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   const phaseChanges = useMemo(
@@ -73,7 +76,7 @@ export function AdaptiveEngineCard({
                 { color: colors.accent, fontFamily: "Inter_600SemiBold" },
               ]}
             >
-              ADAPTIVE ENGINE
+              {t("adaptiveEngineCard.eyebrow", "ADAPTIVE ENGINE")}
             </Text>
             <Text
               style={[
@@ -81,7 +84,7 @@ export function AdaptiveEngineCard({
                 { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
               ]}
             >
-              Last evolved {formatRelative(lastEvolvedAt)}
+              {t("adaptiveEngineCard.lastEvolved", "Last evolved {{when}}", { when: formatRelative(lastEvolvedAt) })}
             </Text>
           </View>
         </View>
@@ -105,8 +108,7 @@ export function AdaptiveEngineCard({
             { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
           ]}
         >
-          As you reflect on tasks, rubai learns how you actually execute and
-          updates this roadmap to match. Tap below to evolve it manually.
+          {t("adaptiveEngineCard.emptyBody", "As you reflect on tasks, rubai learns how you actually execute and updates this roadmap to match. Tap below to evolve it manually.")}
         </Text>
       )}
 
@@ -122,7 +124,7 @@ export function AdaptiveEngineCard({
               { color: colors.primary, fontFamily: "Inter_600SemiBold" },
             ]}
           >
-            {expanded ? "Hide what changed" : "View what changed"}
+            {expanded ? t("adaptiveEngineCard.hideChanges", "Hide what changed") : t("adaptiveEngineCard.viewChanges", "View what changed")}
           </Text>
           <Feather
             name={expanded ? "chevron-up" : "chevron-down"}
@@ -194,7 +196,7 @@ export function AdaptiveEngineCard({
                   { color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
                 ]}
               >
-                WHY
+                {t("adaptiveEngineCard.why", "WHY")}
               </Text>
               <Text
                 style={[
@@ -211,7 +213,7 @@ export function AdaptiveEngineCard({
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Evolve roadmap now"
+        accessibilityLabel={t("adaptiveEngineCard.evolveNowA11y", "Evolve roadmap now")}
         disabled={!canEvolve || isEvolving}
         onPress={onEvolve}
         style={({ pressed }) => [
@@ -246,7 +248,7 @@ export function AdaptiveEngineCard({
             },
           ]}
         >
-          {isEvolving ? "Evolving roadmap…" : "Evolve roadmap now"}
+          {isEvolving ? t("adaptiveEngineCard.evolving", "Evolving roadmap…") : t("adaptiveEngineCard.evolveNow", "Evolve roadmap now")}
         </Text>
       </Pressable>
 
@@ -257,7 +259,7 @@ export function AdaptiveEngineCard({
             { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
           ]}
         >
-          Add a couple of reflections in Today first so rubai has signal to learn from.
+          {t("adaptiveEngineCard.helperText", "Add a couple of reflections in Today first so rubai has signal to learn from.")}
         </Text>
       )}
     </View>
