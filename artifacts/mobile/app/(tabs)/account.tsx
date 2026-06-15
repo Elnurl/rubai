@@ -290,14 +290,36 @@ export default function AccountScreen() {
         {/* ── Active goal card ── */}
         {activeGoal && goalTitle ? (
           <>
-            <SectionLabel>ACTIVE GOAL</SectionLabel>
-            <View
-              style={[
+            <View style={styles.sectionLabelRow}>
+              <SectionLabel>ACTIVE GOAL</SectionLabel>
+              {goals.length > 1 && (
+                <Pressable
+                  onPress={() => router.push("/account/goals")}
+                  hitSlop={8}
+                >
+                  <Text
+                    style={{
+                      color: colors.primary,
+                      fontFamily: "Inter_500Medium",
+                      fontSize: 12,
+                      letterSpacing: 0.2,
+                    }}
+                  >
+                    See all
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+            <Pressable
+              onPress={() => router.push("/account/goals")}
+              android_ripple={{ color: colors.primary + "14" }}
+              style={({ pressed }) => [
                 styles.goalCard,
                 {
                   backgroundColor: colors.primary + "0D",
                   borderColor: colors.primary + "30",
                   borderRadius: colors.radius,
+                  opacity: pressed ? 0.9 : 1,
                 },
               ]}
             >
@@ -322,6 +344,11 @@ export default function AccountScreen() {
                 >
                   {goalTitle}
                 </Text>
+                <Feather
+                  name="chevron-right"
+                  size={16}
+                  color={colors.primary + "80"}
+                />
               </View>
 
               <View style={styles.progressLabelRow}>
@@ -362,7 +389,7 @@ export default function AccountScreen() {
                   }}
                 />
               </View>
-            </View>
+            </Pressable>
           </>
         ) : null}
 
@@ -731,6 +758,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     marginTop: 3,
+  },
+  sectionLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+    marginTop: 4,
   },
   goalCard: {
     padding: 14,
