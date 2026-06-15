@@ -17,6 +17,7 @@ import { AtlasButton } from "@/components/AtlasButton";
 import { AskCoachPill } from "@/components/AskCoachPill";
 import { EmptyState } from "@/components/EmptyState";
 import { ReflectionSheet } from "@/components/ReflectionSheet";
+import { SaveToast } from "@/components/SaveToast";
 import { SectionHeader } from "@/components/SectionHeader";
 import { TaskCard } from "@/components/TaskCard";
 import { TaskDetailSheet } from "@/components/TaskDetailSheet";
@@ -73,6 +74,7 @@ export default function TodayScreen() {
     completed: boolean;
   } | null>(null);
   const [detailTarget, setDetailTarget] = useState<DailyTask | null>(null);
+  const [showSaveToast, setShowSaveToast] = useState(false);
 
   const planIsForToday = activeDailyPlan && activeDailyPlan.plan.date === today;
 
@@ -157,6 +159,7 @@ export default function TodayScreen() {
 
   const handleSubmitReflection = async (entry: ReflectionEntry) => {
     await recordActiveReflection(entry);
+    setShowSaveToast(true);
     if (!activeProfile) return;
     const recent = activeTaskHistory.slice(-60).map((e) => ({
       taskId: e.taskId,
@@ -452,6 +455,12 @@ export default function TodayScreen() {
             setReflectTarget({ task: target, completed: isCompleted });
           }, 150);
         }}
+      />
+
+      <SaveToast
+        visible={showSaveToast}
+        message="Reflection saved"
+        onDismiss={() => setShowSaveToast(false)}
       />
     </View>
   );

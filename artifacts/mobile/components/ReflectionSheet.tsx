@@ -505,9 +505,15 @@ export function ReflectionSheet({
                 style={({ pressed }) => [
                   styles.mediaBtn,
                   {
-                    borderColor: isRecording ? colors.destructive : colors.border,
+                    borderColor: isRecording
+                      ? colors.destructive
+                      : recorder.state === "error"
+                      ? colors.destructive + "80"
+                      : colors.border,
                     backgroundColor: isRecording
                       ? colors.destructive + "1A"
+                      : recorder.state === "error"
+                      ? colors.destructive + "0D"
                       : colors.background,
                     opacity: pressed || transcribing ? 0.7 : 1,
                   },
@@ -518,26 +524,33 @@ export function ReflectionSheet({
                   <ActivityIndicator size="small" color={colors.mutedForeground} />
                 ) : (
                   <Feather
-                    name={isRecording ? "square" : "mic"}
+                    name={isRecording ? "square" : recorder.state === "error" ? "alert-circle" : "mic"}
                     size={14}
-                    color={isRecording ? colors.destructive : colors.mutedForeground}
+                    color={
+                      isRecording || recorder.state === "error"
+                        ? colors.destructive
+                        : colors.mutedForeground
+                    }
                   />
                 )}
                 <Text
                   style={[
                     styles.mediaBtnText,
                     {
-                      color: isRecording
+                      color: isRecording || recorder.state === "error"
                         ? colors.destructive
                         : colors.foreground,
                       fontFamily: "Inter_500Medium",
                     },
                   ]}
+                  numberOfLines={1}
                 >
                   {isRecording
                     ? `Recording ${recordingSeconds}s — tap to stop`
                     : transcribing
                     ? "Transcribing…"
+                    : recorder.state === "error"
+                    ? (recorder.errorMessage ?? "Mic unavailable — tap to retry")
                     : voiceTranscript
                     ? "Add more voice"
                     : "Voice note"}
