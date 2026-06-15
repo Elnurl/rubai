@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useUser } from "@clerk/expo";
 import { useRouter } from "expo-router";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Alert,
   Image,
@@ -125,6 +125,26 @@ export default function AccountScreen() {
   const tasksDone = useMemo(
     () => allTaskHistory.filter((h) => h.completed).length,
     [allTaskHistory],
+  );
+
+  const [goalBreakdownExpanded, setGoalBreakdownExpanded] = useState(false);
+
+  const perGoalStats = useMemo(
+    () =>
+      goals.map((g) => {
+        const title =
+          g.profile.customGoalTitle ??
+          g.profile.goalType
+            .split("_")
+            .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(" ");
+        const history = g.taskHistory ?? [];
+        const done = history.filter((h) => h.completed).length;
+        const streak = computeBestStreak(history);
+        const hasRoadmap = g.roadmap !== null;
+        return { id: g.id, title, done, streak, hasRoadmap };
+      }),
+    [goals],
   );
 
   const goalTitle = activeGoal
@@ -421,6 +441,129 @@ export default function AccountScreen() {
             colors={colors}
           />
         </View>
+
+        {/* ── Per-goal breakdown ── */}
+        {perGoalStats.length > 0 && (
+          <Pressable
+            onPress={() => setGoalBreakdownExpanded((v) => !v)}
+            style={({ pressed }) => [
+              styles.breakdownHeader,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderRadius: colors.radius,
+                opacity: pressed ? 0.85 : 1,
+              },
+            ]}
+          >
+            <Text
+              style={{
+                flex: 1,
+                color: colors.foreground,
+                fontFamily: "Inter_600SemiBold",
+                fontSize: 13,
+                letterSpacing: -0.1,
+              }}
+            >
+              Breakdown by goal
+            </Text>
+            <Text
+              style={{
+                color: colors.mutedForeground,
+                fontFamily: "Inter_400Regular",
+                fontSize: 12,
+                marginRight: 6,
+              }}
+            >
+              {perGoalStats.length} goal{perGoalStats.length !== 1 ? "s" : ""}
+            </Text>
+            <Feather
+              name={goalBreakdownExpanded ? "chevron-up" : "chevron-down"}
+              size={16}
+              color={colors.mutedForeground}
+            />
+          </Pressable>
+        )}
+        {goalBreakdownExpanded && perGoalStats.length > 0 && (
+          <View
+            style={[
+              styles.breakdownList,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderRadius: colors.radius,
+              },
+            ]}
+          >
+            {perGoalStats.map((gs, idx) => (
+              <React.Fragment key={gs.id}>
+                {idx > 0 && (
+                  <View
+                    style={[styles.divider, { backgroundColor: colors.border, marginLeft: 14 }]}
+                  />
+                )}
+                <View style={styles.breakdownRow}>
+                  <View
+                    style={[
+                      styles.breakdownIcon,
+                      {
+                        backgroundColor: gs.hasRoadmap
+                          ? colors.primary + "18"
+                          : colors.muted,
+                      },
+                    ]}
+                  >
+                    <Feather
+                      name={gs.hasRoadmap ? "target" : "check-square"}
+                      size={13}
+                      color={gs.hasRoadmap ? colors.primary : colors.mutedForeground}
+                    />
+                  </View>
+                  <Text
+                    numberOfLines={2}
+                    style={{
+                      flex: 1,
+                      color: colors.foreground,
+                      fontFamily: "Inter_500Medium",
+                      fontSize: 13,
+                      letterSpacing: -0.1,
+                    }}
+                  >
+                    {gs.title}
+                  </Text>
+                  <View style={styles.breakdownStats}>
+                    <View style={styles.breakdownStatPill}>
+                      <Feather name="check-circle" size={11} color={colors.primary} />
+                      <Text
+                        style={{
+                          color: colors.foreground,
+                          fontFamily: "Inter_600SemiBold",
+                          fontSize: 12,
+                          marginLeft: 4,
+                        }}
+                      >
+                        {gs.done}
+                      </Text>
+                    </View>
+                    <View style={styles.breakdownStatPill}>
+                      <Feather name="award" size={11} color={colors.primary} />
+                      <Text
+                        style={{
+                          color: colors.foreground,
+                          fontFamily: "Inter_600SemiBold",
+                          fontSize: 12,
+                          marginLeft: 4,
+                        }}
+                      >
+                        {gs.streak}d
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </React.Fragment>
+            ))}
+          </View>
+        )}
 
         {/* ── Preferences ── */}
         <SectionLabel>PREFERENCES</SectionLabel>
@@ -847,5 +990,38 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     paddingVertical: 14,
+  },
+  breakdownHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  breakdownList: {
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  breakdownRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  breakdownIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  breakdownStats: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  breakdownStatPill: {
+    flexDirection: "row",
+    alignItems: "center",
   },
 });
