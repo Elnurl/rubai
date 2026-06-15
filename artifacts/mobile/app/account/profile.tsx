@@ -7,6 +7,7 @@ import {
   ActionSheetIOS,
   ActivityIndicator,
   Alert,
+  FlatList,
   Image,
   Modal,
   Platform,
@@ -16,6 +17,7 @@ import {
   Switch,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   useColorScheme,
   View,
 } from "react-native";
@@ -26,19 +28,12 @@ import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { friendlyAuthError } from "@/lib/authErrors";
 import { TIER_INFO, type SubscriptionTier } from "@/types/atlas";
+import { LANGUAGES } from "@/lib/languageLocales";
+import { COUNTRIES, DEFAULT_COUNTRY, type CountryCode } from "@/lib/countryCodes";
 import {
   useGetMeTierHistory,
   type TierTransitionEntry,
 } from "@workspace/api-client-react";
-
-const LANGUAGES = [
-  "English",
-  "Azərbaycan",
-  "Español",
-  "Português",
-  "Deutsch",
-  "Français",
-];
 
 type EditField = "name" | "email" | "phone" | "password" | null;
 
@@ -82,6 +77,8 @@ export default function ProfileScreen() {
 
   const [field, setField] = useState<EditField>(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
+  const [localAvatarUri, setLocalAvatarUri] = useState<string | null>(null);
+  const [showLangPicker, setShowLangPicker] = useState(false);
 
   const email = user?.primaryEmailAddress?.emailAddress ?? "—";
   const phone = user?.primaryPhoneNumber?.phoneNumber ?? "—";
@@ -89,16 +86,10 @@ export default function ProfileScreen() {
     [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() ||
     user?.username ||
     (user?.primaryEmailAddress?.emailAddress?.split("@")[0] ?? "Your account");
-  const avatarUrl = user?.imageUrl ?? null;
+  const avatarUrl = localAvatarUri ?? user?.imageUrl ?? null;
   const initials =
     ((user?.firstName?.[0] ?? "") + (user?.lastName?.[0] ?? "")).trim() ||
     fullName.slice(0, 2);
-
-  const cycleLanguage = () => {
-    const idx = LANGUAGES.indexOf(account.preferredLanguage);
-    const next = LANGUAGES[(idx + 1) % LANGUAGES.length];
-    void updateAccount({ preferredLanguage: next });
-  };
 
   // ---- Avatar: action sheet (iOS) / Alert (Android) ----
   const onAvatarPress = useCallback(() => {
@@ -159,6 +150,8 @@ export default function ProfileScreen() {
       const mime = asset.mimeType || "image/jpeg";
       const dataUrl = `data:${mime};base64,${asset.base64}`;
       await user.setProfileImage({ file: dataUrl });
+      await user.reload();
+      setLocalAvatarUri(null);
     } catch (err) {
       Alert.alert("Couldn't update photo", friendlyAuthError(err));
     } finally {
@@ -171,6 +164,8 @@ export default function ProfileScreen() {
     try {
       setAvatarBusy(true);
       await user.setProfileImage({ file: null });
+      await user.reload();
+      setLocalAvatarUri(null);
     } catch (err) {
       Alert.alert("Couldn't remove photo", friendlyAuthError(err));
     } finally {
@@ -301,7 +296,7 @@ export default function ProfileScreen() {
           onPress={() => setField("phone")}
         />
         <Pressable
-          onPress={cycleLanguage}
+          onPress={() => setShowLangPicker(true)}
           style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
         >
           <DetailRow
@@ -515,6 +510,15 @@ export default function ProfileScreen() {
         visible={field === "password"}
         onClose={() => setField(null)}
         passwordEnabled={!!user?.passwordEnabled}
+      />
+      <LanguageModal
+        visible={showLangPicker}
+        selected={account.preferredLanguage}
+        onSelect={(lang) => {
+          void updateAccount({ preferredLanguage: lang });
+          setShowLangPicker(false);
+        }}
+        onClose={() => setShowLangPicker(false)}
       />
     </View>
   );
@@ -1127,6 +1131,7 @@ function VerifyModal(props: {
   currentValue: string;
 }) {
   const { user } = useUser();
+  const colors = useColors();
   const isEmail = props.kind === "email";
   const [step, setStep] = useState<"input" | "code">("input");
   const [value, setValue] = useState("");
@@ -1134,11 +1139,9 @@ function VerifyModal(props: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingResource | null>(null);
+  const [country, setCountry] = useState<CountryCode>(DEFAULT_COUNTRY);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
 
-  // Reset on open. On close, if we still hold an unverified pending resource
-  // (user dismissed mid-flow), best-effort destroy it so we don't leave
-  // "zombie" emails/phones on the Clerk user that would later trip Clerk's
-  // per-user limits.
   React.useEffect(() => {
     if (props.visible) {
       setStep("input");
@@ -1146,6 +1149,7 @@ function VerifyModal(props: {
       setCode("");
       setError(null);
       setPending(null);
+      setCountry(DEFAULT_COUNTRY);
     } else if (pending) {
       const stale = pending;
       setPending(null);
@@ -1159,6 +1163,8 @@ function VerifyModal(props: {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.visible]);
+
+  const fullPhone = country.dialCode + value.trim();
 
   const sendCode = async () => {
     if (!user) return;
@@ -1176,7 +1182,7 @@ function VerifyModal(props: {
           destroy: () => created.destroy(),
         });
       } else {
-        const created = await user.createPhoneNumber({ phoneNumber: value.trim() });
+        const created = await user.createPhoneNumber({ phoneNumber: fullPhone });
         await created.prepareVerification();
         setPending({
           id: created.id,
@@ -1201,9 +1207,6 @@ function VerifyModal(props: {
     setError(null);
     try {
       await pending.attempt(code.trim());
-      // Defensive: confirm Clerk really marked it verified before promoting.
-      // attemptVerification mutates the resource in-place, but a reload
-      // guarantees we see the server-side status.
       await pending.reload();
       if (!pending.isVerified()) {
         throw new Error("Verification did not complete. Please try again.");
@@ -1213,11 +1216,6 @@ function VerifyModal(props: {
           ? { primaryEmailAddressId: pending.id }
           : { primaryPhoneNumberId: pending.id },
       );
-      // Best-effort cleanup: only AFTER the new resource is primary, remove
-      // all other entries of the same kind so the user has exactly one
-      // verified primary email/phone after the swap. Errors here are
-      // logged but non-fatal — if Clerk refuses (e.g. last verified email
-      // constraint), the user just keeps both, which is acceptable.
       const others = isEmail
         ? user.emailAddresses.filter((e) => e.id !== pending.id)
         : user.phoneNumbers.filter((p) => p.id !== pending.id);
@@ -1228,7 +1226,6 @@ function VerifyModal(props: {
           console.warn("[profile] cleanup of old contact failed", e);
         }
       }
-      // Mark as consumed so the close-effect doesn't try to destroy it.
       setPending(null);
       props.onClose();
     } catch (err) {
@@ -1240,60 +1237,117 @@ function VerifyModal(props: {
   };
 
   const title = isEmail
-    ? step === "input"
-      ? "Change email"
-      : "Verify email"
-    : step === "input"
-      ? "Change phone number"
-      : "Verify phone number";
+    ? step === "input" ? "Change email" : "Verify email"
+    : step === "input" ? "Change phone number" : "Verify phone number";
 
-  const primaryLabel =
-    step === "input" ? "Send code" : "Verify & save";
-  // Clerk codes are 6-digit by default across email_code / phone_code.
+  const primaryLabel = step === "input" ? "Send code" : "Verify & save";
   const primaryDisabled =
-    step === "input" ? value.trim().length < (isEmail ? 5 : 6) : code.trim().length < 6;
+    step === "input"
+      ? isEmail
+        ? value.trim().length < 5
+        : value.trim().length < 4
+      : code.trim().length < 6;
 
   return (
-    <ModalShell
-      visible={props.visible}
-      onClose={props.onClose}
-      title={title}
-      primaryLabel={primaryLabel}
-      primaryDisabled={primaryDisabled}
-      busy={busy}
-      error={error}
-      onPrimary={step === "input" ? sendCode : verifyAndPromote}
-    >
-      {step === "input" ? (
-        <>
-          <Text style={styles.modalHelper}>
-            Current: {props.currentValue}
-          </Text>
-          <FieldInput
-            label={isEmail ? "New email" : "New phone (e.g. +994501234567)"}
-            value={value}
-            onChangeText={setValue}
-            placeholder={isEmail ? "you@example.com" : "+994501234567"}
-            keyboardType={isEmail ? "email-address" : "phone-pad"}
-            autoFocus
-          />
-        </>
-      ) : (
-        <>
-          <Text style={styles.modalHelper}>
-            We sent a code to {value.trim()}. Enter it below to confirm.
-          </Text>
-          <FieldInput
-            label="Verification code"
-            value={code}
-            onChangeText={setCode}
-            placeholder="123456"
-            keyboardType="number-pad"
-            autoFocus
-          />
-        </>
-      )}
-    </ModalShell>
+    <>
+      <ModalShell
+        visible={props.visible}
+        onClose={props.onClose}
+        title={title}
+        primaryLabel={primaryLabel}
+        primaryDisabled={primaryDisabled}
+        busy={busy}
+        error={error}
+        onPrimary={step === "input" ? sendCode : verifyAndPromote}
+      >
+        {step === "input" ? (
+          <>
+            <Text style={styles.modalHelper}>
+              Current: {props.currentValue}
+            </Text>
+            {isEmail ? (
+              <FieldInput
+                label="New email"
+                value={value}
+                onChangeText={setValue}
+                placeholder="you@example.com"
+                keyboardType="email-address"
+                autoFocus
+              />
+            ) : (
+              <>
+                <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
+                  COUNTRY CODE
+                </Text>
+                <Pressable
+                  onPress={() => setShowCountryPicker(true)}
+                  style={[
+                    styles.countryBtn,
+                    {
+                      backgroundColor: colors.muted,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <Text style={{ fontSize: 20 }}>{country.flag}</Text>
+                  <Text
+                    style={{
+                      color: colors.foreground,
+                      fontFamily: "Inter_600SemiBold",
+                      fontSize: 15,
+                      marginLeft: 8,
+                    }}
+                  >
+                    {country.dialCode}
+                  </Text>
+                  <Text
+                    style={{
+                      color: colors.mutedForeground,
+                      fontFamily: "Inter_400Regular",
+                      fontSize: 13,
+                      flex: 1,
+                      marginLeft: 6,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {country.name}
+                  </Text>
+                  <Feather name="chevron-down" size={16} color={colors.mutedForeground} />
+                </Pressable>
+                <FieldInput
+                  label="PHONE NUMBER"
+                  value={value}
+                  onChangeText={setValue}
+                  placeholder="501234567"
+                  keyboardType="phone-pad"
+                  autoFocus
+                />
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <Text style={styles.modalHelper}>
+              We sent a code to {isEmail ? value.trim() : fullPhone}. Enter it below to confirm.
+            </Text>
+            <FieldInput
+              label="Verification code"
+              value={code}
+              onChangeText={setCode}
+              placeholder="123456"
+              keyboardType="number-pad"
+              autoFocus
+            />
+          </>
+        )}
+      </ModalShell>
+      <CountryPickerModal
+        visible={showCountryPicker}
+        selected={country}
+        onSelect={(c) => { setCountry(c); setShowCountryPicker(false); }}
+        onClose={() => setShowCountryPicker(false)}
+      />
+    </>
   );
 }
 
@@ -1400,6 +1454,323 @@ function PasswordModal(props: {
 }
 
 // ---------------------------------------------------------------------------
+// LanguageModal — full-screen list with checkmarks + backdrop dismiss
+// ---------------------------------------------------------------------------
+
+function LanguageModal(props: {
+  visible: boolean;
+  selected: string;
+  onSelect: (lang: string) => void;
+  onClose: () => void;
+}) {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+
+  return (
+    <Modal
+      visible={props.visible}
+      animationType="slide"
+      transparent
+      onRequestClose={props.onClose}
+    >
+      <TouchableWithoutFeedback onPress={props.onClose}>
+        <View style={langStyles.overlay} />
+      </TouchableWithoutFeedback>
+      <View
+        style={[
+          langStyles.sheet,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            paddingBottom: insets.bottom + 12,
+          },
+        ]}
+      >
+        <View style={langStyles.handle} />
+        <Text
+          style={{
+            color: colors.foreground,
+            fontFamily: "Inter_700Bold",
+            fontSize: 17,
+            textAlign: "center",
+            marginBottom: 16,
+          }}
+        >
+          Language
+        </Text>
+        <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+          {LANGUAGES.map((lang, i) => {
+            const isLast = i === LANGUAGES.length - 1;
+            const isSelected = lang === props.selected;
+            return (
+              <React.Fragment key={lang}>
+                <Pressable
+                  onPress={() => props.onSelect(lang)}
+                  android_ripple={{ color: colors.muted }}
+                  style={({ pressed }) => [
+                    langStyles.langRow,
+                    { opacity: pressed ? 0.8 : 1 },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      flex: 1,
+                      color: isSelected ? colors.primary : colors.foreground,
+                      fontFamily: isSelected ? "Inter_600SemiBold" : "Inter_400Regular",
+                      fontSize: 16,
+                    }}
+                  >
+                    {lang}
+                  </Text>
+                  {isSelected && (
+                    <Feather name="check" size={18} color={colors.primary} />
+                  )}
+                </Pressable>
+                {!isLast && (
+                  <View
+                    style={{
+                      height: StyleSheet.hairlineWidth,
+                      backgroundColor: colors.border,
+                      marginLeft: 16,
+                    }}
+                  />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
+const langStyles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  sheet: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderTopWidth: 1,
+    paddingTop: 10,
+    paddingHorizontal: 16,
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#ccc",
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  langRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 15,
+  },
+});
+
+// ---------------------------------------------------------------------------
+// CountryPickerModal — searchable list of countries with dial codes
+// ---------------------------------------------------------------------------
+
+function CountryPickerModal(props: {
+  visible: boolean;
+  selected: CountryCode;
+  onSelect: (c: CountryCode) => void;
+  onClose: () => void;
+}) {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return COUNTRIES;
+    return COUNTRIES.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.dialCode.includes(q) ||
+        c.code.toLowerCase().includes(q),
+    );
+  }, [query]);
+
+  React.useEffect(() => {
+    if (!props.visible) setQuery("");
+  }, [props.visible]);
+
+  return (
+    <Modal
+      visible={props.visible}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={props.onClose}
+    >
+      <View
+        style={[
+          cpStyles.root,
+          {
+            backgroundColor: colors.background,
+            paddingTop: insets.top,
+            paddingBottom: insets.bottom,
+          },
+        ]}
+      >
+        {/* Header */}
+        <View style={[cpStyles.header, { borderBottomColor: colors.border }]}>
+          <Pressable
+            onPress={props.onClose}
+            hitSlop={12}
+            style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1, padding: 4 }]}
+          >
+            <Feather name="x" size={22} color={colors.foreground} />
+          </Pressable>
+          <Text
+            style={{
+              flex: 1,
+              textAlign: "center",
+              color: colors.foreground,
+              fontFamily: "Inter_600SemiBold",
+              fontSize: 16,
+            }}
+          >
+            Select country
+          </Text>
+          <View style={{ width: 30 }} />
+        </View>
+
+        {/* Search */}
+        <View
+          style={[
+            cpStyles.searchRow,
+            { backgroundColor: colors.muted, borderColor: colors.border },
+          ]}
+        >
+          <Feather name="search" size={15} color={colors.mutedForeground} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search country or code…"
+            placeholderTextColor={colors.mutedForeground}
+            autoCorrect={false}
+            autoCapitalize="none"
+            style={{
+              flex: 1,
+              color: colors.foreground,
+              fontFamily: "Inter_400Regular",
+              fontSize: 14,
+              paddingVertical: Platform.OS === "ios" ? 0 : 2,
+            }}
+          />
+          {query.length > 0 && (
+            <Pressable onPress={() => setQuery("")} hitSlop={8}>
+              <Feather name="x-circle" size={15} color={colors.mutedForeground} />
+            </Pressable>
+          )}
+        </View>
+
+        {/* List */}
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.code}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          ItemSeparatorComponent={() => (
+            <View
+              style={{
+                height: StyleSheet.hairlineWidth,
+                backgroundColor: colors.border,
+                marginLeft: 56,
+              }}
+            />
+          )}
+          renderItem={({ item }) => {
+            const isSelected = item.code === props.selected.code;
+            return (
+              <Pressable
+                onPress={() => props.onSelect(item)}
+                android_ripple={{ color: colors.muted }}
+                style={({ pressed }) => [
+                  cpStyles.countryRow,
+                  { opacity: pressed ? 0.8 : 1 },
+                ]}
+              >
+                <Text style={{ fontSize: 26, width: 36 }}>{item.flag}</Text>
+                <Text
+                  style={{
+                    flex: 1,
+                    color: isSelected ? colors.primary : colors.foreground,
+                    fontFamily: isSelected ? "Inter_600SemiBold" : "Inter_400Regular",
+                    fontSize: 15,
+                  }}
+                  numberOfLines={1}
+                >
+                  {item.name}
+                </Text>
+                <Text
+                  style={{
+                    color: colors.mutedForeground,
+                    fontFamily: "Inter_500Medium",
+                    fontSize: 14,
+                    minWidth: 48,
+                    textAlign: "right",
+                  }}
+                >
+                  {item.dialCode}
+                </Text>
+                {isSelected && (
+                  <Feather
+                    name="check"
+                    size={16}
+                    color={colors.primary}
+                    style={{ marginLeft: 8 }}
+                  />
+                )}
+              </Pressable>
+            );
+          }}
+        />
+      </View>
+    </Modal>
+  );
+}
+
+const cpStyles = StyleSheet.create({
+  root: { flex: 1 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 8,
+  },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    margin: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 8,
+  },
+  countryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
 
@@ -1472,5 +1843,22 @@ const styles = StyleSheet.create({
     color: "#807763",
     marginBottom: 12,
     lineHeight: 18,
+  },
+  fieldLabel: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 11.5,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  countryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    marginBottom: 10,
+    gap: 4,
   },
 });
