@@ -1,31 +1,41 @@
 import { Feather } from "@expo/vector-icons";
 import { useUser } from "@clerk/expo";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useMemo } from "react";
 import {
-  Alert,
-  ActivityIndicator,
   Image,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
-  useColorScheme,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated, { FadeIn } from "react-native-reanimated";
 
 import { AskCoachPill } from "@/components/AskCoachPill";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { TIER_INFO, type SubscriptionTier } from "@/types/atlas";
-import { useGetMeTierHistory } from "@workspace/api-client-react";
-import type { TierTransitionEntry } from "@workspace/api-client-react";
+import type { TaskHistoryEntry } from "@/lib/storage";
 
 const APP_VERSION = "rubai · v1.0 · designed for execution";
+
+function computeBestStreak(history: TaskHistoryEntry[]): number {
+  const daySet = new Set(history.filter((h) => h.completed).map((h) => h.date));
+  const sorted = [...daySet].sort();
+  if (sorted.length === 0) return 0;
+  let best = 1;
+  let cur = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(sorted[i - 1] + "T00:00:00");
+    const curr = new Date(sorted[i] + "T00:00:00");
+    const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
+    cur = diff === 1 ? cur + 1 : 1;
+    best = Math.max(best, cur);
+  }
+  return best;
+}
 
 export default function AccountScreen() {
   const colors = useColors();
@@ -34,25 +44,22 @@ export default function AccountScreen() {
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 8;
   const bottomTab = isWeb ? 84 : 90;
-  const systemScheme = useColorScheme();
 
   const {
     tier,
-    account,
+    goals,
     activeBehavioral,
+    activeGoal,
+    activeTaskHistory,
+    activeCurrentWeek,
     syncStatus,
     syncMessage,
-    updateAccount,
-    signOut,
     dismissSyncMessage,
   } = useAtlas();
   const { user } = useUser();
 
-  const tierKey = (tier as SubscriptionTier) in TIER_INFO ? (tier as SubscriptionTier) : "free";
-  const tierInfo = TIER_INFO[tierKey];
-
-  const { data: tierHistoryData, isLoading: tierHistoryLoading } =
-    useGetMeTierHistory({ limit: 20 });
+  const tierKey =
+    (tier as SubscriptionTier) in TIER_INFO ? (tier as SubscriptionTier) : "free";
 
   const accountEmail = user?.primaryEmailAddress?.emailAddress ?? "Signed in";
   const fullName =
@@ -64,44 +71,43 @@ export default function AccountScreen() {
     (user?.firstName?.[0] ?? "") + (user?.lastName?.[0] ?? "") ||
     fullName.slice(0, 2);
   const avatarUrl = user?.imageUrl ?? null;
-  const streakDays = activeBehavioral.currentStreakDays;
 
-  // Effective scheme for the appearance toggle subtitle
-  const effectiveScheme =
-    account.themeOverride === "system"
-      ? systemScheme ?? "light"
-      : account.themeOverride;
-  const isDark = effectiveScheme === "dark";
+  const activeGoalCount = useMemo(
+    () => goals.filter((g) => g.roadmap !== null).length,
+    [goals],
+  );
+  const currentStreak = activeBehavioral.currentStreakDays;
+  const bestStreak = useMemo(
+    () => computeBestStreak(activeTaskHistory),
+    [activeTaskHistory],
+  );
+  const tasksDone = useMemo(
+    () => activeTaskHistory.filter((h) => h.completed).length,
+    [activeTaskHistory],
+  );
 
-  const onAppearanceToggle = (nextDark: boolean) => {
-    // Tapping the toggle always sets a manual override (light/dark). Long
-    // press / tap-and-hold path is a stretch goal; users can return to system
-    // by tapping the row label below.
-    void updateAccount({ themeOverride: nextDark ? "dark" : "light" });
-  };
+  const goalTitle = activeGoal
+    ? (activeGoal.profile.customGoalTitle ??
+        activeGoal.profile.goalType
+          .split("_")
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" "))
+    : null;
 
-  const onAppearanceLongPress = () => {
-    void updateAccount({ themeOverride: "system" });
-    if (Platform.OS !== "web") {
-      Alert.alert("Appearance", "Following system setting.");
-    }
-  };
+  const phases = activeGoal?.roadmap?.phases;
+  const totalWeeks =
+    activeGoal?.profile?.targetTimelineWeeks ??
+    (phases && phases.length > 0 ? phases[phases.length - 1].endWeek : 12);
+  const progress = Math.min(activeCurrentWeek / Math.max(totalWeeks, 1), 1);
 
-  const onSignOut = () => {
-    const doSignOut = async () => {
-      await signOut();
-    };
-    if (Platform.OS === "web") {
-      if (typeof window !== "undefined" && window.confirm("Sign out of rubai?")) {
-        void doSignOut();
-      }
-    } else {
-      Alert.alert("Sign out?", "You can sign back in any time.", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Sign out", onPress: doSignOut },
-      ]);
-    }
-  };
+  const tierBadgeColor =
+    tierKey === "premium"
+      ? "#F59E0B"
+      : tierKey === "pro"
+        ? "#10B981"
+        : colors.mutedForeground;
+  const tierBadgeText =
+    tierKey === "premium" ? "PREMIUM" : tierKey === "pro" ? "PRO MEMBER" : "FREE";
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -112,7 +118,6 @@ export default function AccountScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header — same pattern as Today/Coach */}
         <View style={styles.headerRow}>
           <AskCoachPill />
           <View style={styles.headerSpacer} />
@@ -154,23 +159,26 @@ export default function AccountScreen() {
           </Pressable>
         ) : null}
 
-        {/* Compact identity strip (avatar + name + streak chip) */}
-        <View
-          style={[
-            styles.identityStrip,
+        {/* ── Profile card ── */}
+        <Pressable
+          onPress={() => router.push("/account/profile")}
+          android_ripple={{ color: colors.muted }}
+          style={({ pressed }) => [
+            styles.profileCard,
             {
               backgroundColor: colors.card,
               borderColor: colors.border,
               borderRadius: colors.radius,
+              opacity: pressed ? 0.9 : 1,
             },
           ]}
         >
           {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.identityAvatar} />
+            <Image source={{ uri: avatarUrl }} style={styles.profileAvatar} />
           ) : (
             <View
               style={[
-                styles.identityAvatar,
+                styles.profileAvatar,
                 {
                   backgroundColor: colors.primary,
                   alignItems: "center",
@@ -182,7 +190,7 @@ export default function AccountScreen() {
                 style={{
                   color: colors.primaryForeground,
                   fontFamily: "Inter_700Bold",
-                  fontSize: 14,
+                  fontSize: 20,
                   textTransform: "uppercase",
                 }}
               >
@@ -190,14 +198,15 @@ export default function AccountScreen() {
               </Text>
             </View>
           )}
-          <View style={{ flex: 1 }}>
+
+          <View style={{ flex: 1, gap: 2 }}>
             <Text
               numberOfLines={1}
               style={{
                 color: colors.foreground,
                 fontFamily: "Inter_700Bold",
-                fontSize: 15,
-                letterSpacing: -0.2,
+                fontSize: 16,
+                letterSpacing: -0.3,
               }}
             >
               {fullName}
@@ -207,195 +216,144 @@ export default function AccountScreen() {
               style={{
                 color: colors.mutedForeground,
                 fontFamily: "Inter_400Regular",
-                fontSize: 11.5,
-                marginTop: 2,
+                fontSize: 12,
               }}
             >
               {accountEmail}
             </Text>
-          </View>
-          <View
-            style={[
-              styles.streakChip,
-              {
-                backgroundColor: colors.primary + "1A",
-                borderColor: colors.primary + "40",
-              },
-            ]}
-          >
-            <Feather name="zap" size={10} color={colors.primary} />
-            <Text
-              style={{
-                color: colors.primary,
-                fontFamily: "Inter_600SemiBold",
-                fontSize: 10.5,
-                letterSpacing: 0.2,
-              }}
+            <View
+              style={[
+                styles.tierBadge,
+                {
+                  backgroundColor: tierBadgeColor + "1A",
+                  borderColor: tierBadgeColor + "55",
+                },
+              ]}
             >
-              {streakDays}d streak
-            </Text>
-          </View>
-        </View>
-
-        {/* Top navigation card — Profile / Behavioral memory / Settings / Privacy */}
-        <Group>
-          <NavRow
-            icon="user"
-            title="Profile"
-            subtitle="Name, avatar, language"
-            onPress={() => router.push("/account/profile")}
-          />
-          <Divider />
-          <NavRow
-            icon="zap"
-            title="Behavioral memory"
-            subtitle="What rubai remembers about you"
-            onPress={() => router.push("/behavioral-insights")}
-          />
-          <Divider />
-          <NavRow
-            icon="settings"
-            title="Settings"
-            subtitle="Sync, devices, persona, nudges"
-            onPress={() => router.push("/account/settings")}
-          />
-          <Divider />
-          <NavRow
-            icon="shield"
-            title="Privacy & data"
-            subtitle="Control what's stored"
-            onPress={() => router.push("/account/privacy")}
-          />
-          <Divider />
-          <NavRow
-            icon="file-text"
-            title="Legal"
-            subtitle="Privacy Policy & Terms of Service"
-            onPress={() => router.push("/legal/document?type=privacy_policy")}
-          />
-        </Group>
-
-        {/* EXPERIENCE */}
-        <SectionLabel>EXPERIENCE</SectionLabel>
-        <Group>
-          <Pressable
-            onLongPress={onAppearanceLongPress}
-            android_ripple={{ color: colors.muted }}
-            style={({ pressed }) => [{ opacity: pressed ? 0.92 : 1 }]}
-          >
-            <View style={styles.row}>
-              <View
-                style={[styles.rowIcon, { backgroundColor: colors.primary + "14" }]}
+              <Text
+                style={{
+                  color: tierBadgeColor,
+                  fontFamily: "Inter_700Bold",
+                  fontSize: 9.5,
+                  letterSpacing: 1.1,
+                }}
               >
-                <Feather
-                  name={isDark ? "moon" : "sun"}
-                  size={15}
-                  color={colors.primary}
-                />
-              </View>
-              <View style={{ flex: 1, gap: 2 }}>
+                {tierBadgeText}
+              </Text>
+            </View>
+          </View>
+
+          <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+        </Pressable>
+
+        {/* ── Active goal card ── */}
+        {activeGoal && goalTitle ? (
+          <>
+            <SectionLabel>ACTIVE GOAL</SectionLabel>
+            <View
+              style={[
+                styles.goalCard,
+                {
+                  backgroundColor: colors.primary + "0D",
+                  borderColor: colors.primary + "30",
+                  borderRadius: colors.radius,
+                },
+              ]}
+            >
+              <View style={styles.goalTitleRow}>
+                <View
+                  style={[
+                    styles.goalIconBubble,
+                    { backgroundColor: colors.primary + "20" },
+                  ]}
+                >
+                  <Feather name="target" size={14} color={colors.primary} />
+                </View>
                 <Text
-                  numberOfLines={1}
+                  numberOfLines={2}
                   style={{
+                    flex: 1,
                     color: colors.foreground,
-                    fontFamily: "Inter_600SemiBold",
+                    fontFamily: "Inter_700Bold",
                     fontSize: 14.5,
+                    letterSpacing: -0.2,
                   }}
                 >
-                  Appearance
+                  {goalTitle}
+                </Text>
+              </View>
+
+              <View style={styles.progressLabelRow}>
+                <Text
+                  style={{
+                    color: colors.primary,
+                    fontFamily: "Inter_600SemiBold",
+                    fontSize: 11.5,
+                  }}
+                >
+                  Week {activeCurrentWeek} of {totalWeeks}
                 </Text>
                 <Text
-                  numberOfLines={1}
                   style={{
                     color: colors.mutedForeground,
                     fontFamily: "Inter_400Regular",
-                    fontSize: 12,
+                    fontSize: 11,
                   }}
                 >
-                  {account.themeOverride === "system"
-                    ? `System (${isDark ? "Dark" : "Light"})`
-                    : isDark
-                      ? "Dark"
-                      : "Light"}
+                  {Math.round(progress * 100)}%
                 </Text>
               </View>
-              <Switch
-                value={isDark}
-                onValueChange={onAppearanceToggle}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={colors.primaryForeground}
-              />
-            </View>
-          </Pressable>
-          <Divider />
-          <NavRow
-            icon="bell"
-            title="Notifications"
-            subtitle="Smart timing for nudges"
-            onPress={() => router.push("/account/notifications")}
-          />
-          <Divider />
-          <NavRow
-            icon="calendar"
-            title="Calendar sync"
-            subtitle={
-              account.calendarSync.enabled && account.calendarSync.calendarTitle
-                ? `On · ${account.calendarSync.calendarTitle}`
-                : account.calendarSync.enabled
-                  ? "On · pick a calendar"
-                  : "Off"
-            }
-            onPress={() => router.push("/account/calendar")}
-          />
-          <Divider />
-          <NavRow
-            icon="credit-card"
-            title="Subscription"
-            subtitle={`${tierInfo.label} · ${tierInfo.price}`}
-            onPress={() => router.push("/plans")}
-          />
-        </Group>
 
-        {/* SUBSCRIPTION HISTORY */}
-        <SectionLabel>SUBSCRIPTION HISTORY</SectionLabel>
-        <Group>
-          {tierHistoryLoading ? (
-            <View style={styles.historyPlaceholder}>
-              <ActivityIndicator size="small" color={colors.primary} />
-            </View>
-          ) : !tierHistoryData?.transitions?.length ? (
-            <View style={styles.historyPlaceholder}>
-              <Text
+              <View
                 style={{
-                  color: colors.mutedForeground,
-                  fontFamily: "Inter_400Regular",
-                  fontSize: 13,
+                  height: 4,
+                  borderRadius: 2,
+                  overflow: "hidden",
+                  backgroundColor: colors.primary + "20",
                 }}
               >
-                No subscription changes yet.
-              </Text>
+                <View
+                  style={{
+                    height: "100%",
+                    borderRadius: 2,
+                    backgroundColor: colors.primary,
+                    width: `${Math.round(progress * 100)}%`,
+                  }}
+                />
+              </View>
             </View>
-          ) : (
-            tierHistoryData.transitions.map((entry, idx) => (
-              <React.Fragment key={entry.id}>
-                {idx > 0 && <Divider />}
-                <HistoryRow entry={entry} />
-              </React.Fragment>
-            ))
-          )}
-        </Group>
+          </>
+        ) : null}
 
-        {/* SESSION */}
-        <SectionLabel>SESSION</SectionLabel>
-        <Group>
-          <NavRow
-            icon="log-out"
-            title="Sign out"
-            onPress={onSignOut}
+        {/* ── Stats & Streaks ── */}
+        <SectionLabel>STATS & STREAKS</SectionLabel>
+        <View style={styles.statsGrid}>
+          <StatBlock
+            label="Current Streak"
+            value={`${currentStreak}d`}
+            icon="zap"
+            colors={colors}
           />
-        </Group>
+          <StatBlock
+            label="Best Streak"
+            value={`${bestStreak}d`}
+            icon="award"
+            colors={colors}
+          />
+          <StatBlock
+            label="Tasks Done"
+            value={String(tasksDone)}
+            icon="check-circle"
+            colors={colors}
+          />
+          <StatBlock
+            label="Goals Active"
+            value={String(activeGoalCount)}
+            icon="flag"
+            colors={colors}
+          />
+        </View>
 
-        {/* Footer */}
         <Text
           style={{
             color: colors.mutedForeground,
@@ -413,10 +371,6 @@ export default function AccountScreen() {
     </View>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/*  Building blocks                                                            */
-/* -------------------------------------------------------------------------- */
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   const colors = useColors();
@@ -436,183 +390,53 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Group({ children }: { children: React.ReactNode }) {
-  const colors = useColors();
-  return (
-    <View
-      style={{
-        backgroundColor: colors.card,
-        borderColor: colors.border,
-        borderRadius: colors.radius,
-        borderWidth: 1,
-        overflow: "hidden",
-      }}
-    >
-      {children}
-    </View>
-  );
-}
-
-function Divider() {
-  const colors = useColors();
-  return (
-    <View
-      style={{
-        height: StyleSheet.hairlineWidth,
-        backgroundColor: colors.border,
-        marginLeft: 62,
-      }}
-    />
-  );
-}
-
-function NavRow({
+function StatBlock({
+  label,
+  value,
   icon,
-  title,
-  subtitle,
-  onPress,
+  colors,
 }: {
+  label: string;
+  value: string;
   icon: React.ComponentProps<typeof Feather>["name"];
-  title: string;
-  subtitle?: string;
-  onPress: () => void;
+  colors: ReturnType<typeof useColors>;
 }) {
-  const colors = useColors();
   return (
-    <Pressable
-      onPress={onPress}
-      android_ripple={{ color: colors.muted }}
-      style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+    <View
+      style={[
+        styles.statBlock,
+        {
+          backgroundColor: colors.card,
+          borderColor: colors.border,
+          borderRadius: colors.radius,
+        },
+      ]}
     >
-      <View style={styles.row}>
-        <View
-          style={[styles.rowIcon, { backgroundColor: colors.primary + "14" }]}
-        >
-          <Feather name={icon} size={13} color={colors.primary} />
-        </View>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text
-            numberOfLines={1}
-            style={{
-              color: colors.foreground,
-              fontFamily: "Inter_600SemiBold",
-              fontSize: 13,
-              letterSpacing: -0.1,
-            }}
-          >
-            {title}
-          </Text>
-          {subtitle && (
-            <Text
-              numberOfLines={1}
-              style={{
-                color: colors.mutedForeground,
-                fontFamily: "Inter_400Regular",
-                fontSize: 11,
-                lineHeight: 15,
-              }}
-            >
-              {subtitle}
-            </Text>
-          )}
-        </View>
-        <Feather
-          name="chevron-right"
-          size={15}
-          color={colors.mutedForeground}
-        />
+      <View
+        style={[styles.statIconBubble, { backgroundColor: colors.primary + "14" }]}
+      >
+        <Feather name={icon} size={13} color={colors.primary} />
       </View>
-    </Pressable>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Tier-history helpers                                                       */
-/* -------------------------------------------------------------------------- */
-
-const TIER_RANK: Record<string, number> = { free: 0, pro: 1, premium: 2 };
-
-function transitionDirection(from: string, to: string): { label: string; icon: React.ComponentProps<typeof Feather>["name"]; positive: boolean } {
-  const fromRank = TIER_RANK[from] ?? 0;
-  const toRank = TIER_RANK[to] ?? 0;
-  if (toRank > fromRank) return { label: "Upgraded", icon: "arrow-up-circle", positive: true };
-  if (toRank < fromRank) return { label: "Downgraded", icon: "arrow-down-circle", positive: false };
-  return { label: "Changed", icon: "refresh-cw", positive: true };
-}
-
-function triggerLabel(triggeredBy: string, eventType: string | null): string {
-  if (triggeredBy === "sync-tier") return "App sync";
-  if (!eventType) return "Purchase";
-  const map: Record<string, string> = {
-    INITIAL_PURCHASE: "Purchase",
-    RENEWAL: "Renewal",
-    CANCELLATION: "Cancelled",
-    EXPIRATION: "Expired",
-    BILLING_ISSUE: "Billing issue",
-    PRODUCT_CHANGE: "Plan change",
-    TRANSFER: "Transfer",
-    SUBSCRIBER_ALIAS: "Account merge",
-  };
-  return map[eventType] ?? "Purchase";
-}
-
-function tierDisplayName(tier: string): string {
-  const key = tier as SubscriptionTier;
-  return TIER_INFO[key]?.label ?? (tier.charAt(0).toUpperCase() + tier.slice(1));
-}
-
-function formatHistoryDate(raw: Date | string): string {
-  const d = typeof raw === "string" ? new Date(raw) : raw;
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
-
-function HistoryRow({ entry }: { entry: TierTransitionEntry }) {
-  const colors = useColors();
-  const dir = transitionDirection(entry.fromTier, entry.toTier);
-  const trigger = triggerLabel(entry.triggeredBy, entry.eventType);
-  const accentColor = dir.positive ? colors.primary : colors.destructive;
-  const dateStr = formatHistoryDate(entry.createdAt);
-
-  return (
-    <View style={[styles.row, { minHeight: 56 }]}>
-      <View style={[styles.rowIcon, { backgroundColor: accentColor + "14" }]}>
-        <Feather name={dir.icon} size={14} color={accentColor} />
-      </View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text
-          numberOfLines={1}
-          style={{
-            color: colors.foreground,
-            fontFamily: "Inter_600SemiBold",
-            fontSize: 13,
-            letterSpacing: -0.1,
-          }}
-        >
-          {dir.label} to {tierDisplayName(entry.toTier)}
-        </Text>
-        <Text
-          numberOfLines={1}
-          style={{
-            color: colors.mutedForeground,
-            fontFamily: "Inter_400Regular",
-            fontSize: 11,
-            lineHeight: 15,
-          }}
-        >
-          {trigger}
-          {dateStr ? `  ·  ${dateStr}` : ""}
-        </Text>
-      </View>
+      <Text
+        style={{
+          color: colors.foreground,
+          fontFamily: "Inter_700Bold",
+          fontSize: 22,
+          letterSpacing: -0.5,
+          marginTop: 8,
+        }}
+      >
+        {value}
+      </Text>
       <Text
         style={{
           color: colors.mutedForeground,
           fontFamily: "Inter_400Regular",
           fontSize: 11,
+          marginTop: 2,
         }}
       >
-        {tierDisplayName(entry.fromTier)}
-        {"  →"}
+        {label}
       </Text>
     </View>
   );
@@ -643,45 +467,63 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     lineHeight: 17,
   },
-  identityStrip: {
+  profileCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    padding: 12,
+    gap: 14,
+    padding: 14,
     borderWidth: 1,
   },
-  identityAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+  profileAvatar: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
   },
-  streakChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  tierBadge: {
+    alignSelf: "flex-start",
+    borderWidth: 1,
     borderRadius: 999,
-    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginTop: 3,
   },
-  row: {
+  goalCard: {
+    padding: 14,
+    borderWidth: 1,
+    gap: 10,
+  },
+  goalTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    minHeight: 52,
+    gap: 10,
   },
-  rowIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+  goalIconBubble: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
-  historyPlaceholder: {
-    paddingVertical: 18,
-    paddingHorizontal: 16,
+  progressLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  statsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  statBlock: {
+    flex: 1,
+    minWidth: "44%",
+    borderWidth: 1,
+    padding: 14,
+  },
+  statIconBubble: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },

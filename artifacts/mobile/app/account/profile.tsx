@@ -13,8 +13,10 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
@@ -23,6 +25,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { friendlyAuthError } from "@/lib/authErrors";
+import { TIER_INFO, type SubscriptionTier } from "@/types/atlas";
+import {
+  useGetMeTierHistory,
+  type TierTransitionEntry,
+} from "@workspace/api-client-react";
 
 const LANGUAGES = [
   "English",
@@ -40,7 +47,38 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, isLoaded } = useUser();
-  const { account, updateAccount } = useAtlas();
+  const { account, updateAccount, tier, signOut } = useAtlas();
+  const systemScheme = useColorScheme();
+  const effectiveScheme =
+    account.themeOverride === "system"
+      ? systemScheme ?? "light"
+      : account.themeOverride;
+  const isDark = effectiveScheme === "dark";
+
+  const onAppearanceToggle = (nextDark: boolean) => {
+    void updateAccount({ themeOverride: nextDark ? "dark" : "light" });
+  };
+  const onAppearanceLongPress = () => {
+    void updateAccount({ themeOverride: "system" });
+    if (Platform.OS !== "web") Alert.alert("Appearance", "Following system setting.");
+  };
+  const onSignOut = () => {
+    const doSignOut = async () => { await signOut(); };
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.confirm("Sign out of rubai?")) void doSignOut();
+    } else {
+      Alert.alert("Sign out?", "You can sign back in any time.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign out", onPress: doSignOut },
+      ]);
+    }
+  };
+
+  const tierKey =
+    (tier as SubscriptionTier) in TIER_INFO ? (tier as SubscriptionTier) : "free";
+  const tierInfo = TIER_INFO[tierKey];
+  const { data: tierHistoryData, isLoading: tierHistoryLoading } =
+    useGetMeTierHistory({ limit: 20 });
 
   const [field, setField] = useState<EditField>(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
@@ -282,6 +320,171 @@ export default function ProfileScreen() {
           value={user?.passwordEnabled ? "••••••••" : "Not set"}
           onPress={() => setField("password")}
         />
+
+        {/* ── PREFERENCES ── */}
+        <SectionLabel text="PREFERENCES" />
+        <SettingsGroup>
+          <Pressable
+            onLongPress={onAppearanceLongPress}
+            android_ripple={{ color: colors.muted }}
+            style={({ pressed }) => [{ opacity: pressed ? 0.92 : 1 }]}
+          >
+            <View style={pStyles.settingsRow}>
+              <View style={[pStyles.settingsIcon, { backgroundColor: colors.primary + "14" }]}>
+                <Feather name={isDark ? "moon" : "sun"} size={15} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={[pStyles.settingsTitle, { color: colors.foreground }]}>
+                  Appearance
+                </Text>
+                <Text style={[pStyles.settingsSubtitle, { color: colors.mutedForeground }]}>
+                  {account.themeOverride === "system"
+                    ? `System (${isDark ? "Dark" : "Light"})`
+                    : isDark
+                      ? "Dark"
+                      : "Light"}
+                </Text>
+              </View>
+              <Switch
+                value={isDark}
+                onValueChange={onAppearanceToggle}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.primaryForeground}
+              />
+            </View>
+          </Pressable>
+          <SettingsDivider />
+          <SettingsNavRow
+            icon="bell"
+            title="Notifications"
+            subtitle="Smart timing for nudges"
+            onPress={() => router.push("/account/notifications")}
+            colors={colors}
+          />
+        </SettingsGroup>
+
+        {/* ── ACCOUNT ── */}
+        <SectionLabel text="ACCOUNT" />
+        <SettingsGroup>
+          <SettingsNavRow
+            icon="calendar"
+            title="Calendar sync"
+            subtitle={
+              account.calendarSync.enabled && account.calendarSync.calendarTitle
+                ? `On · ${account.calendarSync.calendarTitle}`
+                : account.calendarSync.enabled
+                  ? "On · pick a calendar"
+                  : "Off"
+            }
+            onPress={() => router.push("/account/calendar")}
+            colors={colors}
+          />
+          <SettingsDivider />
+          <SettingsNavRow
+            icon="zap"
+            title="Behavioral memory"
+            subtitle="What rubai remembers about you"
+            onPress={() => router.push("/behavioral-insights")}
+            colors={colors}
+          />
+          <SettingsDivider />
+          <SettingsNavRow
+            icon="shield"
+            title="Privacy & data"
+            subtitle="Control what's stored"
+            onPress={() => router.push("/account/privacy")}
+            colors={colors}
+          />
+          <SettingsDivider />
+          <SettingsNavRow
+            icon="file-text"
+            title="Legal"
+            subtitle="Privacy Policy & Terms of Service"
+            onPress={() => router.push("/legal/document?type=privacy_policy")}
+            colors={colors}
+          />
+        </SettingsGroup>
+
+        {/* ── SUBSCRIPTION ── */}
+        <SectionLabel text="SUBSCRIPTION" />
+        <SettingsGroup>
+          <View style={pStyles.subscriptionHeader}>
+            <View style={[pStyles.settingsIcon, { backgroundColor: colors.primary + "14" }]}>
+              <Feather name="credit-card" size={15} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={[pStyles.settingsTitle, { color: colors.foreground }]}>
+                {tierInfo.label} plan
+              </Text>
+              <Text style={[pStyles.settingsSubtitle, { color: colors.mutedForeground }]}>
+                {tierInfo.price} · {tierInfo.tagline}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => router.push("/plans")}
+              style={({ pressed }) => [
+                pStyles.manageBtn,
+                {
+                  backgroundColor: colors.primary,
+                  opacity: pressed ? 0.85 : 1,
+                },
+              ]}
+            >
+              <Text style={{ color: colors.primaryForeground, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>
+                Manage
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Subscription history inline */}
+          <SettingsDivider />
+          <View style={pStyles.historyLabelRow}>
+            <Text style={[pStyles.historyLabel, { color: colors.mutedForeground }]}>
+              HISTORY
+            </Text>
+          </View>
+          {tierHistoryLoading ? (
+            <View style={pStyles.historyPlaceholder}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : !tierHistoryData?.transitions?.length ? (
+            <View style={pStyles.historyPlaceholder}>
+              <Text style={{ color: colors.mutedForeground, fontFamily: "Inter_400Regular", fontSize: 13 }}>
+                No subscription changes yet.
+              </Text>
+            </View>
+          ) : (
+            tierHistoryData.transitions.map((entry, idx) => (
+              <React.Fragment key={entry.id}>
+                {idx > 0 && <SettingsDivider />}
+                <HistoryRow entry={entry} colors={colors} />
+              </React.Fragment>
+            ))
+          )}
+        </SettingsGroup>
+
+        {/* ── SESSION ── */}
+        <SectionLabel text="SESSION" />
+        <Pressable
+          onPress={onSignOut}
+          android_ripple={{ color: colors.destructive + "20" }}
+          style={({ pressed }) => [
+            pStyles.signOutRow,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderRadius: colors.radius,
+              opacity: pressed ? 0.85 : 1,
+            },
+          ]}
+        >
+          <View style={[pStyles.settingsIcon, { backgroundColor: colors.destructive + "14" }]}>
+            <Feather name="log-out" size={15} color={colors.destructive} />
+          </View>
+          <Text style={{ color: colors.destructive, fontFamily: "Inter_600SemiBold", fontSize: 14.5 }}>
+            Sign out
+          </Text>
+        </Pressable>
       </ScrollView>
 
       {/* Edit modals */}
@@ -316,6 +519,204 @@ export default function ProfileScreen() {
     </View>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Settings group helpers (used by the appended sections)
+// ---------------------------------------------------------------------------
+
+function SettingsGroup({ children }: { children: React.ReactNode }) {
+  const colors = useColors();
+  return (
+    <View
+      style={{
+        backgroundColor: colors.card,
+        borderColor: colors.border,
+        borderRadius: colors.radius,
+        borderWidth: 1,
+        overflow: "hidden",
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
+function SettingsDivider() {
+  const colors = useColors();
+  return (
+    <View
+      style={{
+        height: StyleSheet.hairlineWidth,
+        backgroundColor: colors.border,
+        marginLeft: 54,
+      }}
+    />
+  );
+}
+
+function SettingsNavRow({
+  icon,
+  title,
+  subtitle,
+  onPress,
+  colors,
+}: {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  title: string;
+  subtitle?: string;
+  onPress: () => void;
+  colors: ReturnType<typeof useColors>;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      android_ripple={{ color: colors.muted }}
+      style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+    >
+      <View style={pStyles.settingsRow}>
+        <View style={[pStyles.settingsIcon, { backgroundColor: colors.primary + "14" }]}>
+          <Feather name={icon} size={15} color={colors.primary} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[pStyles.settingsTitle, { color: colors.foreground }]}>
+            {title}
+          </Text>
+          {subtitle ? (
+            <Text
+              numberOfLines={1}
+              style={[pStyles.settingsSubtitle, { color: colors.mutedForeground }]}
+            >
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
+        <Feather name="chevron-right" size={15} color={colors.mutedForeground} />
+      </View>
+    </Pressable>
+  );
+}
+
+const TIER_RANK: Record<string, number> = { free: 0, pro: 1, premium: 2 };
+function transitionDir(from: string, to: string) {
+  const f = TIER_RANK[from] ?? 0;
+  const t = TIER_RANK[to] ?? 0;
+  if (t > f) return { label: "Upgraded", icon: "arrow-up-circle" as const, positive: true };
+  if (t < f) return { label: "Downgraded", icon: "arrow-down-circle" as const, positive: false };
+  return { label: "Changed", icon: "refresh-cw" as const, positive: true };
+}
+function tierName(t: string): string {
+  const k = t as SubscriptionTier;
+  return TIER_INFO[k]?.label ?? (t.charAt(0).toUpperCase() + t.slice(1));
+}
+function historyTrigger(triggeredBy: string, eventType: string | null): string {
+  if (triggeredBy === "sync-tier") return "App sync";
+  if (!eventType) return "Purchase";
+  const m: Record<string, string> = {
+    INITIAL_PURCHASE: "Purchase", RENEWAL: "Renewal", CANCELLATION: "Cancelled",
+    EXPIRATION: "Expired", BILLING_ISSUE: "Billing issue", PRODUCT_CHANGE: "Plan change",
+    TRANSFER: "Transfer", SUBSCRIBER_ALIAS: "Account merge",
+  };
+  return m[eventType] ?? "Purchase";
+}
+function historyDate(raw: Date | string): string {
+  const d = typeof raw === "string" ? new Date(raw) : raw;
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function HistoryRow({
+  entry,
+  colors,
+}: {
+  entry: TierTransitionEntry;
+  colors: ReturnType<typeof useColors>;
+}) {
+  const dir = transitionDir(entry.fromTier, entry.toTier);
+  const trigger = historyTrigger(entry.triggeredBy, entry.eventType);
+  const accent = dir.positive ? colors.primary : colors.destructive;
+  return (
+    <View style={[pStyles.settingsRow, { minHeight: 52 }]}>
+      <View style={[pStyles.settingsIcon, { backgroundColor: accent + "14" }]}>
+        <Feather name={dir.icon} size={13} color={accent} />
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text numberOfLines={1} style={[pStyles.settingsTitle, { color: colors.foreground }]}>
+          {dir.label} to {tierName(entry.toTier)}
+        </Text>
+        <Text numberOfLines={1} style={[pStyles.settingsSubtitle, { color: colors.mutedForeground }]}>
+          {trigger}{historyDate(entry.createdAt) ? `  ·  ${historyDate(entry.createdAt)}` : ""}
+        </Text>
+      </View>
+      <Text style={{ color: colors.mutedForeground, fontFamily: "Inter_400Regular", fontSize: 11 }}>
+        {tierName(entry.fromTier)}{"  →"}
+      </Text>
+    </View>
+  );
+}
+
+// Extra styles for the appended settings sections
+const pStyles = StyleSheet.create({
+  settingsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    minHeight: 52,
+  },
+  settingsIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  settingsTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+    letterSpacing: -0.1,
+  },
+  settingsSubtitle: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11.5,
+    lineHeight: 15,
+  },
+  subscriptionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 13,
+  },
+  manageBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  historyLabelRow: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  historyLabel: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 10,
+    letterSpacing: 1.2,
+  },
+  historyPlaceholder: {
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  signOutRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    borderWidth: 1,
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Sub-components
