@@ -50,7 +50,6 @@ export default function AccountScreen() {
     goals,
     activeBehavioral,
     activeGoal,
-    activeTaskHistory,
     activeCurrentWeek,
     syncStatus,
     syncMessage,
@@ -72,18 +71,23 @@ export default function AccountScreen() {
     fullName.slice(0, 2);
   const avatarUrl = user?.imageUrl ?? null;
 
+  const allTaskHistory = useMemo(
+    () => goals.flatMap((g) => g.taskHistory ?? []),
+    [goals],
+  );
+
   const activeGoalCount = useMemo(
     () => goals.filter((g) => g.roadmap !== null).length,
     [goals],
   );
   const currentStreak = activeBehavioral.currentStreakDays;
   const bestStreak = useMemo(
-    () => computeBestStreak(activeTaskHistory),
-    [activeTaskHistory],
+    () => computeBestStreak(allTaskHistory),
+    [allTaskHistory],
   );
   const tasksDone = useMemo(
-    () => activeTaskHistory.filter((h) => h.completed).length,
-    [activeTaskHistory],
+    () => allTaskHistory.filter((h) => h.completed).length,
+    [allTaskHistory],
   );
 
   const goalTitle = activeGoal
