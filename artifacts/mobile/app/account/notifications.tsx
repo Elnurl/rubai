@@ -1,7 +1,9 @@
 import { Feather } from "@expo/vector-icons";
+import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import React, { useMemo, useRef, useState } from "react";
 import {
+  Alert,
   FlatList,
   Modal,
   Platform,
@@ -18,6 +20,43 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { formatTime } from "@/lib/languageLocales";
+
+const REMINDER_TAG = "rubai-daily-reminder";
+
+async function scheduleReminder(timeStr: string): Promise<void> {
+  if (Platform.OS === "web") return;
+  const [h, m] = timeStr.split(":").map(Number);
+  if (isNaN(h) || isNaN(m)) return;
+  // Cancel any existing rubai reminder first.
+  const existing = await Notifications.getAllScheduledNotificationsAsync();
+  for (const n of existing) {
+    if ((n.content.data as Record<string, unknown>)?.[REMINDER_TAG]) {
+      await Notifications.cancelScheduledNotificationAsync(n.identifier);
+    }
+  }
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: "rubai",
+      body: "Time to check your daily tasks and keep moving forward. 🎯",
+      data: { [REMINDER_TAG]: true },
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
+      hour: h,
+      minute: m,
+    },
+  });
+}
+
+async function cancelReminder(): Promise<void> {
+  if (Platform.OS === "web") return;
+  const existing = await Notifications.getAllScheduledNotificationsAsync();
+  for (const n of existing) {
+    if ((n.content.data as Record<string, unknown>)?.[REMINDER_TAG]) {
+      await Notifications.cancelScheduledNotificationAsync(n.identifier);
+    }
+  }
+}
 
 export default function NotificationsScreen() {
   const colors = useColors();
@@ -102,9 +141,22 @@ export default function NotificationsScreen() {
             </View>
             <Switch
               value={account.notificationsEnabled}
-              onValueChange={(v) =>
-                void updateAccount({ notificationsEnabled: v })
-              }
+              onValueChange={async (v) => {
+                if (v && Platform.OS !== "web") {
+                  const { status } = await Notifications.requestPermissionsAsync();
+                  if (status !== "granted") {
+                    Alert.alert(
+                      "Permission needed",
+                      "Enable notifications in your device Settings to receive reminders.",
+                    );
+                    return;
+                  }
+                  void scheduleReminder(account.reminderTime);
+                } else if (!v) {
+                  void cancelReminder();
+                }
+                void updateAccount({ notificationsEnabled: v });
+              }}
               trackColor={{ false: colors.border, true: colors.primary }}
               thumbColor={colors.primaryForeground}
             />
@@ -140,7 +192,7 @@ export default function NotificationsScreen() {
                     fontSize: 14.5,
                   }}
                 >
-                  Daily reminder time
+                  Set alarm
                 </Text>
                 <Text
                   style={{
@@ -168,6 +220,9 @@ export default function NotificationsScreen() {
         language={account.preferredLanguage}
         onConfirm={(t) => {
           void updateAccount({ reminderTime: t });
+          if (account.notificationsEnabled) {
+            void scheduleReminder(t);
+          }
           setShowPicker(false);
         }}
         onClose={() => setShowPicker(false)}
@@ -320,6 +375,7 @@ function TimePickerModal(props: {
                 snapToInterval={ITEM_H}
                 decelerationRate="fast"
                 onMomentumScrollEnd={(e) => handleHourScroll(e.nativeEvent.contentOffset.y)}
+                onScrollEndDrag={(e) => handleHourScroll(e.nativeEvent.contentOffset.y)}
                 getItemLayout={(_, index) => ({ length: ITEM_H, offset: ITEM_H * index, index })}
                 renderItem={({ item }) => (
                   <View style={[styles2.item, { height: ITEM_H }]}>
@@ -376,6 +432,7 @@ function TimePickerModal(props: {
                 snapToInterval={ITEM_H}
                 decelerationRate="fast"
                 onMomentumScrollEnd={(e) => handleMinScroll(e.nativeEvent.contentOffset.y)}
+                onScrollEndDrag={(e) => handleMinScroll(e.nativeEvent.contentOffset.y)}
                 getItemLayout={(_, index) => ({ length: ITEM_H, offset: ITEM_H * index, index })}
                 renderItem={({ item }) => (
                   <View style={[styles2.item, { height: ITEM_H }]}>

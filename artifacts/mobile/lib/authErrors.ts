@@ -45,6 +45,13 @@ export function friendlyAuthError(input: unknown): string {
       return "You're already signed in.";
     case "network_error":
       return "Network problem. Check your connection and try again.";
+    case "phone_number_exists":
+      return "That phone number is already linked to an account.";
+    case "form_param_format_invalid_phone_number":
+      return "Please enter a valid phone number.";
+    case "resource_forbidden":
+    case "feature_not_available_on_development_instance":
+      return "Phone verification isn't enabled on this account. Contact support to activate it.";
     default:
       return err.longMessage || err.message || "Something went wrong.";
   }

@@ -312,26 +312,24 @@ export default function AccountScreen() {
           <>
             <View style={styles.sectionLabelRow}>
               <SectionLabel>ACTIVE GOAL</SectionLabel>
-              {goals.length > 1 && (
-                <Pressable
-                  onPress={() => router.push("/account/goals")}
-                  hitSlop={8}
+              <Pressable
+                onPress={() => router.push("/account/goals" as never)}
+                hitSlop={8}
+              >
+                <Text
+                  style={{
+                    color: colors.primary,
+                    fontFamily: "Inter_500Medium",
+                    fontSize: 12,
+                    letterSpacing: 0.2,
+                  }}
                 >
-                  <Text
-                    style={{
-                      color: colors.primary,
-                      fontFamily: "Inter_500Medium",
-                      fontSize: 12,
-                      letterSpacing: 0.2,
-                    }}
-                  >
-                    See all
-                  </Text>
-                </Pressable>
-              )}
+                  {goals.length > 1 ? "Switch goal" : "See all"}
+                </Text>
+              </Pressable>
             </View>
             <Pressable
-              onPress={() => router.push("/account/goals")}
+              onPress={() => router.push("/account/goals" as never)}
               android_ripple={{ color: colors.primary + "14" }}
               style={({ pressed }) => [
                 styles.goalCard,
