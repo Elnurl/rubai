@@ -18,7 +18,13 @@ import {
   View,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import Animated, { FadeIn } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  useSharedValue,
+  withTiming,
+  useAnimatedStyle,
+  Easing,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ActiveGoalChip } from "@/components/ActiveGoalChip";
@@ -1897,6 +1903,23 @@ function ChatSessionsSidebar({
 }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const PANEL_W = 290;
+  const translateX = useSharedValue(-PANEL_W);
+
+  // Animate panel in/out on visibility change.
+  React.useEffect(() => {
+    translateX.value = withTiming(visible ? 0 : -PANEL_W, {
+      duration: 260,
+      easing: visible
+        ? Easing.out(Easing.cubic)
+        : Easing.in(Easing.cubic),
+    });
+  }, [visible, translateX, PANEL_W]);
+
+  const panelAnim = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
   // Newest first; sessions without messages bubble to the top via createdAt.
   const ordered = [...sessions].sort((a, b) => {
     const aT = Date.parse(a.lastMessageAt || a.createdAt) || 0;
@@ -1907,14 +1930,16 @@ function ChatSessionsSidebar({
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="none"
       onRequestClose={onClose}
     >
       <View style={sidebarStyles.backdropRow}>
-        <View
+        <Animated.View
           style={[
             sidebarStyles.panel,
+            panelAnim,
             {
+              width: PANEL_W,
               backgroundColor: colors.background,
               borderRightColor: colors.border,
               paddingTop: insets.top + 12,
@@ -2078,7 +2103,7 @@ function ChatSessionsSidebar({
               }}
             />
           )}
-        </View>
+        </Animated.View>
         <Pressable
           style={sidebarStyles.dismiss}
           onPress={onClose}
@@ -2096,8 +2121,6 @@ const sidebarStyles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.45)",
   },
   panel: {
-    width: "82%",
-    maxWidth: 360,
     borderRightWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 14,
   },
