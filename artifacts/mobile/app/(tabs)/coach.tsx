@@ -1877,9 +1877,9 @@ export default function CoachScreen() {
 
 // ---------------------------------------------------------------------------
 // ChatGPT-style sidebar listing every coaching session for the active goal.
-// Slides in from the left over a dim backdrop. Each row shows the session
-// title, a one-line preview of the latest message, and the time it landed.
-// Long-press (or the trash icon) deletes a session after confirmation.
+// Rendered as an absolute overlay (no Modal) so Reanimated owns 100% of the
+// enter/exit animation — no iOS native bottom-sheet transition can interfere.
+// Panel slides in from the left; backdrop fades in simultaneously.
 // ---------------------------------------------------------------------------
 
 function ChatSessionsSidebar({
@@ -1905,222 +1905,208 @@ function ChatSessionsSidebar({
   const insets = useSafeAreaInsets();
   const PANEL_W = 290;
   const translateX = useSharedValue(-PANEL_W);
+  const backdropOpacity = useSharedValue(0);
 
-  // Animate panel in/out on visibility change.
   React.useEffect(() => {
-    translateX.value = withTiming(visible ? 0 : -PANEL_W, {
+    const cfg = {
       duration: 260,
-      easing: visible
-        ? Easing.out(Easing.cubic)
-        : Easing.in(Easing.cubic),
-    });
-  }, [visible, translateX, PANEL_W]);
+      easing: visible ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
+    };
+    translateX.value = withTiming(visible ? 0 : -PANEL_W, cfg);
+    backdropOpacity.value = withTiming(visible ? 1 : 0, { duration: 220 });
+  }, [visible, translateX, backdropOpacity, PANEL_W]);
 
   const panelAnim = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
   }));
+  const backdropAnim = useAnimatedStyle(() => ({
+    opacity: backdropOpacity.value,
+  }));
 
-  // Newest first; sessions without messages bubble to the top via createdAt.
+  // Newest first.
   const ordered = [...sessions].sort((a, b) => {
     const aT = Date.parse(a.lastMessageAt || a.createdAt) || 0;
     const bT = Date.parse(b.lastMessageAt || b.createdAt) || 0;
     return bT - aT;
   });
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={onClose}
+    // Always mounted; pointerEvents controls whether touches reach children.
+    <View
+      style={[StyleSheet.absoluteFill, { zIndex: 100 }]}
+      pointerEvents={visible ? "box-none" : "none"}
     >
-      <View style={sidebarStyles.backdropRow}>
-        <Animated.View
-          style={[
-            sidebarStyles.panel,
-            panelAnim,
-            {
-              width: PANEL_W,
-              backgroundColor: colors.background,
-              borderRightColor: colors.border,
-              paddingTop: insets.top + 12,
-              paddingBottom: insets.bottom + 12,
-            },
-          ]}
-        >
-          <View style={sidebarStyles.panelHeader}>
-            <View style={{ flex: 1 }}>
-              <Text
-                style={[
-                  sidebarStyles.eyebrow,
-                  {
-                    color: colors.mutedForeground,
-                    fontFamily: "Inter_600SemiBold",
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                {goalTitle ? goalTitle.toUpperCase() : "CHATS"}
-              </Text>
-              <Text
-                style={[
-                  sidebarStyles.title,
-                  { color: colors.foreground, fontFamily: "Inter_700Bold" },
-                ]}
-              >
-                Chats
-              </Text>
-            </View>
-            <Pressable
-              onPress={onClose}
-              hitSlop={10}
-              accessibilityLabel="Close chat history"
-              style={({ pressed }) => [
-                sidebarStyles.iconBtn,
-                {
-                  borderColor: colors.border,
-                  backgroundColor: colors.muted,
-                  opacity: pressed ? 0.7 : 1,
-                },
-              ]}
-            >
-              <Feather name="x" size={16} color={colors.foreground} />
-            </Pressable>
-          </View>
-
-          <Pressable
-            onPress={onNewChat}
-            style={({ pressed }) => [
-              sidebarStyles.newBtn,
-              {
-                backgroundColor: colors.primary,
-                opacity: pressed ? 0.85 : 1,
-              },
-            ]}
-            testID="new-chat-button"
-          >
-            <Feather name="plus" size={16} color={colors.primaryForeground} />
-            <Text
-              style={[
-                sidebarStyles.newBtnText,
-                {
-                  color: colors.primaryForeground,
-                  fontFamily: "Inter_600SemiBold",
-                },
-              ]}
-            >
-              New chat
-            </Text>
-          </Pressable>
-
-          {ordered.length === 0 ? (
-            <View style={sidebarStyles.empty}>
-              <Text
-                style={[
-                  sidebarStyles.emptyText,
-                  {
-                    color: colors.mutedForeground,
-                    fontFamily: "Inter_500Medium",
-                  },
-                ]}
-              >
-                No chats yet. Tap "New chat" to start.
-              </Text>
-            </View>
-          ) : (
-            <FlatList
-              data={ordered}
-              keyExtractor={(s) => s.id}
-              contentContainerStyle={{ paddingVertical: 8 }}
-              renderItem={({ item }) => {
-                const isActive = item.id === activeSessionId;
-                const lastMsg =
-                  item.messages.length > 0
-                    ? item.messages[item.messages.length - 1].content
-                    : "";
-                const preview = lastMsg.replace(/\s+/g, " ").trim();
-                return (
-                  <Pressable
-                    onPress={() => onPickSession(item.id)}
-                    onLongPress={() => onDeleteSession(item.id, item.title)}
-                    style={({ pressed }) => [
-                      sidebarStyles.row,
-                      {
-                        borderColor: colors.border,
-                        backgroundColor: isActive
-                          ? colors.primary + "18"
-                          : pressed
-                            ? colors.muted
-                            : "transparent",
-                      },
-                    ]}
-                    testID={`session-row-${item.id}`}
-                  >
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          sidebarStyles.rowTitle,
-                          {
-                            color: colors.foreground,
-                            fontFamily: "Inter_600SemiBold",
-                          },
-                        ]}
-                      >
-                        {item.title || "New chat"}
-                      </Text>
-                      {preview ? (
-                        <Text
-                          numberOfLines={1}
-                          style={[
-                            sidebarStyles.rowPreview,
-                            {
-                              color: colors.mutedForeground,
-                              fontFamily: "Inter_400Regular",
-                            },
-                          ]}
-                        >
-                          {preview}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <Pressable
-                      onPress={() => onDeleteSession(item.id, item.title)}
-                      hitSlop={8}
-                      accessibilityLabel="Delete chat"
-                      style={({ pressed }) => ({
-                        padding: 6,
-                        opacity: pressed ? 0.6 : 0.8,
-                      })}
-                    >
-                      <Feather
-                        name="trash-2"
-                        size={14}
-                        color={colors.mutedForeground}
-                      />
-                    </Pressable>
-                  </Pressable>
-                );
-              }}
-            />
-          )}
-        </Animated.View>
+      {/* Dim backdrop — tapping it closes the drawer */}
+      <Animated.View
+        style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.45)" }, backdropAnim]}
+        pointerEvents={visible ? "auto" : "none"}
+      >
         <Pressable
-          style={sidebarStyles.dismiss}
+          style={StyleSheet.absoluteFill}
           onPress={onClose}
           accessibilityLabel="Close chat history"
         />
-      </View>
-    </Modal>
+      </Animated.View>
+
+      {/* Sliding panel */}
+      <Animated.View
+        style={[
+          sidebarStyles.panel,
+          panelAnim,
+          {
+            width: PANEL_W,
+            backgroundColor: colors.background,
+            borderRightColor: colors.border,
+            paddingTop: insets.top + 12,
+            paddingBottom: insets.bottom + 12,
+          },
+        ]}
+      >
+        <View style={sidebarStyles.panelHeader}>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={[
+                sidebarStyles.eyebrow,
+                { color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
+              ]}
+              numberOfLines={1}
+            >
+              {goalTitle ? goalTitle.toUpperCase() : "CHATS"}
+            </Text>
+            <Text
+              style={[
+                sidebarStyles.title,
+                { color: colors.foreground, fontFamily: "Inter_700Bold" },
+              ]}
+            >
+              Chats
+            </Text>
+          </View>
+          <Pressable
+            onPress={onClose}
+            hitSlop={10}
+            accessibilityLabel="Close chat history"
+            style={({ pressed }) => [
+              sidebarStyles.iconBtn,
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.muted,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <Feather name="x" size={16} color={colors.foreground} />
+          </Pressable>
+        </View>
+
+        <Pressable
+          onPress={onNewChat}
+          style={({ pressed }) => [
+            sidebarStyles.newBtn,
+            { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
+          ]}
+          testID="new-chat-button"
+        >
+          <Feather name="plus" size={16} color={colors.primaryForeground} />
+          <Text
+            style={[
+              sidebarStyles.newBtnText,
+              { color: colors.primaryForeground, fontFamily: "Inter_600SemiBold" },
+            ]}
+          >
+            New chat
+          </Text>
+        </Pressable>
+
+        {ordered.length === 0 ? (
+          <View style={sidebarStyles.empty}>
+            <Text
+              style={[
+                sidebarStyles.emptyText,
+                { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
+              ]}
+            >
+              No chats yet. Tap "New chat" to start.
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={ordered}
+            keyExtractor={(s) => s.id}
+            contentContainerStyle={{ paddingVertical: 8 }}
+            renderItem={({ item }) => {
+              const isActive = item.id === activeSessionId;
+              const lastMsg =
+                item.messages.length > 0
+                  ? item.messages[item.messages.length - 1].content
+                  : "";
+              const preview = lastMsg.replace(/\s+/g, " ").trim();
+              return (
+                <Pressable
+                  onPress={() => onPickSession(item.id)}
+                  onLongPress={() => onDeleteSession(item.id, item.title)}
+                  style={({ pressed }) => [
+                    sidebarStyles.row,
+                    {
+                      borderColor: colors.border,
+                      backgroundColor: isActive
+                        ? colors.primary + "18"
+                        : pressed
+                          ? colors.muted
+                          : "transparent",
+                    },
+                  ]}
+                  testID={`session-row-${item.id}`}
+                >
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        sidebarStyles.rowTitle,
+                        { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
+                      ]}
+                    >
+                      {item.title || "New chat"}
+                    </Text>
+                    {preview ? (
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          sidebarStyles.rowPreview,
+                          { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
+                        ]}
+                      >
+                        {preview}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Pressable
+                    onPress={() => onDeleteSession(item.id, item.title)}
+                    hitSlop={8}
+                    accessibilityLabel="Delete chat"
+                    style={({ pressed }) => ({
+                      padding: 6,
+                      opacity: pressed ? 0.6 : 0.8,
+                    })}
+                  >
+                    <Feather name="trash-2" size={14} color={colors.mutedForeground} />
+                  </Pressable>
+                </Pressable>
+              );
+            }}
+          />
+        )}
+      </Animated.View>
+    </View>
   );
 }
 
 const sidebarStyles = StyleSheet.create({
-  backdropRow: {
-    flex: 1,
-    flexDirection: "row",
-    backgroundColor: "rgba(0,0,0,0.45)",
-  },
   panel: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    bottom: 0,
     borderRightWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 14,
   },
