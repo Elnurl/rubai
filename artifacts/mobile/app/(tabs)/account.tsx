@@ -3,12 +3,16 @@ import { useUser } from "@clerk/expo";
 import { useRouter } from "expo-router";
 import React, { useMemo } from "react";
 import {
+  Alert,
   Image,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
+  useColorScheme,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -48,6 +52,9 @@ export default function AccountScreen() {
   const {
     tier,
     goals,
+    account,
+    updateAccount,
+    signOut,
     activeBehavioral,
     activeGoal,
     activeCurrentWeek,
@@ -55,6 +62,36 @@ export default function AccountScreen() {
     syncMessage,
     dismissSyncMessage,
   } = useAtlas();
+
+  const systemScheme = useColorScheme();
+  const effectiveScheme =
+    account.themeOverride === "system"
+      ? (systemScheme ?? "light")
+      : account.themeOverride;
+  const isDark = effectiveScheme === "dark";
+
+  const onSignOut = () => {
+    const doSignOut = async () => { await signOut(); };
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.confirm("Sign out of rubai?"))
+        void doSignOut();
+    } else {
+      Alert.alert("Sign out?", "You can sign back in any time.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign out", style: "destructive", onPress: doSignOut },
+      ]);
+    }
+  };
+
+  const openSubscriptionManagement = () => {
+    if (Platform.OS === "ios") {
+      void Linking.openURL("itms-apps://apps.apple.com/account/subscriptions");
+    } else if (Platform.OS === "android") {
+      void Linking.openURL("https://play.google.com/store/account/subscriptions");
+    } else {
+      void Linking.openURL("https://apps.apple.com/account/subscriptions");
+    }
+  };
   const { user } = useUser();
 
   const tierKey =
@@ -358,13 +395,165 @@ export default function AccountScreen() {
           />
         </View>
 
+        {/* ── Preferences ── */}
+        <SectionLabel>PREFERENCES</SectionLabel>
+        <View
+          style={[
+            styles.group,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderRadius: colors.radius,
+            },
+          ]}
+        >
+          <AcctRow
+            icon="bell"
+            title="Notifications"
+            onPress={() => router.push("/account/notifications")}
+            chevron
+            colors={colors}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <AcctRow
+            icon="moon"
+            title="Dark Mode"
+            colors={colors}
+            trailing={
+              <Switch
+                value={isDark}
+                onValueChange={(v) =>
+                  void updateAccount({ themeOverride: v ? "dark" : "light" })
+                }
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.primaryForeground}
+              />
+            }
+          />
+        </View>
+
+        {/* ── Account ── */}
+        <SectionLabel>ACCOUNT</SectionLabel>
+        <View
+          style={[
+            styles.group,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderRadius: colors.radius,
+            },
+          ]}
+        >
+          <AcctRow
+            icon="shield"
+            title="Privacy & Security"
+            onPress={() => router.push("/account/privacy")}
+            chevron
+            colors={colors}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <AcctRow
+            icon="help-circle"
+            title="Help & Support"
+            onPress={() =>
+              void Linking.openURL("mailto:support@rubai.app")
+            }
+            chevron
+            colors={colors}
+          />
+        </View>
+
+        {/* ── Subscription card ── */}
+        {tierKey !== "free" ? (
+          <View
+            style={[
+              styles.subCard,
+              {
+                backgroundColor: colors.primary + "1A",
+                borderColor: colors.primary + "40",
+                borderRadius: colors.radius,
+              },
+            ]}
+          >
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  color: colors.foreground,
+                  fontFamily: "Inter_700Bold",
+                  fontSize: 15,
+                  letterSpacing: -0.2,
+                }}
+              >
+                {tierKey === "premium" ? "rubai Premium" : "rubai Pro"}
+              </Text>
+              <Text
+                style={{
+                  color: colors.mutedForeground,
+                  fontFamily: "Inter_400Regular",
+                  fontSize: 12,
+                  marginTop: 2,
+                }}
+              >
+                Active subscription
+              </Text>
+            </View>
+            <Pressable
+              onPress={openSubscriptionManagement}
+              style={({ pressed }) => [
+                styles.manageBtn,
+                {
+                  backgroundColor: colors.primary,
+                  opacity: pressed ? 0.8 : 1,
+                },
+              ]}
+            >
+              <Text
+                style={{
+                  color: colors.primaryForeground,
+                  fontFamily: "Inter_700Bold",
+                  fontSize: 13,
+                }}
+              >
+                Manage
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {/* ── Sign out ── */}
+        <Pressable
+          onPress={onSignOut}
+          android_ripple={{ color: colors.destructive + "22" }}
+          style={({ pressed }) => [
+            styles.signOutBtn,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.destructive + "40",
+              borderRadius: colors.radius,
+              opacity: pressed ? 0.8 : 1,
+            },
+          ]}
+        >
+          <Feather name="log-out" size={16} color={colors.destructive} />
+          <Text
+            style={{
+              color: colors.destructive,
+              fontFamily: "Inter_600SemiBold",
+              fontSize: 15,
+              marginLeft: 8,
+            }}
+          >
+            Sign Out
+          </Text>
+        </Pressable>
+
         <Text
           style={{
             color: colors.mutedForeground,
             fontFamily: "Inter_400Regular",
-            fontSize: 11.5,
+            fontSize: 11,
             textAlign: "center",
-            paddingTop: 14,
+            paddingTop: 6,
             paddingBottom: 4,
             letterSpacing: 0.2,
           }}
@@ -444,6 +633,58 @@ function StatBlock({
       </Text>
     </View>
   );
+}
+
+function AcctRow({
+  icon,
+  title,
+  chevron,
+  trailing,
+  onPress,
+  colors,
+}: {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  title: string;
+  chevron?: boolean;
+  trailing?: React.ReactNode;
+  onPress?: () => void;
+  colors: ReturnType<typeof useColors>;
+}) {
+  const inner = (
+    <View style={styles.acctRow}>
+      <View style={[styles.acctIcon, { backgroundColor: colors.primary + "14" }]}>
+        <Feather name={icon} size={15} color={colors.primary} />
+      </View>
+      <Text
+        style={{
+          flex: 1,
+          color: colors.foreground,
+          fontFamily: "Inter_600SemiBold",
+          fontSize: 14.5,
+          letterSpacing: -0.1,
+        }}
+      >
+        {title}
+      </Text>
+      {trailing ??
+        (chevron && (
+          <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+        ))}
+    </View>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        android_ripple={{ color: colors.muted }}
+        style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+      >
+        {inner}
+      </Pressable>
+    );
+  }
+  return inner;
 }
 
 const styles = StyleSheet.create({
@@ -530,5 +771,47 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
+  },
+  group: {
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 62,
+  },
+  acctRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    minHeight: 56,
+  },
+  acctIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  subCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    padding: 14,
+    gap: 12,
+  },
+  manageBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  signOutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    paddingVertical: 14,
   },
 });
