@@ -19,6 +19,7 @@ import type {
 import type {
   AdaptRequest,
   AdaptResponse,
+  AdminGetUserTierHistoryParams,
   AnalyzeReflectionImageRequest,
   AnalyzeReflectionImageResponse,
   BehavioralProfileRequest,
@@ -466,6 +467,132 @@ export function useGetMeTierHistory<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetMeTierHistoryQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns every tier transition for the specified user in reverse-chronological order.
+Intended for support staff to answer billing questions without requiring the customer
+to be present or granting direct database access.
+Requires the `X-Admin-Key` header to match the server's `ADMIN_API_KEY` environment variable.
+
+ * @summary Subscription tier history for any user (support lookup)
+ */
+export const getAdminGetUserTierHistoryUrl = (
+  clerkUserId: string,
+  params?: AdminGetUserTierHistoryParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/users/${clerkUserId}/tier-history?${stringifiedParams}`
+    : `/api/admin/users/${clerkUserId}/tier-history`;
+};
+
+export const adminGetUserTierHistory = async (
+  clerkUserId: string,
+  params?: AdminGetUserTierHistoryParams,
+  options?: RequestInit,
+): Promise<TierHistoryResponse> => {
+  return customFetch<TierHistoryResponse>(
+    getAdminGetUserTierHistoryUrl(clerkUserId, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getAdminGetUserTierHistoryQueryKey = (
+  clerkUserId: string,
+  params?: AdminGetUserTierHistoryParams,
+) => {
+  return [
+    `/api/admin/users/${clerkUserId}/tier-history`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getAdminGetUserTierHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof adminGetUserTierHistory>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  clerkUserId: string,
+  params?: AdminGetUserTierHistoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof adminGetUserTierHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getAdminGetUserTierHistoryQueryKey(clerkUserId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof adminGetUserTierHistory>>
+  > = ({ signal }) =>
+    adminGetUserTierHistory(clerkUserId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clerkUserId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof adminGetUserTierHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type AdminGetUserTierHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof adminGetUserTierHistory>>
+>;
+export type AdminGetUserTierHistoryQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Subscription tier history for any user (support lookup)
+ */
+
+export function useAdminGetUserTierHistory<
+  TData = Awaited<ReturnType<typeof adminGetUserTierHistory>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  clerkUserId: string,
+  params?: AdminGetUserTierHistoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof adminGetUserTierHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getAdminGetUserTierHistoryQueryOptions(
+    clerkUserId,
+    params,
+    options,
+  );
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

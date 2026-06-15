@@ -164,6 +164,56 @@ export const GetMeTierHistoryResponse = zod.object({
 });
 
 /**
+ * Returns every tier transition for the specified user in reverse-chronological order.
+Intended for support staff to answer billing questions without requiring the customer
+to be present or granting direct database access.
+Requires the `X-Admin-Key` header to match the server's `ADMIN_API_KEY` environment variable.
+
+ * @summary Subscription tier history for any user (support lookup)
+ */
+export const AdminGetUserTierHistoryParams = zod.object({
+  clerkUserId: zod.coerce
+    .string()
+    .describe("The Clerk user ID of the user to look up."),
+});
+
+export const adminGetUserTierHistoryQueryLimitDefault = 50;
+export const adminGetUserTierHistoryQueryLimitMax = 100;
+
+export const AdminGetUserTierHistoryQueryParams = zod.object({
+  limit: zod.coerce
+    .number()
+    .min(1)
+    .max(adminGetUserTierHistoryQueryLimitMax)
+    .default(adminGetUserTierHistoryQueryLimitDefault)
+    .describe("Maximum number of records to return (1–100, default 50)."),
+});
+
+export const AdminGetUserTierHistoryResponse = zod.object({
+  transitions: zod.array(
+    zod
+      .object({
+        id: zod.number(),
+        fromTier: zod.string(),
+        toTier: zod.string(),
+        triggeredBy: zod.string().describe('\"webhook\" or \"sync-tier\"'),
+        eventType: zod
+          .union([zod.string(), zod.null()])
+          .describe(
+            'Raw RevenueCat event type (e.g. \"INITIAL_PURCHASE\"). Null for sync-tier entries.',
+          ),
+        createdAt: zod.coerce.date(),
+      })
+      .describe(
+        "A single tier change event in the user's subscription history.",
+      ),
+  ),
+  total: zod
+    .number()
+    .describe("Total number of transitions returned in this response."),
+});
+
+/**
  * @summary Continue an adaptive onboarding conversation for the chosen goal model
  */
 export const AtlasOnboardingChatBody = zod.object({
@@ -987,6 +1037,10 @@ export const AtlasCoachResponse = zod.object({
             "regenerateDay",
             "syncToCalendar",
             "addCalendarEvent",
+            "editMilestone",
+            "addMilestone",
+            "removeMilestone",
+            "editPhase",
           ]),
           label: zod.string(),
           rationale: zod.string(),
@@ -1050,6 +1104,37 @@ export const AtlasCoachResponse = zod.object({
                 .describe(
                   "A single calendar event the coach can add on the user's behalf.",
                 ),
+              zod.null(),
+            ])
+            .optional(),
+          milestoneId: zod.union([zod.string(), zod.null()]).optional(),
+          milestonePhaseId: zod.union([zod.string(), zod.null()]).optional(),
+          phaseId: zod.union([zod.string(), zod.null()]).optional(),
+          newMilestone: zod
+            .union([
+              zod.object({
+                title: zod.string(),
+                description: zod.string(),
+                weekNumber: zod.number(),
+              }),
+              zod.null(),
+            ])
+            .optional(),
+          milestonePatch: zod
+            .union([
+              zod.object({
+                title: zod.union([zod.string(), zod.null()]),
+                description: zod.union([zod.string(), zod.null()]),
+              }),
+              zod.null(),
+            ])
+            .optional(),
+          phasePatch: zod
+            .union([
+              zod.object({
+                title: zod.union([zod.string(), zod.null()]),
+                focus: zod.union([zod.string(), zod.null()]),
+              }),
               zod.null(),
             ])
             .optional(),

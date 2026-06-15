@@ -1506,6 +1506,43 @@ components:
             - type: "null"
       required: [title, notes, startISO, durationMinutes]
 
+    CoachMilestonePatch:
+      type: object
+      properties:
+        title:
+          oneOf:
+            - type: string
+            - type: "null"
+        description:
+          oneOf:
+            - type: string
+            - type: "null"
+      required: [title, description]
+
+    CoachPhasePatch:
+      type: object
+      properties:
+        title:
+          oneOf:
+            - type: string
+            - type: "null"
+        focus:
+          oneOf:
+            - type: string
+            - type: "null"
+      required: [title, focus]
+
+    CoachNewMilestone:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        weekNumber:
+          type: integer
+      required: [title, description, weekNumber]
+
     ProposedCoachAction:
       type: object
       description: A concrete plan/goal/calendar-modifying action the AI applies instantly (with Undo).
@@ -1523,6 +1560,10 @@ components:
               regenerateDay,
               syncToCalendar,
               addCalendarEvent,
+              editMilestone,
+              addMilestone,
+              removeMilestone,
+              editPhase,
             ]
         label:
           type: string
@@ -1559,6 +1600,30 @@ components:
         event:
           oneOf:
             - $ref: "#/components/schemas/CoachCalendarEvent"
+            - type: "null"
+        milestoneId:
+          oneOf:
+            - type: string
+            - type: "null"
+        milestonePhaseId:
+          oneOf:
+            - type: string
+            - type: "null"
+        phaseId:
+          oneOf:
+            - type: string
+            - type: "null"
+        newMilestone:
+          oneOf:
+            - $ref: "#/components/schemas/CoachNewMilestone"
+            - type: "null"
+        milestonePatch:
+          oneOf:
+            - $ref: "#/components/schemas/CoachMilestonePatch"
+            - type: "null"
+        phasePatch:
+          oneOf:
+            - $ref: "#/components/schemas/CoachPhasePatch"
             - type: "null"
       required: [kind, label, rationale]
 

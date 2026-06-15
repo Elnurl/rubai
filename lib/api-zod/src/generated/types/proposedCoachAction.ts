@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CoachCalendarEvent } from "./coachCalendarEvent";
+import type { CoachMilestonePatch } from "./coachMilestonePatch";
+import type { CoachNewMilestone } from "./coachNewMilestone";
+import type { CoachPhasePatch } from "./coachPhasePatch";
 import type { CoachTaskPatch } from "./coachTaskPatch";
 import type { DailyTask } from "./dailyTask";
 import type { ProposedCoachActionKind } from "./proposedCoachActionKind";
@@ -25,4 +28,10 @@ export interface ProposedCoachAction {
   newTitle?: string | null;
   removeTaskIds?: string[];
   event?: CoachCalendarEvent | null;
+  milestoneId?: string | null;
+  milestonePhaseId?: string | null;
+  phaseId?: string | null;
+  newMilestone?: CoachNewMilestone | null;
+  milestonePatch?: CoachMilestonePatch | null;
+  phasePatch?: CoachPhasePatch | null;
 }

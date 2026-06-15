@@ -19,4 +19,8 @@ export const ProposedCoachActionKind = {
   regenerateDay: "regenerateDay",
   syncToCalendar: "syncToCalendar",
   addCalendarEvent: "addCalendarEvent",
+  editMilestone: "editMilestone",
+  addMilestone: "addMilestone",
+  removeMilestone: "removeMilestone",
+  editPhase: "editPhase",
 } as const;

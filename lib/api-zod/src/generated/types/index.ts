@@ -9,6 +9,7 @@
 export * from "./adaptRequest";
 export * from "./adaptResponse";
 export * from "./adaptResponseDifficultyAdjustment";
+export * from "./adminGetUserTierHistoryParams";
 export * from "./analyzeReflectionImageRequest";
 export * from "./analyzeReflectionImageResponse";
 export * from "./behavioralProfile";
@@ -27,6 +28,9 @@ export * from "./coachAttachmentImage";
 export * from "./coachCalendarEvent";
 export * from "./coachMemory";
 export * from "./coachMemoryUpdate";
+export * from "./coachMilestonePatch";
+export * from "./coachNewMilestone";
+export * from "./coachPhasePatch";
 export * from "./coachRequest";
 export * from "./coachRequestModelChoice";
 export * from "./coachResponse";

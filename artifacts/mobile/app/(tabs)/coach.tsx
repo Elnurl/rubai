@@ -488,10 +488,13 @@ export default function CoachScreen() {
           // activeController stays null and we DO show the error message.
           !!activeController?.signal.aborted;
         if (aborted) return;
+        const isQuotaExceeded =
+          err instanceof Error && err.message === "quota_exceeded";
         const errMsg: ChatMessage = {
           role: "assistant",
-          content:
-            "Bağlantı bir anlığa kəsildi. Mesajını yenidən göndər — davam edək.",
+          content: isQuotaExceeded
+            ? "Günlük AI limitinə çatdın. Daha çox istifadə üçün planını yüksəlt. 🚀"
+            : "Bağlantı bir anlığa kəsildi. Mesajını yenidən göndər — davam edək.",
         };
         await appendCoachMessageToSession(pinnedGoalId, pinnedSessionId, errMsg);
       }
@@ -874,6 +877,163 @@ export default function CoachScreen() {
                   account.calendarSync.calendarTitle,
                 );
               }
+            }
+            break;
+          }
+          case "editMilestone": {
+            const { milestonePhaseId, milestoneId, milestonePatch } = action;
+            if (milestonePhaseId && milestoneId && milestonePatch && activeRoadmap) {
+              const prevRoadmap = activeRoadmap;
+              const edited = activeRoadmap.phases
+                .find((p) => p.id === milestonePhaseId)
+                ?.milestones.find((m) => m.id === milestoneId);
+              await updateActiveGoal((g) => {
+                if (!g.roadmap) return g;
+                return {
+                  ...g,
+                  roadmap: {
+                    ...g.roadmap,
+                    phases: g.roadmap.phases.map((phase) =>
+                      phase.id !== milestonePhaseId
+                        ? phase
+                        : {
+                            ...phase,
+                            milestones: phase.milestones.map((m) =>
+                              m.id !== milestoneId
+                                ? m
+                                : {
+                                    ...m,
+                                    ...(milestonePatch.title != null
+                                      ? { title: milestonePatch.title }
+                                      : {}),
+                                    ...(milestonePatch.description != null
+                                      ? { description: milestonePatch.description }
+                                      : {}),
+                                  },
+                            ),
+                          },
+                    ),
+                  },
+                };
+              });
+              confirmation = edited
+                ? `Updated milestone "${edited.title}".`
+                : "Updated milestone.";
+              undoFn = async () => {
+                await updateActiveGoal((g) => ({ ...g, roadmap: prevRoadmap }));
+              };
+              applied = true;
+            }
+            break;
+          }
+          case "addMilestone": {
+            const { milestonePhaseId, newMilestone } = action;
+            if (milestonePhaseId && newMilestone && activeRoadmap) {
+              const prevRoadmap = activeRoadmap;
+              const newId = `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+              await updateActiveGoal((g) => {
+                if (!g.roadmap) return g;
+                return {
+                  ...g,
+                  roadmap: {
+                    ...g.roadmap,
+                    phases: g.roadmap.phases.map((phase) =>
+                      phase.id !== milestonePhaseId
+                        ? phase
+                        : {
+                            ...phase,
+                            milestones: [
+                              ...phase.milestones,
+                              {
+                                id: newId,
+                                title: newMilestone.title,
+                                description: newMilestone.description,
+                                weekNumber: newMilestone.weekNumber,
+                              },
+                            ],
+                          },
+                    ),
+                  },
+                };
+              });
+              confirmation = `Added milestone "${newMilestone.title}".`;
+              undoFn = async () => {
+                await updateActiveGoal((g) => ({ ...g, roadmap: prevRoadmap }));
+              };
+              applied = true;
+            }
+            break;
+          }
+          case "removeMilestone": {
+            const { milestonePhaseId, milestoneId } = action;
+            if (milestonePhaseId && milestoneId && activeRoadmap) {
+              const prevRoadmap = activeRoadmap;
+              const removed = activeRoadmap.phases
+                .find((p) => p.id === milestonePhaseId)
+                ?.milestones.find((m) => m.id === milestoneId);
+              await updateActiveGoal((g) => {
+                if (!g.roadmap) return g;
+                return {
+                  ...g,
+                  roadmap: {
+                    ...g.roadmap,
+                    phases: g.roadmap.phases.map((phase) =>
+                      phase.id !== milestonePhaseId
+                        ? phase
+                        : {
+                            ...phase,
+                            milestones: phase.milestones.filter(
+                              (m) => m.id !== milestoneId,
+                            ),
+                          },
+                    ),
+                  },
+                };
+              });
+              confirmation = removed
+                ? `Removed milestone "${removed.title}".`
+                : "Removed milestone.";
+              undoFn = async () => {
+                await updateActiveGoal((g) => ({ ...g, roadmap: prevRoadmap }));
+              };
+              applied = true;
+            }
+            break;
+          }
+          case "editPhase": {
+            const { phaseId, phasePatch } = action;
+            if (phaseId && phasePatch && activeRoadmap) {
+              const prevRoadmap = activeRoadmap;
+              const editedPhase = activeRoadmap.phases.find((p) => p.id === phaseId);
+              await updateActiveGoal((g) => {
+                if (!g.roadmap) return g;
+                return {
+                  ...g,
+                  roadmap: {
+                    ...g.roadmap,
+                    phases: g.roadmap.phases.map((phase) =>
+                      phase.id !== phaseId
+                        ? phase
+                        : {
+                            ...phase,
+                            ...(phasePatch.title != null
+                              ? { title: phasePatch.title }
+                              : {}),
+                            ...(phasePatch.focus != null
+                              ? { focus: phasePatch.focus }
+                              : {}),
+                          },
+                    ),
+                  },
+                };
+              });
+              confirmation = editedPhase
+                ? `Updated phase "${editedPhase.title}".`
+                : "Updated phase.";
+              undoFn = async () => {
+                await updateActiveGoal((g) => ({ ...g, roadmap: prevRoadmap }));
+              };
+              applied = true;
             }
             break;
           }

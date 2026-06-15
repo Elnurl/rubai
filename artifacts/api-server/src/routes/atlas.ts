@@ -38,6 +38,7 @@ import {
 } from "../lib/dailyPlanCache";
 import { sendPushTo } from "../lib/pushScheduler";
 import { retrieveRelevantContext } from "../lib/ragRetrieval";
+import { requireAiQuota } from "../middlewares/requireAiQuota";
 import {
   AtlasOnboardingChatBody as atlasOnboardingChatBody,
   AtlasGenerateRoadmapBody as atlasGenerateRoadmapBody,
@@ -315,7 +316,7 @@ When isComplete=false, set nextMessage to: ${JSON.stringify(nextMessage)}`,
   }
 });
 
-router.post("/roadmap", async (req, res) => {
+router.post("/roadmap", requireAiQuota, async (req, res) => {
   const parsed = atlasGenerateRoadmapBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -370,7 +371,7 @@ ${langRule}`,
   }
 });
 
-router.post("/daily-plan", async (req, res) => {
+router.post("/daily-plan", requireAiQuota, async (req, res) => {
   const parsed = atlasGenerateDailyPlanBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -637,6 +638,28 @@ const coachCalendarEventValidator = z
   })
   .nullable();
 
+const coachMilestonePatchValidator = z
+  .object({
+    title: z.string().nullable(),
+    description: z.string().nullable(),
+  })
+  .nullable();
+
+const coachPhasePatchValidator = z
+  .object({
+    title: z.string().nullable(),
+    focus: z.string().nullable(),
+  })
+  .nullable();
+
+const coachNewMilestoneValidator = z
+  .object({
+    title: z.string(),
+    description: z.string(),
+    weekNumber: z.number().int(),
+  })
+  .nullable();
+
 const coachProposedActionValidator = z
   .object({
     kind: z.enum([
@@ -649,6 +672,10 @@ const coachProposedActionValidator = z
       "regenerateDay",
       "syncToCalendar",
       "addCalendarEvent",
+      "editMilestone",
+      "addMilestone",
+      "removeMilestone",
+      "editPhase",
       "none",
     ]),
     label: z.string(),
@@ -664,6 +691,13 @@ const coachProposedActionValidator = z
     newTitle: z.string().nullable(),
     removeTaskIds: z.array(z.string()),
     event: coachCalendarEventValidator,
+    // Roadmap-editing fields (Premium only)
+    milestoneId: z.string().nullable(),
+    milestonePhaseId: z.string().nullable(),
+    phaseId: z.string().nullable(),
+    newMilestone: coachNewMilestoneValidator,
+    milestonePatch: coachMilestonePatchValidator,
+    phasePatch: coachPhasePatchValidator,
   })
   .nullable();
 
@@ -695,6 +729,13 @@ const PROPOSED_ACTION_RULES = `- "proposedAction": include ONLY when the user is
     • syncToCalendar — put TODAY's tasks on their calendar. No payload; the app writes each task as an event.
     • addCalendarEvent — add ONE meeting/event to their calendar. Fill 'event' (title; notes or null; startISO in ISO-8601 if a specific time is implied else null; durationMinutes or null).
   Otherwise return null. Only act when they clearly ask. Reply text and the action must agree. Never repeat an action you already performed on the previous turn. When you reference a behavioral pattern (peak hours, consistency, momentum), state it plainly in 'reply' rather than only pointing them elsewhere.`;
+
+const ROADMAP_EDIT_RULES = `- ROADMAP EDITING (Premium): You MAY directly edit the roadmap when the user explicitly asks to change a milestone or phase. Use exact ids from the ROADMAP STRUCTURE block above. The app applies the change instantly with Undo.
+    • editMilestone — update an existing milestone. Fill 'milestonePhaseId' + 'milestoneId' (exact ids from ROADMAP STRUCTURE) and 'milestonePatch' with ONLY the fields to change (title or description; leave others null).
+    • addMilestone — add a new milestone to an existing phase. Fill 'milestonePhaseId' (exact phase id) and 'newMilestone' (title, description, weekNumber within that phase's range).
+    • removeMilestone — delete a milestone. Fill 'milestonePhaseId' + 'milestoneId'.
+    • editPhase — rename a phase or change its focus text. Fill 'phaseId' (exact phase id) and 'phasePatch' with ONLY the fields to change. Never change a phase's week range.
+  Roadmap edits are PREMIUM-ONLY. Propose roadmap edits only when the user explicitly asks — do not proactively restructure the roadmap.`;
 
 /**
  * Stream fallback resolver. Pulled out as a pure exported helper so the
@@ -853,7 +894,7 @@ const roadmapEvolutionValidator = z.object({
   rationale: z.string(),
 });
 
-router.post("/coach", async (req, res) => {
+router.post("/coach", requireAiQuota, async (req, res) => {
   const parsed = atlasCoachBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -1020,6 +1061,18 @@ router.post("/coach", async (req, res) => {
       coachMemory,
     });
 
+    const roadmapStructureBlock =
+      tier === "premium"
+        ? `\n\nROADMAP STRUCTURE (use exact ids for roadmap editing):\n${roadmap.phases
+            .map(
+              (p) =>
+                `Phase ${p.id} "${p.title}" (weeks ${p.startWeek}–${p.endWeek}): ${p.milestones
+                  .map((m) => `[${m.id}] ${m.title}`)
+                  .join(", ")}`,
+            )
+            .join("\n")}`
+        : "";
+
     const systemContext = `You are rabai — a strategic AI execution coach inside a mobile app. The user has come to you for guidance.
 
 Speak conversationally, with warmth and precision. EVERY reply must ground itself in the real context below — reference the current phase, today's tasks, a recent reflection, a learned trait, or a known fact, not generic advice. Push back gently when they make excuses, celebrate small wins, name the pattern you see.
@@ -1033,12 +1086,12 @@ Hard rules:
     • refresh_insights — they're asking about themselves / patterns / "what should I focus on" and the learned profile feels stale.
     • reflect_on_task — they mentioned a specific task they did or skipped and haven't reflected on it.
   Otherwise return null. Don't suggest the same action two turns in a row.
-${PROPOSED_ACTION_RULES}
+${PROPOSED_ACTION_RULES}${tier === "premium" ? `\n${ROADMAP_EDIT_RULES}` : ""}
 - "memoryUpdate": include ONLY when the user revealed something durable in THIS message (a constraint, preference, life event, identity statement). Otherwise null. The summary you write replaces the prior summary; keep it ≤ 3 sentences. newFacts must not duplicate existing facts.
 - If the user goes off-topic, steer back to their goal in one sentence.
 
 CONTEXT:
-${contextBlock}${
+${contextBlock}${roadmapStructureBlock}${
       calendarContext && calendarContext.trim().length > 0
         ? `\n\nTODAY'S CALENDAR:\n${calendarContext.trim()}`
         : ""
@@ -1142,6 +1195,22 @@ type CoachRawOutput = {
       notes?: string | null;
       startISO?: string | null;
       durationMinutes?: number | null;
+    } | null;
+    milestoneId?: string | null;
+    milestonePhaseId?: string | null;
+    phaseId?: string | null;
+    newMilestone?: {
+      title?: string;
+      description?: string;
+      weekNumber?: number;
+    } | null;
+    milestonePatch?: {
+      title?: string | null;
+      description?: string | null;
+    } | null;
+    phasePatch?: {
+      title?: string | null;
+      focus?: string | null;
     } | null;
   } | null;
 };
@@ -1367,7 +1436,7 @@ function normalizeCoachOutput(
 // compatibility and as a fallback when the client cannot consume SSE
 // (e.g. older RN runtimes without fetch streaming).
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/coach/stream", async (req, res) => {
+router.post("/coach/stream", requireAiQuota, async (req, res) => {
   const parsed = atlasCoachBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -1522,6 +1591,18 @@ router.post("/coach/stream", async (req, res) => {
     coachMemory,
   });
 
+  const roadmapStructureBlockStream =
+    tierStream === "premium"
+      ? `\n\nROADMAP STRUCTURE (use exact ids for roadmap editing):\n${roadmap.phases
+          .map(
+            (p) =>
+              `Phase ${p.id} "${p.title}" (weeks ${p.startWeek}–${p.endWeek}): ${p.milestones
+                .map((m) => `[${m.id}] ${m.title}`)
+                .join(", ")}`,
+          )
+          .join("\n")}`
+      : "";
+
   const systemContext = `You are rabai — a strategic AI execution coach inside a mobile app. The user has come to you for guidance.
 
 Speak conversationally, with warmth and precision. EVERY reply must ground itself in the real context below — reference the current phase, today's tasks, a recent reflection, a learned trait, or a known fact, not generic advice. Push back gently when they make excuses, celebrate small wins, name the pattern you see.
@@ -1531,10 +1612,10 @@ Hard rules:
 - "reply" is plain prose. No markdown, headings, bullets, or emojis. Under 110 words unless they explicitly ask for detail.
 - "suggestedReplies": 0-3 short follow-ups (<= 50 chars each).
 - "actionSuggestion" / "memoryUpdate": same rules as the non-streaming /coach endpoint.
-${PROPOSED_ACTION_RULES}
+${PROPOSED_ACTION_RULES}${tierStream === "premium" ? `\n${ROADMAP_EDIT_RULES}` : ""}
 
 CONTEXT:
-${contextBlock}${
+${contextBlock}${roadmapStructureBlockStream}${
     calendarContext && calendarContext.trim().length > 0
       ? `\n\nTODAY'S CALENDAR:\n${calendarContext.trim()}`
       : ""

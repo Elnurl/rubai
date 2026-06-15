@@ -626,6 +626,22 @@ export interface CoachCalendarEvent {
   durationMinutes: number | null;
 }
 
+export interface CoachMilestonePatch {
+  title: string | null;
+  description: string | null;
+}
+
+export interface CoachPhasePatch {
+  title: string | null;
+  focus: string | null;
+}
+
+export interface CoachNewMilestone {
+  title: string;
+  description: string;
+  weekNumber: number;
+}
+
 export type ProposedCoachActionKind =
   (typeof ProposedCoachActionKind)[keyof typeof ProposedCoachActionKind];
 
@@ -639,6 +655,10 @@ export const ProposedCoachActionKind = {
   regenerateDay: "regenerateDay",
   syncToCalendar: "syncToCalendar",
   addCalendarEvent: "addCalendarEvent",
+  editMilestone: "editMilestone",
+  addMilestone: "addMilestone",
+  removeMilestone: "removeMilestone",
+  editPhase: "editPhase",
 } as const;
 
 /**
@@ -656,6 +676,12 @@ export interface ProposedCoachAction {
   newTitle?: string | null;
   removeTaskIds?: string[];
   event?: CoachCalendarEvent | null;
+  milestoneId?: string | null;
+  milestonePhaseId?: string | null;
+  phaseId?: string | null;
+  newMilestone?: CoachNewMilestone | null;
+  milestonePatch?: CoachMilestonePatch | null;
+  phasePatch?: CoachPhasePatch | null;
 }
 
 export interface CoachResponse {
@@ -842,6 +868,15 @@ export interface LegalAcceptInput {
 }
 
 export type GetMeTierHistoryParams = {
+  /**
+   * Maximum number of records to return (1–100, default 50).
+   * @minimum 1
+   * @maximum 100
+   */
+  limit?: number;
+};
+
+export type AdminGetUserTierHistoryParams = {
   /**
    * Maximum number of records to return (1–100, default 50).
    * @minimum 1
