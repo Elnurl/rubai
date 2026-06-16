@@ -234,7 +234,11 @@
     "whatRubaiRemembers": "RUBAİ-NİN XATIRLADIQLARI",
     "workingOn": "ÜZƏRİNDƏ İŞLƏNİLİR",
     "workingOnContext": "Üzərində işlənilir və xatırlanan kontekst",
-    "yourCalendar": "təqviminiz"
+    "yourCalendar": "təqviminiz",
+    "coachMode": "KOÇ",
+    "freeMode": "AZAD",
+    "coachModeLabel": "Koç rejimi — yalnız məqsəd mövzuları",
+    "freeModeLabel": "Azad rejim — istənilən mövzu"
   },
   "coachMemory": {
     "activeGoal": "AKTİV MƏQSƏD",

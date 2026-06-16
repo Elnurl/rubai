@@ -495,6 +495,18 @@ export interface CoachMemoryUpdate {
 }
 
 /**
+ * Optional conversation mode. "coach" (default) restricts the AI to goal-, task-, and plan-related topics only — off-topic messages are redirected. "normal" allows free-form conversation on any topic; the AI still has full goal context and captures behavioural insights via memoryUpdate.
+
+ */
+export type CoachRequestConversationMode =
+  (typeof CoachRequestConversationMode)[keyof typeof CoachRequestConversationMode];
+
+export const CoachRequestConversationMode = {
+  coach: "coach",
+  normal: "normal",
+} as const;
+
+/**
  * Optional model preference. "smart" (default) uses the high-quality model; "fast" uses a lower-latency one.
  */
 export type CoachRequestModelChoice =
@@ -564,6 +576,9 @@ export interface CoachRequest {
   coachMemory?: CoachMemory | null;
   history: ChatMessage[];
   message: string;
+  /** Optional conversation mode. "coach" (default) restricts the AI to goal-, task-, and plan-related topics only — off-topic messages are redirected. "normal" allows free-form conversation on any topic; the AI still has full goal context and captures behavioural insights via memoryUpdate.
+   */
+  conversationMode?: CoachRequestConversationMode;
   /** Optional model preference. "smart" (default) uses the high-quality model; "fast" uses a lower-latency one. */
   modelChoice?: CoachRequestModelChoice;
   /** Optional note about an attachment the user added this turn (e.g. an image filename). The reply should acknowledge it. */

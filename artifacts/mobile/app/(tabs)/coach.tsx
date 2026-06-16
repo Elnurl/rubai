@@ -182,6 +182,7 @@ export default function CoachScreen() {
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modelChoice, setModelChoice] = useState<ModelChoice>("smart");
+  const [conversationMode, setConversationMode] = useState<"coach" | "normal">("coach");
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
   const [pendingAttachment, setPendingAttachment] =
@@ -340,6 +341,7 @@ export default function CoachScreen() {
           .slice(-10)
           .map((m) => ({ ...m, content: stripAttachmentMeta(m.content) })),
         message,
+        conversationMode,
         modelChoice,
         ...(calendarContext ? { calendarContext } : {}),
         currentWeek: activeCurrentWeek,
@@ -528,6 +530,7 @@ export default function CoachScreen() {
       appendCoachMessageToSession,
       applyCoachMemoryUpdate,
       modelChoice,
+      conversationMode,
       pendingAttachment,
       autoSpeak,
       tts,
@@ -1560,6 +1563,38 @@ export default function CoachScreen() {
               ]}
             >
               {autoSpeak ? t("coach.voiceOn", "VOICE ON") : t("coach.voiceOff", "VOICE OFF")}
+            </Text>
+          </Pressable>
+          <Text
+            style={[
+              styles.statusCaptionSep,
+              { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
+            ]}
+          >
+            ·
+          </Text>
+          <Pressable
+            onPress={() =>
+              setConversationMode((v) => (v === "coach" ? "normal" : "coach"))
+            }
+            hitSlop={8}
+            testID="conversation-mode-toggle"
+          >
+            <Text
+              style={[
+                styles.statusCaptionText,
+                {
+                  color:
+                    conversationMode === "normal"
+                      ? colors.primary
+                      : colors.mutedForeground,
+                  fontFamily: "Inter_600SemiBold",
+                },
+              ]}
+            >
+              {conversationMode === "normal"
+                ? t("coach.freeMode", "FREE MODE")
+                : t("coach.coachMode", "COACH MODE")}
             </Text>
           </Pressable>
           {transcribing ? (

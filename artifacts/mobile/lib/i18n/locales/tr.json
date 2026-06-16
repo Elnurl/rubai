@@ -234,7 +234,11 @@
     "whatRubaiRemembers": "RUBAI NELERİ HATIRLIYOR",
     "workingOn": "ÜZERİNDE ÇALIŞILAN",
     "workingOnContext": "Üzerinde çalışılan ve hatırlanan bağlam",
-    "yourCalendar": "takviminiz"
+    "yourCalendar": "takviminiz",
+    "coachMode": "KOÇLUK",
+    "freeMode": "SERBEST",
+    "coachModeLabel": "Koçluk modu — yalnızca hedef konuları",
+    "freeModeLabel": "Serbest mod — her konu"
   },
   "coachMemory": {
     "activeGoal": "AKTİF HEDEF",

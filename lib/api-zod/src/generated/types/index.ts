@@ -32,6 +32,7 @@ export * from "./coachMilestonePatch";
 export * from "./coachNewMilestone";
 export * from "./coachPhasePatch";
 export * from "./coachRequest";
+export * from "./coachRequestConversationMode";
 export * from "./coachRequestModelChoice";
 export * from "./coachResponse";
 export * from "./coachTaskPatch";

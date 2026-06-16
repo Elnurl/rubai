@@ -913,11 +913,14 @@ router.post("/coach", requireAiQuota, async (req, res) => {
     coachMemory,
     history,
     message,
+    conversationMode,
     modelChoice,
     attachmentNote,
     attachmentImage,
     calendarContext,
   } = parsed.data;
+
+  const isNormalMode = conversationMode === "normal";
 
   // Run the user's text through OpenAI moderation BEFORE we spend tokens
   // on a smart-model coach turn or feed potentially abusive content into
@@ -1073,7 +1076,39 @@ router.post("/coach", requireAiQuota, async (req, res) => {
             .join("\n")}`
         : "";
 
-    const systemContext = `You are rabai — a strategic AI execution coach inside a mobile app. The user has come to you for guidance.
+    const calendarSection =
+      calendarContext && calendarContext.trim().length > 0
+        ? `\n\nTODAY'S CALENDAR:\n${calendarContext.trim()}`
+        : "";
+    const ragSection =
+      typeof req.userId === "number"
+        ? await retrieveRelevantContext(req, req.userId, message)
+            .then((b) =>
+              b
+                ? `\n\nRELEVANT MEMORY (semantic retrieval — surface only when it directly helps):\n${b}`
+                : "",
+            )
+            .catch(() => "")
+        : "";
+    const behavioralSection = orchConfig.behavioralAddendum
+      ? `\n\n${orchConfig.behavioralAddendum}`
+      : "";
+
+    const systemContext = isNormalMode
+      ? `You are rabai — an AI companion and life assistant inside a mobile app. You know this user well through their goals and journey.
+
+Speak naturally, with warmth and genuine curiosity. You can discuss ANY topic the user brings up — you are not limited to their goals. Be helpful, insightful, and conversational.
+
+Hard rules:
+- LANGUAGE RULE: Write ALL text output (reply, suggestedReplies) in the same language as the user's goal and profile data. Never switch to another language.
+- "reply" is plain prose. No markdown, headings, bullets, or emojis. Under 150 words unless they explicitly ask for detail.
+- "suggestedReplies": 0-3 short natural follow-ups (<= 50 chars each) that fit the conversation. If nothing fits, return [].
+- "actionSuggestion": null — free conversations do not trigger app actions.
+- "memoryUpdate": be PROACTIVE. If this exchange reveals ANYTHING durable about this person — values, habits, fears, aspirations, how they think, life circumstances, relationships, recurring patterns — capture it. These insights make future coaching more personal. Return null only if truly nothing meaningful was shared.
+
+GOAL CONTEXT (you know this person — reference naturally when relevant, but don't force it):
+${contextBlock}${roadmapStructureBlock}${calendarSection}${ragSection}${behavioralSection}`
+      : `You are rabai — a strategic AI execution coach inside a mobile app. The user has come to you for guidance.
 
 Speak conversationally, with warmth and precision. EVERY reply must ground itself in the real context below — reference the current phase, today's tasks, a recent reflection, a learned trait, or a known fact, not generic advice. Push back gently when they make excuses, celebrate small wins, name the pattern you see.
 
@@ -1088,24 +1123,10 @@ Hard rules:
   Otherwise return null. Don't suggest the same action two turns in a row.
 ${PROPOSED_ACTION_RULES}${tier === "premium" ? `\n${ROADMAP_EDIT_RULES}` : ""}
 - "memoryUpdate": include ONLY when the user revealed something durable in THIS message (a constraint, preference, life event, identity statement). Otherwise null. The summary you write replaces the prior summary; keep it ≤ 3 sentences. newFacts must not duplicate existing facts.
-- If the user goes off-topic, steer back to their goal in one sentence.
+- COACH MODE: You ONLY discuss topics directly related to the user's goal, tasks, plan, reflections, and progress. If the user asks about anything unrelated (health advice, general knowledge, news, other life topics not connected to this goal), decline in ONE sentence and redirect: e.g. "I'm here as your goal coach — let's stay focused on [relevant topic]."
 
 CONTEXT:
-${contextBlock}${roadmapStructureBlock}${
-      calendarContext && calendarContext.trim().length > 0
-        ? `\n\nTODAY'S CALENDAR:\n${calendarContext.trim()}`
-        : ""
-    }${
-      typeof req.userId === "number"
-        ? await retrieveRelevantContext(req, req.userId, message)
-            .then((b) =>
-              b
-                ? `\n\nRELEVANT MEMORY (semantic retrieval — surface only when it directly helps):\n${b}`
-                : "",
-            )
-            .catch(() => "")
-        : ""
-    }${orchConfig.behavioralAddendum ? `\n\n${orchConfig.behavioralAddendum}` : ""}`;
+${contextBlock}${roadmapStructureBlock}${calendarSection}${ragSection}${behavioralSection}`;
 
     const parsedJson = await strictJsonCompletion(
       req,
@@ -1455,11 +1476,14 @@ router.post("/coach/stream", requireAiQuota, async (req, res) => {
     coachMemory,
     history,
     message,
+    conversationMode: conversationModeStream,
     modelChoice,
     attachmentNote,
     attachmentImage,
     calendarContext,
   } = parsed.data;
+
+  const isNormalModeStream = conversationModeStream === "normal";
 
   // Pre-flight moderation BEFORE we open the SSE stream so a flagged
   // input can still be returned as a clean 400 JSON error (the client
@@ -1603,23 +1627,11 @@ router.post("/coach/stream", requireAiQuota, async (req, res) => {
           .join("\n")}`
       : "";
 
-  const systemContext = `You are rabai — a strategic AI execution coach inside a mobile app. The user has come to you for guidance.
-
-Speak conversationally, with warmth and precision. EVERY reply must ground itself in the real context below — reference the current phase, today's tasks, a recent reflection, a learned trait, or a known fact, not generic advice. Push back gently when they make excuses, celebrate small wins, name the pattern you see.
-
-Hard rules:
-- LANGUAGE RULE: Write ALL text output (reply, suggestedReplies) in the same language as the user's goal and profile data. If the goal is in Turkish, respond in Turkish. If in Azerbaijani, in Azerbaijani. If in Russian, in Russian. Never switch to another language.
-- "reply" is plain prose. No markdown, headings, bullets, or emojis. Under 110 words unless they explicitly ask for detail.
-- "suggestedReplies": 0-3 short follow-ups (<= 50 chars each).
-- "actionSuggestion" / "memoryUpdate": same rules as the non-streaming /coach endpoint.
-${PROPOSED_ACTION_RULES}${tierStream === "premium" ? `\n${ROADMAP_EDIT_RULES}` : ""}
-
-CONTEXT:
-${contextBlock}${roadmapStructureBlockStream}${
+  const calendarSectionStream =
     calendarContext && calendarContext.trim().length > 0
       ? `\n\nTODAY'S CALENDAR:\n${calendarContext.trim()}`
-      : ""
-  }${
+      : "";
+  const ragSectionStream =
     typeof req.userId === "number"
       ? await retrieveRelevantContext(req, req.userId, message)
           .then((b) =>
@@ -1628,8 +1640,39 @@ ${contextBlock}${roadmapStructureBlockStream}${
               : "",
           )
           .catch(() => "")
-      : ""
-  }${orchConfigStream.behavioralAddendum ? `\n\n${orchConfigStream.behavioralAddendum}` : ""}`;
+      : "";
+  const behavioralSectionStream = orchConfigStream.behavioralAddendum
+    ? `\n\n${orchConfigStream.behavioralAddendum}`
+    : "";
+
+  const systemContext = isNormalModeStream
+    ? `You are rabai — an AI companion and life assistant inside a mobile app. You know this user well through their goals and journey.
+
+Speak naturally, with warmth and genuine curiosity. You can discuss ANY topic the user brings up — you are not limited to their goals. Be helpful, insightful, and conversational.
+
+Hard rules:
+- LANGUAGE RULE: Write ALL text output (reply, suggestedReplies) in the same language as the user's goal and profile data. Never switch to another language.
+- "reply" is plain prose. No markdown, headings, bullets, or emojis. Under 150 words unless they explicitly ask for detail.
+- "suggestedReplies": 0-3 short natural follow-ups (<= 50 chars each) that fit the conversation. If nothing fits, return [].
+- "actionSuggestion": null — free conversations do not trigger app actions.
+- "memoryUpdate": be PROACTIVE. If this exchange reveals ANYTHING durable about this person — values, habits, fears, aspirations, how they think, life circumstances, relationships, recurring patterns — capture it. These insights make future coaching more personal. Return null only if truly nothing meaningful was shared.
+
+GOAL CONTEXT (you know this person — reference naturally when relevant, but don't force it):
+${contextBlock}${roadmapStructureBlockStream}${calendarSectionStream}${ragSectionStream}${behavioralSectionStream}`
+    : `You are rabai — a strategic AI execution coach inside a mobile app. The user has come to you for guidance.
+
+Speak conversationally, with warmth and precision. EVERY reply must ground itself in the real context below — reference the current phase, today's tasks, a recent reflection, a learned trait, or a known fact, not generic advice. Push back gently when they make excuses, celebrate small wins, name the pattern you see.
+
+Hard rules:
+- LANGUAGE RULE: Write ALL text output (reply, suggestedReplies) in the same language as the user's goal and profile data. If the goal is in Turkish, respond in Turkish. If in Azerbaijani, in Azerbaijani. If in Russian, in Russian. Never switch to another language.
+- "reply" is plain prose. No markdown, headings, bullets, or emojis. Under 110 words unless they explicitly ask for detail.
+- "suggestedReplies": 0-3 short follow-ups (<= 50 chars each).
+- "actionSuggestion" / "memoryUpdate": same rules as the non-streaming /coach endpoint.
+- COACH MODE: You ONLY discuss topics directly related to the user's goal, tasks, plan, reflections, and progress. If the user asks about anything unrelated (health advice, general knowledge, news, other life topics not connected to this goal), decline in ONE sentence and redirect: e.g. "I'm here as your goal coach — let's stay focused on [relevant topic]."
+${PROPOSED_ACTION_RULES}${tierStream === "premium" ? `\n${ROADMAP_EDIT_RULES}` : ""}
+
+CONTEXT:
+${contextBlock}${roadmapStructureBlockStream}${calendarSectionStream}${ragSectionStream}${behavioralSectionStream}`;
 
   // SSE headers. `X-Accel-Buffering: no` disables nginx-style proxy
   // buffering so chunks reach the client in real time even behind a

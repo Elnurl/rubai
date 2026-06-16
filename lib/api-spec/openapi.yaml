@@ -1382,6 +1382,14 @@ components:
             $ref: "#/components/schemas/ChatMessage"
         message:
           type: string
+        conversationMode:
+          type: string
+          enum: [coach, normal]
+          description: >
+            Optional conversation mode. "coach" (default) restricts the AI to goal-,
+            task-, and plan-related topics only — off-topic messages are redirected.
+            "normal" allows free-form conversation on any topic; the AI still has full
+            goal context and captures behavioural insights via memoryUpdate.
         modelChoice:
           type: string
           enum: [smart, fast]

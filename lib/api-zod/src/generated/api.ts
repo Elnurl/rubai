@@ -947,6 +947,12 @@ export const AtlasCoachBody = zod.object({
     }),
   ),
   message: zod.string(),
+  conversationMode: zod
+    .enum(["coach", "normal"])
+    .optional()
+    .describe(
+      'Optional conversation mode. \"coach\" (default) restricts the AI to goal-, task-, and plan-related topics only — off-topic messages are redirected. \"normal\" allows free-form conversation on any topic; the AI still has full goal context and captures behavioural insights via memoryUpdate.\n',
+    ),
   modelChoice: zod
     .enum(["smart", "fast"])
     .optional()

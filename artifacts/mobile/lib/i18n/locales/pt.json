@@ -234,7 +234,11 @@
     "whatRubaiRemembers": "O QUE O RUBAI LEMBRA",
     "workingOn": "TRABALHANDO EM",
     "workingOnContext": "Trabalhando em e contexto lembrado",
-    "yourCalendar": "seu calendário"
+    "yourCalendar": "seu calendário",
+    "coachMode": "COACH",
+    "freeMode": "LIVRE",
+    "coachModeLabel": "Modo coach — apenas temas do objetivo",
+    "freeModeLabel": "Modo livre — qualquer tema"
   },
   "coachMemory": {
     "activeGoal": "OBJETIVO ATIVO",

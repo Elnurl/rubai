@@ -234,7 +234,11 @@
     "whatRubaiRemembers": "RUBAI 记住的内容",
     "workingOn": "正在处理",
     "workingOnContext": "正在处理及记住的上下文",
-    "yourCalendar": "您的日历"
+    "yourCalendar": "您的日历",
+    "coachMode": "教练",
+    "freeMode": "自由",
+    "coachModeLabel": "教练模式 — 仅限目标相关话题",
+    "freeModeLabel": "自由模式 — 任何话题"
   },
   "coachMemory": {
     "activeGoal": "活跃目标",

@@ -234,7 +234,11 @@
     "whatRubaiRemembers": "ЧТО ПОМНИТ RUBAI",
     "workingOn": "В РАБОТЕ",
     "workingOnContext": "В работе и запомненный контекст",
-    "yourCalendar": "ваш календарь"
+    "yourCalendar": "ваш календарь",
+    "coachMode": "КОЧ",
+    "freeMode": "СВОБОДНЫЙ",
+    "coachModeLabel": "Режим коуча — только темы цели",
+    "freeModeLabel": "Свободный режим — любая тема"
   },
   "coachMemory": {
     "activeGoal": "АКТИВНАЯ ЦЕЛЬ",

@@ -10,6 +10,7 @@ import type { BehavioralSnapshot } from "./behavioralSnapshot";
 import type { ChatMessage } from "./chatMessage";
 import type { CoachAttachmentImage } from "./coachAttachmentImage";
 import type { CoachMemory } from "./coachMemory";
+import type { CoachRequestConversationMode } from "./coachRequestConversationMode";
 import type { CoachRequestModelChoice } from "./coachRequestModelChoice";
 import type { CurrentPhaseSnapshot } from "./currentPhaseSnapshot";
 import type { DailyPlan } from "./dailyPlan";
@@ -37,6 +38,9 @@ export interface CoachRequest {
   coachMemory?: CoachMemory | null;
   history: ChatMessage[];
   message: string;
+  /** Optional conversation mode. "coach" (default) restricts the AI to goal-, task-, and plan-related topics only — off-topic messages are redirected. "normal" allows free-form conversation on any topic; the AI still has full goal context and captures behavioural insights via memoryUpdate.
+   */
+  conversationMode?: CoachRequestConversationMode;
   /** Optional model preference. "smart" (default) uses the high-quality model; "fast" uses a lower-latency one. */
   modelChoice?: CoachRequestModelChoice;
   /** Optional note about an attachment the user added this turn (e.g. an image filename). The reply should acknowledge it. */
