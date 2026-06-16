@@ -238,7 +238,15 @@
     "coachMode": "KOÇLUK",
     "freeMode": "SERBEST",
     "coachModeLabel": "Koçluk modu — yalnızca hedef konuları",
-    "freeModeLabel": "Serbest mod — her konu"
+    "freeModeLabel": "Serbest mod — her konu",
+    "fastLabel": "Hızlı",
+    "smartLabel": "Akıllı",
+    "generalLabel": "Genel",
+    "coachLabel": "Koç",
+    "smartDesc": "En iyi yanıtlar",
+    "fastDesc": "Daha hızlı yanıtlar",
+    "coachModeDesc": "Hedef odaklı koçluk",
+    "generalModeDesc": "Serbest sohbet"
   },
   "coachMemory": {
     "activeGoal": "AKTİF HEDEF",

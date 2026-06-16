@@ -238,7 +238,15 @@
     "coachMode": "مدرب",
     "freeMode": "حر",
     "coachModeLabel": "وضع المدرب — مواضيع الهدف فقط",
-    "freeModeLabel": "الوضع الحر — أي موضوع"
+    "freeModeLabel": "الوضع الحر — أي موضوع",
+    "fastLabel": "سريع",
+    "smartLabel": "ذكي",
+    "generalLabel": "عام",
+    "coachLabel": "مدرب",
+    "smartDesc": "أفضل الإجابات",
+    "fastDesc": "ردود أسرع",
+    "coachModeDesc": "تدريب يركز على الأهداف",
+    "generalModeDesc": "محادثة حرة"
   },
   "coachMemory": {
     "activeGoal": "الهدف النشط",

@@ -238,7 +238,15 @@
     "coachMode": "KOÇ",
     "freeMode": "AZAD",
     "coachModeLabel": "Koç rejimi — yalnız məqsəd mövzuları",
-    "freeModeLabel": "Azad rejim — istənilən mövzu"
+    "freeModeLabel": "Azad rejim — istənilən mövzu",
+    "fastLabel": "Sürətli",
+    "smartLabel": "Ağıllı",
+    "generalLabel": "Ümumi",
+    "coachLabel": "Koç",
+    "smartDesc": "Ən yaxşı cavablar",
+    "fastDesc": "Daha sürətli cavablar",
+    "coachModeDesc": "Məqsəd yönümlü koçluq",
+    "generalModeDesc": "Azad söhbət"
   },
   "coachMemory": {
     "activeGoal": "AKTİV MƏQSƏD",

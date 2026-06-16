@@ -183,7 +183,8 @@ export default function CoachScreen() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modelChoice, setModelChoice] = useState<ModelChoice>("smart");
   const [conversationMode, setConversationMode] = useState<"coach" | "normal">("coach");
-  const [autoSpeak, setAutoSpeak] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [autoSpeak, setAutoSpeak] = useState(false); // TODO: voice output — implement later
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
   const [pendingAttachment, setPendingAttachment] =
     useState<PendingAttachment | null>(null);
@@ -1413,13 +1414,20 @@ export default function CoachScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
+      {dropdownOpen && (
+        <Pressable
+          style={[StyleSheet.absoluteFill, { zIndex: 50 }]}
+          onPress={() => setDropdownOpen(false)}
+        />
+      )}
     <KeyboardAvoidingView
       behavior="padding"
       keyboardVerticalOffset={0}
       style={[styles.root, { backgroundColor: colors.background }]}
     >
-      <View style={[styles.header, { paddingTop: topPad }]}>
+      <View style={[styles.header, { paddingTop: topPad, zIndex: 100 }]}>
         <View style={styles.headerInner}>
+          {/* Hamburger */}
           <Pressable
             onPress={() => setSidebarOpen(true)}
             hitSlop={10}
@@ -1437,9 +1445,41 @@ export default function CoachScreen() {
           >
             <Feather name="menu" size={16} color={colors.foreground} />
           </Pressable>
-          <View style={{ flex: 1 }}>
+
+          {/* Logo + mode pill — taps open/close the dropdown */}
+          <Pressable
+            onPress={() => setDropdownOpen((v) => !v)}
+            hitSlop={8}
+            testID="model-mode-dropdown-trigger"
+            style={styles.logoPillWrap}
+          >
             <AtlasLogo size="lg" />
-          </View>
+            <View
+              style={[
+                styles.logoPill,
+                { backgroundColor: colors.muted, borderColor: colors.border },
+              ]}
+            >
+              <Text
+                style={[styles.logoPillText, { color: colors.mutedForeground }]}
+              >
+                {modelChoice === "fast"
+                  ? t("coach.fastLabel", "Fast")
+                  : t("coach.smartLabel", "Smart")}
+                {" · "}
+                {conversationMode === "normal"
+                  ? t("coach.generalLabel", "General")
+                  : t("coach.coachLabel", "Coach")}
+              </Text>
+              <Feather
+                name={dropdownOpen ? "chevron-up" : "chevron-down"}
+                size={12}
+                color={colors.mutedForeground}
+              />
+            </View>
+          </Pressable>
+
+          {/* Right chips */}
           <View style={styles.headerChipRow}>
             <ActiveGoalChip />
             <WorkingOnInfoButton
@@ -1449,6 +1489,52 @@ export default function CoachScreen() {
             />
           </View>
         </View>
+
+        {/* Dropdown card — Gemini-style model + mode picker */}
+        {dropdownOpen && (
+          <View
+            style={[
+              styles.dropdownCard,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                shadowColor: colors.foreground,
+              },
+            ]}
+          >
+            <ModelModeRow
+              label={t("coach.smartLabel", "Smart")}
+              desc={t("coach.smartDesc", "Best answers")}
+              selected={modelChoice === "smart"}
+              onPress={() => { setModelChoice("smart"); setDropdownOpen(false); }}
+              colors={colors}
+            />
+            <View style={[styles.dropdownSep, { backgroundColor: colors.border }]} />
+            <ModelModeRow
+              label={t("coach.fastLabel", "Fast")}
+              desc={t("coach.fastDesc", "Faster responses")}
+              selected={modelChoice === "fast"}
+              onPress={() => { setModelChoice("fast"); setDropdownOpen(false); }}
+              colors={colors}
+            />
+            <View style={[styles.dropdownGroupDivider, { backgroundColor: colors.border }]} />
+            <ModelModeRow
+              label={t("coach.coachLabel", "Coach")}
+              desc={t("coach.coachModeDesc", "Goal-focused coaching")}
+              selected={conversationMode === "coach"}
+              onPress={() => { setConversationMode("coach"); setDropdownOpen(false); }}
+              colors={colors}
+            />
+            <View style={[styles.dropdownSep, { backgroundColor: colors.border }]} />
+            <ModelModeRow
+              label={t("coach.generalLabel", "General")}
+              desc={t("coach.generalModeDesc", "Free conversation")}
+              selected={conversationMode === "normal"}
+              onPress={() => { setConversationMode("normal"); setDropdownOpen(false); }}
+              colors={colors}
+            />
+          </View>
+        )}
       </View>
 
       <FlatList
@@ -1517,108 +1603,14 @@ export default function CoachScreen() {
           </ScrollView>
         )}
 
-        {/* Status caption: tappable inline toggles for model + voice mode.
-            Replaces the earlier pill row; matches the screenshot's
-            "SMART MODE · VOICE OFF" caption. */}
-        <View style={styles.statusCaption}>
-          <Pressable
-            onPress={() =>
-              setModelChoice((v) => (v === "smart" ? "fast" : "smart"))
-            }
-            hitSlop={8}
-            testID="model-toggle"
-          >
-            <Text
-              style={[
-                styles.statusCaptionText,
-                {
-                  color: colors.mutedForeground,
-                  fontFamily: "Inter_600SemiBold",
-                },
-              ]}
-            >
-              {modelChoice === "fast" ? t("coach.fastMode", "FAST MODE") : t("coach.smartMode", "SMART MODE")}
+        {transcribing && (
+          <View style={styles.transcribingRow}>
+            <ActivityIndicator size="small" color={colors.mutedForeground} />
+            <Text style={[styles.transcribingText, { color: colors.mutedForeground }]}>
+              {t("coach.transcribing", "TRANSCRIBING…")}
             </Text>
-          </Pressable>
-          <Text
-            style={[
-              styles.statusCaptionSep,
-              { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
-            ]}
-          >
-            ·
-          </Text>
-          <Pressable
-            onPress={() => setAutoSpeak((v) => !v)}
-            hitSlop={8}
-            testID="autospeak-toggle"
-          >
-            <Text
-              style={[
-                styles.statusCaptionText,
-                {
-                  color: colors.mutedForeground,
-                  fontFamily: "Inter_600SemiBold",
-                },
-              ]}
-            >
-              {autoSpeak ? t("coach.voiceOn", "VOICE ON") : t("coach.voiceOff", "VOICE OFF")}
-            </Text>
-          </Pressable>
-          <Text
-            style={[
-              styles.statusCaptionSep,
-              { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
-            ]}
-          >
-            ·
-          </Text>
-          <Pressable
-            onPress={() =>
-              setConversationMode((v) => (v === "coach" ? "normal" : "coach"))
-            }
-            hitSlop={8}
-            testID="conversation-mode-toggle"
-          >
-            <Text
-              style={[
-                styles.statusCaptionText,
-                {
-                  color:
-                    conversationMode === "normal"
-                      ? colors.primary
-                      : colors.mutedForeground,
-                  fontFamily: "Inter_600SemiBold",
-                },
-              ]}
-            >
-              {conversationMode === "normal"
-                ? t("coach.freeMode", "FREE MODE")
-                : t("coach.coachMode", "COACH MODE")}
-            </Text>
-          </Pressable>
-          {transcribing ? (
-            <>
-              <Text
-                style={[
-                  styles.statusCaptionSep,
-                  { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
-                ]}
-              >
-                ·
-              </Text>
-              <ActivityIndicator size="small" color={colors.mutedForeground} />
-              <Text
-                style={[
-                  styles.statusCaptionText,
-                  { color: colors.mutedForeground, fontFamily: "Inter_600SemiBold" },
-                ]}
-              >
-                {t("coach.transcribing", "TRANSCRIBING…")}
-              </Text>
-            </>
-          ) : null}
-        </View>
+          </View>
+        )}
 
         {pendingAttachment ? (
           pendingAttachment.kind === "image" && pendingAttachment.uri ? (
@@ -2521,20 +2513,76 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  statusCaption: {
+  logoPillWrap: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  logoPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  logoPillText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    letterSpacing: 0.1,
+  },
+  dropdownCard: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    right: 0,
+    marginTop: 6,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
+    zIndex: 200,
+  },
+  dropdownSep: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 56,
+  },
+  dropdownGroupDivider: {
+    height: 6,
+  },
+  dropdownRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    gap: 12,
+  },
+  dropdownRowLabel: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 15,
+    letterSpacing: -0.1,
+  },
+  dropdownRowDesc: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12.5,
+    marginTop: 1,
+  },
+  transcribingRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
     paddingVertical: 4,
-    paddingHorizontal: 4,
   },
-  statusCaptionText: {
+  transcribingText: {
+    fontFamily: "Inter_600SemiBold",
     fontSize: 10.5,
     letterSpacing: 1.2,
-  },
-  statusCaptionSep: {
-    fontSize: 11,
   },
   footerStack: {
     paddingHorizontal: 6,
@@ -2755,3 +2803,42 @@ const styles = StyleSheet.create({
     marginHorizontal: 24,
   },
 });
+
+// ---------------------------------------------------------------------------
+// ModelModeRow — single selectable row inside the dropdown card
+// ---------------------------------------------------------------------------
+function ModelModeRow({
+  label,
+  desc,
+  selected,
+  onPress,
+  colors,
+}: {
+  label: string;
+  desc: string;
+  selected: boolean;
+  onPress: () => void;
+  colors: ReturnType<typeof useColors>;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.dropdownRow,
+        { opacity: pressed ? 0.75 : 1 },
+      ]}
+    >
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.dropdownRowLabel, { color: colors.foreground }]}>
+          {label}
+        </Text>
+        <Text style={[styles.dropdownRowDesc, { color: colors.mutedForeground }]}>
+          {desc}
+        </Text>
+      </View>
+      {selected && (
+        <Feather name="check" size={16} color={colors.primary} />
+      )}
+    </Pressable>
+  );
+}

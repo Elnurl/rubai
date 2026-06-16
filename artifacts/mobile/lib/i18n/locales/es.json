@@ -238,7 +238,15 @@
     "coachMode": "COACH",
     "freeMode": "LIBRE",
     "coachModeLabel": "Modo coach — solo temas del objetivo",
-    "freeModeLabel": "Modo libre — cualquier tema"
+    "freeModeLabel": "Modo libre — cualquier tema",
+    "fastLabel": "Rápido",
+    "smartLabel": "Inteligente",
+    "generalLabel": "General",
+    "coachLabel": "Coach",
+    "smartDesc": "Las mejores respuestas",
+    "fastDesc": "Respuestas más rápidas",
+    "coachModeDesc": "Coaching enfocado en objetivos",
+    "generalModeDesc": "Conversación libre"
   },
   "coachMemory": {
     "activeGoal": "META ACTIVA",

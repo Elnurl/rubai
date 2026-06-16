@@ -238,7 +238,15 @@
     "coachMode": "КОЧ",
     "freeMode": "СВОБОДНЫЙ",
     "coachModeLabel": "Режим коуча — только темы цели",
-    "freeModeLabel": "Свободный режим — любая тема"
+    "freeModeLabel": "Свободный режим — любая тема",
+    "fastLabel": "Быстрый",
+    "smartLabel": "Умный",
+    "generalLabel": "Общий",
+    "coachLabel": "Коуч",
+    "smartDesc": "Лучшие ответы",
+    "fastDesc": "Быстрые ответы",
+    "coachModeDesc": "Целеориентированный коучинг",
+    "generalModeDesc": "Свободный разговор"
   },
   "coachMemory": {
     "activeGoal": "АКТИВНАЯ ЦЕЛЬ",

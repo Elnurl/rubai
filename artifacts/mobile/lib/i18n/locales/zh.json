@@ -238,7 +238,15 @@
     "coachMode": "教练",
     "freeMode": "自由",
     "coachModeLabel": "教练模式 — 仅限目标相关话题",
-    "freeModeLabel": "自由模式 — 任何话题"
+    "freeModeLabel": "自由模式 — 任何话题",
+    "fastLabel": "快速",
+    "smartLabel": "智能",
+    "generalLabel": "通用",
+    "coachLabel": "教练",
+    "smartDesc": "最佳答案",
+    "fastDesc": "更快的回复",
+    "coachModeDesc": "以目标为中心的辅导",
+    "generalModeDesc": "自由对话"
   },
   "coachMemory": {
     "activeGoal": "活跃目标",
