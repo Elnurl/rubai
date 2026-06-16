@@ -227,3 +227,40 @@ export async function clearV1Storage(): Promise<void> {
 export function makeId(prefix = "id"): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
+
+// ---------------------------------------------------------------------------
+// Subscription / tier-change history
+// ---------------------------------------------------------------------------
+
+const TIER_HISTORY_PREFIX = `${PREFIX}tierHistory:`;
+const MAX_TIER_HISTORY = 50;
+
+export type TierChangeEvent = {
+  fromTier: string;
+  toTier: string;
+  timestamp: string; // ISO 8601
+  source: "foreground" | "push";
+};
+
+export async function loadTierHistory(clerkUserId: string): Promise<TierChangeEvent[]> {
+  try {
+    const raw = await AsyncStorage.getItem(TIER_HISTORY_PREFIX + clerkUserId);
+    if (!raw) return [];
+    return JSON.parse(raw) as TierChangeEvent[];
+  } catch {
+    return [];
+  }
+}
+
+export async function appendTierHistory(
+  clerkUserId: string,
+  event: TierChangeEvent,
+): Promise<void> {
+  try {
+    const existing = await loadTierHistory(clerkUserId);
+    const updated = [event, ...existing].slice(0, MAX_TIER_HISTORY);
+    await AsyncStorage.setItem(TIER_HISTORY_PREFIX + clerkUserId, JSON.stringify(updated));
+  } catch {
+    // ignore — history is informational only
+  }
+}
