@@ -44,8 +44,8 @@ export function ChatBubble({ role, content, onSpeak, isSpeaking }: Props) {
           isUser ? styles.userBubble : styles.assistantBubble,
           isUser
             ? {
-                backgroundColor: colors.primary,
-                borderColor: colors.primary,
+                backgroundColor: colors.primary + "18",
+                borderColor: colors.primary + "55",
               }
             : null,
         ]}
@@ -70,14 +70,14 @@ export function ChatBubble({ role, content, onSpeak, isSpeaking }: Props) {
             <Feather
               name="file-text"
               size={13}
-              color={colors.primaryForeground}
+              color={colors.primary}
             />
             <Text
               numberOfLines={1}
               style={[
                 styles.filePillText,
                 {
-                  color: colors.primaryForeground,
+                  color: colors.primary,
                   fontFamily: "Inter_500Medium",
                 },
               ]}
@@ -93,7 +93,7 @@ export function ChatBubble({ role, content, onSpeak, isSpeaking }: Props) {
             style={[
               styles.text,
               {
-                color: isUser ? colors.primaryForeground : colors.foreground,
+                color: isUser ? colors.primary : colors.foreground,
                 fontFamily: "Inter_400Regular",
                 marginTop: attachMeta ? 8 : 0,
               },
