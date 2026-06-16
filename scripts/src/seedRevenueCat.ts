@@ -339,9 +339,10 @@ async function seedRevenueCat() {
   console.log("Test Store App ID:", testStoreApp.id);
   console.log("App Store App ID:", appStoreApp.id);
   console.log("Play Store App ID:", playStoreApp.id);
-  console.log("EXPO_PUBLIC_REVENUECAT_TEST_API_KEY:", testKeys?.items.map((k) => k.key).join(", ") ?? "N/A");
-  console.log("EXPO_PUBLIC_REVENUECAT_IOS_API_KEY:", appKeys?.items.map((k) => k.key).join(", ") ?? "N/A");
-  console.log("EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY:", playKeys?.items.map((k) => k.key).join(", ") ?? "N/A");
+  const maskKey = (key: string) => key.length > 8 ? key.slice(0, 4) + "..." + key.slice(-4) : "****";
+  console.log("EXPO_PUBLIC_REVENUECAT_TEST_API_KEY:", testKeys?.items.map((k) => maskKey(k.key)).join(", ") ?? "N/A");
+  console.log("EXPO_PUBLIC_REVENUECAT_IOS_API_KEY:", appKeys?.items.map((k) => maskKey(k.key)).join(", ") ?? "N/A");
+  console.log("EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY:", playKeys?.items.map((k) => maskKey(k.key)).join(", ") ?? "N/A");
   console.log("REVENUECAT_PROJECT_ID:", project.id);
   console.log("REVENUECAT_TEST_STORE_APP_ID:", testStoreApp.id);
   console.log("REVENUECAT_APPLE_APP_STORE_APP_ID:", appStoreApp.id);
