@@ -77,27 +77,53 @@ export default function NewGoalScreen() {
   const [transcribing, setTranscribing] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
-  // Cycling animated placeholder
-  const [hintIndex, setHintIndex] = useState(0);
-  const hintOpacity = useRef(new Animated.Value(1)).current;
+  // Typewriter animated placeholder
+  const [typedHint, setTypedHint] = useState("");
+  const [showCursor, setShowCursor] = useState(true);
+  const hintIndexRef = useRef(0);
+  const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
-    const cycle = setInterval(() => {
-      Animated.timing(hintOpacity, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start(() => {
-        setHintIndex((i) => (i + 1) % PLACEHOLDER_HINTS.length);
-        Animated.timing(hintOpacity, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }).start();
-      });
-    }, 3000);
-    return () => clearInterval(cycle);
-  }, [hintOpacity]);
+    const clearAll = () => {
+      timeoutsRef.current.forEach(clearTimeout);
+      timeoutsRef.current = [];
+    };
+
+    const schedule = (fn: () => void, ms: number) => {
+      const id = setTimeout(fn, ms);
+      timeoutsRef.current.push(id);
+    };
+
+    const runCycle = () => {
+      const hint = PLACEHOLDER_HINTS[hintIndexRef.current];
+      // Type characters one by one
+      for (let i = 0; i <= hint.length; i++) {
+        const charDelay = i * 38;
+        schedule(() => setTypedHint(hint.slice(0, i)), charDelay);
+      }
+      // Pause after fully typed, then erase
+      const pauseStart = hint.length * 38 + 1800;
+      for (let i = hint.length; i >= 0; i--) {
+        const eraseDelay = pauseStart + (hint.length - i) * 22;
+        schedule(() => setTypedHint(hint.slice(0, i)), eraseDelay);
+      }
+      // Move to next hint and repeat
+      const nextStart = pauseStart + hint.length * 22 + 400;
+      schedule(() => {
+        hintIndexRef.current = (hintIndexRef.current + 1) % PLACEHOLDER_HINTS.length;
+        runCycle();
+      }, nextStart);
+    };
+
+    // Blinking cursor
+    const cursorInterval = setInterval(() => setShowCursor((v) => !v), 530);
+
+    runCycle();
+    return () => {
+      clearAll();
+      clearInterval(cursorInterval);
+    };
+  }, []);
 
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 12 : insets.top;
@@ -331,17 +357,18 @@ export default function NewGoalScreen() {
           ]}
         >
           <View style={styles.inputInner}>
-            {/* Animated cycling placeholder — shown only when empty & not focused */}
+            {/* Typewriter placeholder — shown only when empty & not focused */}
             {customGoal.length === 0 && !inputFocused && (
-              <Animated.Text
+              <Text
                 style={[
                   styles.animatedPlaceholder,
-                  { color: colors.mutedForeground, fontFamily: "Inter_400Regular", opacity: hintOpacity },
+                  { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
                 ]}
                 pointerEvents="none"
               >
-                {PLACEHOLDER_HINTS[hintIndex]}
-              </Animated.Text>
+                {typedHint}
+                <Text style={{ opacity: showCursor ? 1 : 0, color: colors.primary }}>|</Text>
+              </Text>
             )}
             <TextInput
               ref={inputRef}
