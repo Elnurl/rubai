@@ -441,8 +441,8 @@ export default function NewGoalScreen() {
           </View>
         </View>
 
-        {/* ── CATEGORY CHIPS — centered wrap grid ── */}
-        <View style={styles.chipsGrid}>
+        {/* ── CATEGORY CHIPS ── */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
           {TEMPLATE_GOAL_TYPES.map((g) => {
             const meta = GOAL_META[g];
             const isSelected = selected === g;
@@ -450,16 +450,16 @@ export default function NewGoalScreen() {
               <Pressable
                 key={g}
                 onPress={() => onPickTemplate(g)}
-                style={[styles.chip, { backgroundColor: isSelected ? colors.primary + "18" : colors.card, borderColor: isSelected ? colors.primary : colors.border, borderRadius: 99, opacity: canAddMoreGoals ? 1 : 0.5 }]}
+                style={[styles.chip, { backgroundColor: isSelected ? colors.primary + "18" : colors.card, borderColor: isSelected ? colors.primary : colors.border, borderRadius: 10, opacity: canAddMoreGoals ? 1 : 0.5 }]}
               >
-                <Ionicons name={meta.icon as React.ComponentProps<typeof Ionicons>["name"]} size={18} color={isSelected ? colors.primary : colors.mutedForeground} />
+                <Ionicons name={meta.icon as React.ComponentProps<typeof Ionicons>["name"]} size={20} color={isSelected ? colors.primary : colors.mutedForeground} />
                 <Text style={[styles.chipLabel, { color: isSelected ? colors.primary : colors.mutedForeground, fontFamily: "Inter_500Medium" }]}>
                   {meta.label.split(" ")[0]}
                 </Text>
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
 
         {/* ── EXAMPLE PROMPTS ── */}
         {canAddMoreGoals && (
@@ -695,22 +695,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  chipsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 8,
-    paddingHorizontal: 4,
-  },
+  chipsRow: { gap: 8, flexDirection: "row", paddingHorizontal: 2 },
   chip: {
-    flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 9,
-    paddingHorizontal: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderWidth: 1.5,
-    gap: 6,
+    gap: 5,
   },
-  chipLabel: { fontSize: 13, letterSpacing: 0.1 },
+  chipLabel: { fontSize: 11, letterSpacing: 0.2 },
 
   exampleSection: { gap: 0 },
   exampleChips: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center" },
