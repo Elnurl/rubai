@@ -1,9 +1,11 @@
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  ActivityIndicator,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,27 +13,40 @@ import {
   View,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AtlasButton } from "@/components/AtlasButton";
 import { AtlasLogo } from "@/components/AtlasLogo";
-import { GoalCard } from "@/components/GoalCard";
 import { GOAL_META, TEMPLATE_GOAL_TYPES } from "@/constants/atlas";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { useAtlasGenerateTitle, type GoalType } from "@workspace/api-client-react";
+
+const EXAMPLE_PROMPTS = [
+  "Get promoted in 9 months",
+  "Run a half marathon by June",
+  "Save $15,000 this year",
+  "Ship a side project in 60 days",
+];
 
 export default function WelcomeScreen() {
   const colors = useColors();
   const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { setPendingDraft } = useAtlas();
+  const { setPendingDraft, goals } = useAtlas();
   const generateTitle = useAtlasGenerateTitle();
+
   const [selected, setSelected] = useState<GoalType | null>(null);
   const [customGoal, setCustomGoal] = useState("");
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
+  const inputRef = useRef<TextInput>(null);
+
+  const isWeb = Platform.OS === "web";
+  const topPad = isWeb ? 12 : insets.top;
+  const bottomPad = isWeb ? 34 : insets.bottom + 8;
+
   const placeholders = useMemo(
     () => [
       t("welcome.placeholder1", "Launch my freelance design studio by October"),
@@ -45,22 +60,25 @@ export default function WelcomeScreen() {
   const placeholderIndexRef = useRef(Math.floor(Math.random() * 5));
   const placeholder = placeholders[placeholderIndexRef.current];
 
-  const isWeb = Platform.OS === "web";
-  const topPad = isWeb ? 67 : insets.top + 12;
-  const bottomPad = isWeb ? 34 : insets.bottom + 12;
-
   const customGoalTrimmed = customGoal.trim();
   const hasCustom = customGoalTrimmed.length > 0;
-  const canContinue = hasCustom || selected !== null;
+  const canSend = hasCustom || selected !== null;
 
   const onPickTemplate = (g: GoalType) => {
     setCustomGoal("");
-    setSelected(g);
+    setSelected(g === selected ? null : g);
+    inputRef.current?.blur();
   };
 
   const onCustomChange = (text: string) => {
     setCustomGoal(text);
     if (text.trim().length > 0) setSelected(null);
+  };
+
+  const onExamplePress = (text: string) => {
+    setCustomGoal(text);
+    setSelected(null);
+    inputRef.current?.focus();
   };
 
   const onContinue = async () => {
@@ -73,7 +91,7 @@ export default function WelcomeScreen() {
         });
         if (res.title?.trim()) aiTitle = res.title.trim();
       } catch {
-        // silent fallback — first 4 words already set above
+        // silent fallback
       } finally {
         setIsGeneratingTitle(false);
       }
@@ -99,13 +117,7 @@ export default function WelcomeScreen() {
     router.push("/intake");
   };
 
-  const buttonLabel = hasCustom
-    ? t("welcome.buildPlanBtn", "Build my plan")
-    : selected
-      ? t("welcome.continueWith", "Continue with {{label}}", {
-          label: GOAL_META[selected].label,
-        })
-      : t("welcome.describeOrPick", "Describe a goal or pick a template");
+  const recentGoals = goals.slice(0, 3);
 
   return (
     <KeyboardAvoidingView
@@ -113,263 +125,355 @@ export default function WelcomeScreen() {
       keyboardVerticalOffset={0}
       style={[styles.root, { backgroundColor: colors.background }]}
     >
+      {/* Top bar */}
+      <View style={[styles.topBar, { paddingTop: topPad, borderBottomColor: colors.border }]}>
+        <AtlasLogo size="md" />
+        <Pressable
+          style={[styles.avatarBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+          hitSlop={8}
+        >
+          <Feather name="settings" size={16} color={colors.mutedForeground} />
+        </Pressable>
+      </View>
+
       <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingTop: topPad, paddingBottom: bottomPad + 100 },
-        ]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad + 24 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.header}>
-          <AtlasLogo size="md" />
-        </View>
-
-        <Animated.View entering={FadeInDown.duration(400)} style={styles.hero}>
-          <Text
-            style={[
-              styles.eyebrow,
-              { color: colors.primary, fontFamily: "Inter_600SemiBold" },
-            ]}
-          >
-            {t("welcome.eyebrow", "EXECUTION COACH")}
-          </Text>
-          <Text
-            style={[
-              styles.title,
-              { color: colors.foreground, fontFamily: "Inter_700Bold" },
-            ]}
-          >
-            {t("welcome.title", "What do you want\nto make happen?")}
-          </Text>
-          <Text
-            style={[
-              styles.subtitle,
-              { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-            ]}
-          >
-            {t(
-              "welcome.subtitle",
-              "Tell rubai any goal — career, fitness, study, money, creative, personal — and it will generate a smart intake form, then build a real plan around your time and how you actually behave.",
-            )}
+        {/* Greeting */}
+        <Animated.View entering={FadeInDown.duration(350)} style={styles.greetingBlock}>
+          <Text style={[styles.greeting, { color: colors.foreground, fontFamily: "Inter_700Bold" }]}>
+            {t("welcome.title", "Hi, what goal do you\nwant to crush?")}
           </Text>
         </Animated.View>
 
-        <Animated.View
-          entering={FadeInDown.delay(100).duration(400)}
-          style={[
-            styles.customCard,
-            {
-              backgroundColor: colors.card,
-              borderColor: hasCustom ? colors.primary : colors.border,
-              borderWidth: hasCustom ? 2 : 1,
-              borderRadius: colors.radius,
-            },
-          ]}
-        >
-          <View style={styles.customLabelRow}>
-            <View
-              style={[styles.customIconWrap, { backgroundColor: colors.primary + "1A" }]}
-            >
-              <Feather name="target" size={16} color={colors.primary} />
-            </View>
-            <Text
+        {/* ── MAIN INPUT BOX ── */}
+        <Animated.View entering={FadeInDown.delay(80).duration(350)} style={styles.inputWrap}>
+          <View
+            style={[
+              styles.inputBox,
+              {
+                backgroundColor: colors.card,
+                borderColor: inputFocused ? colors.primary : colors.border,
+                borderRadius: colors.radius,
+              },
+            ]}
+          >
+            <TextInput
+              ref={inputRef}
+              value={customGoal}
+              onChangeText={onCustomChange}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
+              placeholder={placeholder}
+              placeholderTextColor={colors.mutedForeground}
+              multiline
               style={[
-                styles.customLabel,
-                { color: colors.primary, fontFamily: "Inter_600SemiBold" },
+                styles.textInput,
+                { color: colors.foreground, fontFamily: "Inter_400Regular" },
               ]}
-            >
-              {t("welcome.yourGoalLabel", "YOUR GOAL")}
-            </Text>
+            />
+
+            {/* Action bar */}
+            <View style={[styles.actionBar, { borderTopColor: colors.border }]}>
+              {/* Left: attach */}
+              <Pressable
+                style={[styles.actionBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
+                hitSlop={6}
+              >
+                <Feather name="paperclip" size={16} color={colors.mutedForeground} />
+              </Pressable>
+
+              <View style={styles.actionSpacer} />
+
+              {/* Right: mic */}
+              <Pressable
+                style={[styles.actionBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
+                hitSlop={6}
+              >
+                <Feather name="mic" size={16} color={colors.mutedForeground} />
+              </Pressable>
+
+              {/* Right: send */}
+              <Pressable
+                onPress={onContinue}
+                disabled={!canSend}
+                style={[
+                  styles.sendBtn,
+                  {
+                    backgroundColor: canSend ? colors.primary : colors.border,
+                    borderRadius: 8,
+                  },
+                ]}
+                hitSlop={6}
+              >
+                {isGeneratingTitle ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Feather
+                    name="arrow-up"
+                    size={16}
+                    color={canSend ? colors.primaryForeground : colors.mutedForeground}
+                  />
+                )}
+              </Pressable>
+            </View>
           </View>
-          <TextInput
-            value={customGoal}
-            onChangeText={onCustomChange}
-            placeholder={placeholder}
-            placeholderTextColor={colors.mutedForeground}
-            multiline
-            style={[
-              styles.customInput,
-              { color: colors.foreground, fontFamily: "Inter_500Medium" },
-            ]}
-          />
-          <Text
-            style={[
-              styles.customHint,
-              { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-            ]}
-          >
-            {t(
-              "welcome.customHint",
-              "Be specific if you can. rubai will generate a tailored intake form for your exact goal.",
-            )}
-          </Text>
         </Animated.View>
 
-        <View style={styles.dividerRow}>
-          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-          <Text
-            style={[
-              styles.dividerText,
-              { color: colors.mutedForeground, fontFamily: "Inter_500Medium" },
-            ]}
+        {/* ── CATEGORY CHIPS (horizontal scroll) ── */}
+        <Animated.View entering={FadeInDown.delay(140).duration(350)}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipsRow}
           >
-            {t("welcome.orPickTemplate", "OR PICK A TEMPLATE")}
-          </Text>
-          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-        </View>
+            {TEMPLATE_GOAL_TYPES.map((g) => {
+              const meta = GOAL_META[g];
+              const isSelected = selected === g;
+              return (
+                <Pressable
+                  key={g}
+                  onPress={() => onPickTemplate(g)}
+                  style={[
+                    styles.chip,
+                    {
+                      backgroundColor: isSelected ? colors.primary + "18" : colors.card,
+                      borderColor: isSelected ? colors.primary : colors.border,
+                      borderRadius: 10,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={meta.icon as React.ComponentProps<typeof Ionicons>["name"]}
+                    size={20}
+                    color={isSelected ? colors.primary : colors.mutedForeground}
+                  />
+                  <Text
+                    style={[
+                      styles.chipLabel,
+                      {
+                        color: isSelected ? colors.primary : colors.mutedForeground,
+                        fontFamily: "Inter_500Medium",
+                      },
+                    ]}
+                  >
+                    {meta.label.split(" ")[0]}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </Animated.View>
 
-        <View style={styles.cards}>
-          {TEMPLATE_GOAL_TYPES.map((g, i) => (
-            <Animated.View
-              key={g}
-              entering={FadeInDown.delay(160 + i * 50).duration(380)}
-            >
-              <GoalCard
-                goal={g}
-                selected={selected === g}
-                onPress={() => onPickTemplate(g)}
-              />
-            </Animated.View>
-          ))}
-        </View>
-
-        <View style={styles.note}>
-          <Feather name="shield" size={14} color={colors.mutedForeground} />
-          <Text
-            style={[
-              styles.noteText,
-              { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-            ]}
-          >
-            {t(
-              "welcome.noteText",
-              "rubai adapts as you go. Skip a day and the plan softens. Stack wins and it pushes you.",
-            )}
+        {/* ── EXAMPLE PROMPTS ── */}
+        <Animated.View entering={FadeInDown.delay(200).duration(350)} style={styles.exampleSection}>
+          <Text style={[styles.exampleLabel, { color: colors.mutedForeground, fontFamily: "Inter_500Medium" }]}>
+            {t("welcome.exampleLabel", "Try an example prompt")}
           </Text>
-        </View>
+          <View style={styles.exampleChips}>
+            {EXAMPLE_PROMPTS.map((ex) => (
+              <Pressable
+                key={ex}
+                onPress={() => onExamplePress(ex)}
+                style={[
+                  styles.exampleChip,
+                  { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 8 },
+                ]}
+              >
+                <Text style={[styles.exampleChipText, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
+                  {ex}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </Animated.View>
+
+        {/* ── RECENT GOALS ── */}
+        {recentGoals.length > 0 && (
+          <Animated.View entering={FadeIn.delay(260).duration(350)} style={styles.recentSection}>
+            <View style={styles.recentHeader}>
+              <Text style={[styles.recentTitle, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
+                {t("welcome.recentGoals", "Your recent goals")}
+              </Text>
+              <Pressable onPress={() => router.push("/(tabs)/goals")}>
+                <Text style={[styles.viewAll, { color: colors.primary, fontFamily: "Inter_500Medium" }]}>
+                  {t("welcome.viewAll", "View All →")}
+                </Text>
+              </Pressable>
+            </View>
+            {recentGoals.map((goal) => {
+              const meta = GOAL_META[goal.profile?.goalType ?? "custom"];
+              const label =
+                goal.profile?.goalType === "custom" && goal.profile?.customGoalTitle
+                  ? goal.profile.customGoalTitle
+                  : meta.label;
+              const totalWeeks = goal.roadmap?.totalWeeks;
+              const sub = goal.roadmap
+                ? t("welcome.roadmapWeeks", "{{n}}-week plan · Active", { n: totalWeeks ?? "?" })
+                : t("welcome.inProgress", "In progress");
+
+              return (
+                <Pressable
+                  key={goal.id}
+                  style={[
+                    styles.recentGoalRow,
+                    { backgroundColor: colors.card, borderColor: colors.border, borderRadius: colors.radius },
+                  ]}
+                  onPress={() => router.push("/(tabs)/goals")}
+                >
+                  <View style={[styles.recentIcon, { backgroundColor: meta.accent + "18", borderRadius: 8 }]}>
+                    <Ionicons
+                      name={meta.icon as React.ComponentProps<typeof Ionicons>["name"]}
+                      size={18}
+                      color={meta.accent}
+                    />
+                  </View>
+                  <View style={styles.recentText}>
+                    <Text numberOfLines={1} style={[styles.recentGoalTitle, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
+                      {label}
+                    </Text>
+                    <Text style={[styles.recentGoalSub, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
+                      {sub}
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+                </Pressable>
+              );
+            })}
+          </Animated.View>
+        )}
       </ScrollView>
-
-      <View
-        style={[
-          styles.footer,
-          {
-            backgroundColor: colors.background,
-            borderTopColor: colors.border,
-            paddingBottom: bottomPad,
-          },
-        ]}
-      >
-        <AtlasButton
-          label={isGeneratingTitle ? t("welcome.namingGoal", "Naming your goal…") : buttonLabel}
-          onPress={onContinue}
-          disabled={!canContinue}
-          loading={isGeneratingTitle}
-          icon={
-            canContinue && !isGeneratingTitle ? (
-              <Feather name="arrow-right" size={18} color={colors.primaryForeground} />
-            ) : undefined
-          }
-        />
-      </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  scroll: {
-    paddingHorizontal: 22,
-    gap: 22,
-  },
-  header: {
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  hero: {
-    gap: 10,
-    marginTop: 4,
-  },
-  eyebrow: {
-    fontSize: 11,
-    letterSpacing: 2,
-  },
-  title: {
-    fontSize: 34,
-    lineHeight: 38,
-    letterSpacing: -1,
-  },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 4,
-  },
-  customCard: {
-    padding: 18,
-    gap: 10,
-  },
-  customLabelRow: {
+
+  topBar: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  customIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  avatarBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  customLabel: {
-    fontSize: 11,
-    letterSpacing: 1.6,
+
+  scroll: {
+    paddingHorizontal: 16,
+    gap: 16,
+    paddingTop: 24,
   },
-  customInput: {
-    fontSize: 17,
-    lineHeight: 24,
-    minHeight: 70,
+
+  greetingBlock: {
+    paddingHorizontal: 4,
+  },
+  greeting: {
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.6,
+    textAlign: "center",
+  },
+
+  inputWrap: {},
+  inputBox: {
+    borderWidth: 1.5,
+    overflow: "hidden",
+  },
+  textInput: {
+    fontSize: 15,
+    lineHeight: 22,
+    minHeight: 72,
+    maxHeight: 160,
     textAlignVertical: "top",
-    paddingTop: 4,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 8,
   },
-  customHint: {
-    fontSize: 12.5,
-    lineHeight: 18,
-  },
-  dividerRow: {
+  actionBar: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 8,
   },
-  dividerLine: {
-    flex: 1,
-    height: 1,
+  actionBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  dividerText: {
-    fontSize: 10.5,
-    letterSpacing: 1.8,
+  actionSpacer: { flex: 1 },
+  sendBtn: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  cards: {
-    gap: 12,
-  },
-  note: {
+
+  chipsRow: {
+    paddingHorizontal: 2,
+    gap: 8,
     flexDirection: "row",
-    gap: 10,
-    paddingHorizontal: 4,
-    paddingTop: 6,
   },
-  noteText: {
-    fontSize: 12.5,
-    lineHeight: 18,
-    flex: 1,
+  chip: {
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    gap: 5,
   },
-  footer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 22,
-    paddingTop: 14,
-    borderTopWidth: 1,
+  chipLabel: {
+    fontSize: 11,
+    letterSpacing: 0.2,
   },
+
+  exampleSection: { gap: 10 },
+  exampleLabel: { fontSize: 12, fontWeight: "500" },
+  exampleChips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  exampleChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+  },
+  exampleChipText: { fontSize: 12 },
+
+  recentSection: { gap: 10 },
+  recentHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  recentTitle: { fontSize: 14 },
+  viewAll: { fontSize: 12 },
+  recentGoalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    gap: 12,
+    borderWidth: 1,
+  },
+  recentIcon: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recentText: { flex: 1 },
+  recentGoalTitle: { fontSize: 13, marginBottom: 2 },
+  recentGoalSub: { fontSize: 11 },
 });
