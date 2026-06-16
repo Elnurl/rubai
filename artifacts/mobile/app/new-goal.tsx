@@ -274,6 +274,16 @@ export default function NewGoalScreen() {
           </View>
         )}
 
+        {/* ── HEADING ── */}
+        <View style={styles.heroBlock}>
+          <Text style={[styles.heroTitle, { color: colors.foreground, fontFamily: "Inter_700Bold" }]}>
+            {t("newGoal.heroTitle", "Describe your new goal.")}
+          </Text>
+          <Text style={[styles.heroSub, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
+            {t("newGoal.heroSub", "Tell rubai what you want to achieve and it will build a real plan around you.")}
+          </Text>
+        </View>
+
         {/* ── MAIN INPUT BOX ── */}
         <View
           style={[
@@ -479,8 +489,26 @@ const styles = StyleSheet.create({
 
   scroll: {
     paddingHorizontal: 16,
-    paddingTop: 100,
+    paddingTop: 48,
     gap: 16,
+  },
+
+  heroBlock: {
+    alignItems: "center",
+    paddingHorizontal: 8,
+    gap: 8,
+    marginBottom: 8,
+  },
+  heroTitle: {
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.6,
+    textAlign: "center",
+  },
+  heroSub: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
   },
 
   limitBanner: {
