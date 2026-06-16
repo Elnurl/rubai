@@ -2,11 +2,12 @@ import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Modal,
   Platform,
   Pressable,
@@ -30,6 +31,17 @@ const EXAMPLE_PROMPTS = [
   "Run a half marathon by June",
   "Save $15,000 this year",
   "Ship a side project in 60 days",
+];
+
+const PLACEHOLDER_HINTS = [
+  "e.g. Get promoted to senior engineer in 9 months",
+  "e.g. Run my first half marathon by June",
+  "e.g. Save $15,000 for a down payment this year",
+  "e.g. Launch my freelance studio by October",
+  "e.g. Read 30 books and journal weekly",
+  "e.g. Move to Berlin and find a job by June",
+  "e.g. Ship a side project in 60 days",
+  "e.g. Learn Spanish to conversational level",
 ];
 
 // ── Transcribe a recorded clip via Whisper ──────────────────────────────────
@@ -64,6 +76,28 @@ export default function NewGoalScreen() {
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const inputRef = useRef<TextInput>(null);
+
+  // Cycling animated placeholder
+  const [hintIndex, setHintIndex] = useState(0);
+  const hintOpacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const cycle = setInterval(() => {
+      Animated.timing(hintOpacity, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => {
+        setHintIndex((i) => (i + 1) % PLACEHOLDER_HINTS.length);
+        Animated.timing(hintOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      });
+    }, 3000);
+    return () => clearInterval(cycle);
+  }, [hintOpacity]);
 
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 12 : insets.top;
@@ -296,21 +330,33 @@ export default function NewGoalScreen() {
             },
           ]}
         >
-          <TextInput
-            ref={inputRef}
-            value={customGoal}
-            onChangeText={(text) => {
-              setCustomGoal(text);
-              if (text.trim().length > 0) setSelected(null);
-            }}
-            onFocus={() => setInputFocused(true)}
-            onBlur={() => setInputFocused(false)}
-            placeholder={t("newGoal.placeholder", "e.g. Get promoted to senior engineer in 9 months")}
-            placeholderTextColor={colors.mutedForeground}
-            multiline
-            editable={canAddMoreGoals}
-            style={[styles.textInput, { color: colors.foreground, fontFamily: "Inter_400Regular" }]}
-          />
+          <View style={styles.inputInner}>
+            {/* Animated cycling placeholder — shown only when empty & not focused */}
+            {customGoal.length === 0 && !inputFocused && (
+              <Animated.Text
+                style={[
+                  styles.animatedPlaceholder,
+                  { color: colors.mutedForeground, fontFamily: "Inter_400Regular", opacity: hintOpacity },
+                ]}
+                pointerEvents="none"
+              >
+                {PLACEHOLDER_HINTS[hintIndex]}
+              </Animated.Text>
+            )}
+            <TextInput
+              ref={inputRef}
+              value={customGoal}
+              onChangeText={(text) => {
+                setCustomGoal(text);
+                if (text.trim().length > 0) setSelected(null);
+              }}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
+              multiline
+              editable={canAddMoreGoals}
+              style={[styles.textInput, { color: colors.foreground, fontFamily: "Inter_400Regular" }]}
+            />
+          </View>
 
           {/* Action bar */}
           <View style={[styles.actionBar, { borderTopColor: colors.border }]}>
@@ -536,6 +582,20 @@ const styles = StyleSheet.create({
   recordingText: { fontSize: 13 },
 
   inputBox: { borderWidth: 1.5, overflow: "hidden" },
+  inputInner: {
+    position: "relative",
+    minHeight: 80,
+  },
+  animatedPlaceholder: {
+    position: "absolute",
+    top: 14,
+    left: 16,
+    right: 16,
+    fontSize: 15,
+    lineHeight: 22,
+    zIndex: 1,
+    pointerEvents: "none",
+  },
   textInput: {
     fontSize: 15,
     lineHeight: 22,
@@ -545,6 +605,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 8,
+    zIndex: 2,
   },
   actionBar: {
     flexDirection: "row",
