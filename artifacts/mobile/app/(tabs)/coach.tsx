@@ -182,6 +182,8 @@ export default function CoachScreen() {
   } | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showGoalBanner, setShowGoalBanner] = useState(false);
+  const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [modelChoice, setModelChoice] = useState<ModelChoice>("smart");
   const [conversationMode, setConversationMode] = useState<"coach" | "normal">("coach");
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -222,6 +224,18 @@ export default function CoachScreen() {
     useCallback(() => {
       customFetch("/api/atlas/session-start", { method: "POST" }).catch(() => {});
     }, []),
+  );
+
+  // Show goal info banner briefly when entering the chat tab.
+  useFocusEffect(
+    useCallback(() => {
+      if (!activeGoal) return;
+      setShowGoalBanner(true);
+      bannerTimerRef.current = setTimeout(() => setShowGoalBanner(false), 3000);
+      return () => {
+        if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+      };
+    }, [activeGoal]),
   );
 
   useEffect(() => {
@@ -1511,7 +1525,7 @@ export default function CoachScreen() {
             testID="model-mode-dropdown-trigger"
             style={styles.logoPillWrap}
           >
-            <AtlasLogo size="lg" />
+            <AtlasLogo size="sm" />
             <Feather
               name={dropdownOpen ? "chevron-up" : "chevron-down"}
               size={11}
@@ -1531,6 +1545,25 @@ export default function CoachScreen() {
           </View>
         </View>
 
+        {/* Goal info banner — auto-dismisses after 3s */}
+        {showGoalBanner && activeGoal && (
+          <Animated.View
+            entering={FadeIn.duration(250)}
+            style={[
+              styles.goalBanner,
+              { backgroundColor: colors.primary + "14", borderColor: colors.primary + "40" },
+            ]}
+          >
+            <Feather name="crosshair" size={14} color={colors.primary} />
+            <View style={[styles.goalBannerDot, { backgroundColor: colors.primary }]} />
+            <Text
+              numberOfLines={1}
+              style={[styles.goalBannerText, { color: colors.primary, fontFamily: "Inter_500Medium" }]}
+            >
+              {activeGoal.profile.goalStatement}
+            </Text>
+          </Animated.View>
+        )}
       </View>
 
       <FlatList
@@ -2464,6 +2497,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+  goalBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginHorizontal: 16,
+    marginTop: 6,
+    marginBottom: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 99,
+    borderWidth: 1,
+    alignSelf: "flex-start",
+  },
+  goalBannerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  goalBannerText: {
+    fontSize: 12,
+    flexShrink: 1,
   },
   logoPillWrap: {
     flex: 1,
