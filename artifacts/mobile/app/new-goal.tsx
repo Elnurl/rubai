@@ -441,8 +441,8 @@ export default function NewGoalScreen() {
           </View>
         </View>
 
-        {/* ── CATEGORY CHIPS ── */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+        {/* ── CATEGORY CHIPS — centered wrap grid ── */}
+        <View style={styles.chipsGrid}>
           {TEMPLATE_GOAL_TYPES.map((g) => {
             const meta = GOAL_META[g];
             const isSelected = selected === g;
@@ -450,29 +450,26 @@ export default function NewGoalScreen() {
               <Pressable
                 key={g}
                 onPress={() => onPickTemplate(g)}
-                style={[styles.chip, { backgroundColor: isSelected ? colors.primary + "18" : colors.card, borderColor: isSelected ? colors.primary : colors.border, borderRadius: 10, opacity: canAddMoreGoals ? 1 : 0.5 }]}
+                style={[styles.chip, { backgroundColor: isSelected ? colors.primary + "18" : colors.card, borderColor: isSelected ? colors.primary : colors.border, borderRadius: 99, opacity: canAddMoreGoals ? 1 : 0.5 }]}
               >
-                <Ionicons name={meta.icon as React.ComponentProps<typeof Ionicons>["name"]} size={20} color={isSelected ? colors.primary : colors.mutedForeground} />
+                <Ionicons name={meta.icon as React.ComponentProps<typeof Ionicons>["name"]} size={18} color={isSelected ? colors.primary : colors.mutedForeground} />
                 <Text style={[styles.chipLabel, { color: isSelected ? colors.primary : colors.mutedForeground, fontFamily: "Inter_500Medium" }]}>
                   {meta.label.split(" ")[0]}
                 </Text>
               </Pressable>
             );
           })}
-        </ScrollView>
+        </View>
 
         {/* ── EXAMPLE PROMPTS ── */}
         {canAddMoreGoals && (
           <View style={styles.exampleSection}>
-            <Text style={[styles.exampleLabel, { color: colors.mutedForeground, fontFamily: "Inter_500Medium" }]}>
-              {t("newGoal.exampleLabel", "Try an example prompt")}
-            </Text>
             <View style={styles.exampleChips}>
               {EXAMPLE_PROMPTS.map((ex) => (
                 <Pressable
                   key={ex}
                   onPress={() => onExamplePress(ex)}
-                  style={[styles.exampleChip, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 8 }]}
+                  style={[styles.exampleChip, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: 99 }]}
                 >
                   <Text style={[styles.exampleChipText, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>{ex}</Text>
                 </Pressable>
@@ -698,20 +695,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  chipsRow: { gap: 8, flexDirection: "row", paddingHorizontal: 2 },
-  chip: {
-    alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderWidth: 1.5,
-    gap: 5,
+  chipsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 4,
   },
-  chipLabel: { fontSize: 11, letterSpacing: 0.2 },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    gap: 6,
+  },
+  chipLabel: { fontSize: 13, letterSpacing: 0.1 },
 
-  exampleSection: { gap: 10 },
-  exampleLabel: { fontSize: 12 },
-  exampleChips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  exampleChip: { paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1 },
+  exampleSection: { gap: 0 },
+  exampleChips: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center" },
+  exampleChip: { paddingVertical: 7, paddingHorizontal: 14, borderWidth: 1 },
   exampleChipText: { fontSize: 12 },
 
   floatingMenu: {
