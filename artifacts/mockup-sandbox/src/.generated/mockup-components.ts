@@ -6,10 +6,12 @@ export const modules: ModuleMap = {
   "./components/mockups/roadmap/Journey.tsx": () => import("../components/mockups/roadmap/Journey.tsx"),
   "./components/mockups/roadmap/Timeline.tsx": () => import("../components/mockups/roadmap/Timeline.tsx"),
   "./components/mockups/rubai-ambient-thread/Home.tsx": () => import("../components/mockups/rubai-ambient-thread/Home.tsx"),
-  "./components/mockups/rubai-mission-control/Home.tsx": () => import("../components/mockups/rubai-mission-control/Home.tsx"),
   "./components/mockups/rubai-card-deck/Home.tsx": () => import("../components/mockups/rubai-card-deck/Home.tsx"),
+  "./components/mockups/rubai-mission-control/Home.tsx": () => import("../components/mockups/rubai-mission-control/Home.tsx"),
   "./components/mockups/rubai-redesign/AccountScreen.tsx": () => import("../components/mockups/rubai-redesign/AccountScreen.tsx"),
   "./components/mockups/rubai-redesign/CoachScreen.tsx": () => import("../components/mockups/rubai-redesign/CoachScreen.tsx"),
   "./components/mockups/rubai-redesign/RoadmapScreen.tsx": () => import("../components/mockups/rubai-redesign/RoadmapScreen.tsx"),
-  "./components/mockups/rubai-redesign/TodayScreen.tsx": () => import("../components/mockups/rubai-redesign/TodayScreen.tsx")
+  "./components/mockups/rubai-redesign/TodayScreen.tsx": () => import("../components/mockups/rubai-redesign/TodayScreen.tsx"),
+  "./components/mockups/welcome/ChatBubbleDemo.tsx": () => import("../components/mockups/welcome/ChatBubbleDemo.tsx"),
+  "./components/mockups/welcome/WelcomeNew.tsx": () => import("../components/mockups/welcome/WelcomeNew.tsx")
 };
