@@ -2509,7 +2509,7 @@ const styles = StyleSheet.create({
   dropdownCard: {
     position: "absolute",
     top: "100%",
-    left: 0,
+    left: 52,
     width: 240,
     marginTop: 8,
     borderRadius: 16,
