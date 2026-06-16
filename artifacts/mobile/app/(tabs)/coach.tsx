@@ -1414,12 +1414,61 @@ export default function CoachScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
+      {/* Dismiss overlay — same stacking context as dropdown card so zIndex works */}
       {dropdownOpen && (
         <Pressable
-          style={[StyleSheet.absoluteFill, { zIndex: 50 }]}
+          style={[StyleSheet.absoluteFill, { zIndex: 150 }]}
           onPress={() => setDropdownOpen(false)}
         />
       )}
+
+      {/* Dropdown card — rendered here (root level) so zIndex:200 beats overlay:150 */}
+      {dropdownOpen && (
+        <View
+          style={[
+            styles.dropdownCard,
+            {
+              top: topPad + 52,
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              shadowColor: colors.foreground,
+            },
+          ]}
+        >
+          <ModelModeRow
+            label={t("coach.smartLabel", "Smart")}
+            desc={t("coach.smartDesc", "Best answers")}
+            selected={modelChoice === "smart"}
+            onPress={() => { setModelChoice("smart"); setDropdownOpen(false); }}
+            colors={colors}
+          />
+          <View style={[styles.dropdownSep, { backgroundColor: colors.border }]} />
+          <ModelModeRow
+            label={t("coach.fastLabel", "Fast")}
+            desc={t("coach.fastDesc", "Faster responses")}
+            selected={modelChoice === "fast"}
+            onPress={() => { setModelChoice("fast"); setDropdownOpen(false); }}
+            colors={colors}
+          />
+          <View style={[styles.dropdownGroupDivider, { backgroundColor: colors.muted }]} />
+          <ModelModeRow
+            label={t("coach.coachLabel", "Coach")}
+            desc={t("coach.coachModeDesc", "Goal-focused coaching")}
+            selected={conversationMode === "coach"}
+            onPress={() => { setConversationMode("coach"); setDropdownOpen(false); }}
+            colors={colors}
+          />
+          <View style={[styles.dropdownSep, { backgroundColor: colors.border }]} />
+          <ModelModeRow
+            label={t("coach.generalLabel", "General")}
+            desc={t("coach.generalModeDesc", "Free conversation")}
+            selected={conversationMode === "normal"}
+            onPress={() => { setConversationMode("normal"); setDropdownOpen(false); }}
+            colors={colors}
+          />
+        </View>
+      )}
+
     <KeyboardAvoidingView
       behavior="padding"
       keyboardVerticalOffset={0}
@@ -1456,9 +1505,9 @@ export default function CoachScreen() {
             <AtlasLogo size="lg" />
             <Feather
               name={dropdownOpen ? "chevron-up" : "chevron-down"}
-              size={14}
+              size={11}
               color={colors.mutedForeground}
-              style={{ marginLeft: 2, marginTop: 2 }}
+              style={{ marginLeft: 1, marginTop: 3 }}
             />
           </Pressable>
 
@@ -1473,51 +1522,6 @@ export default function CoachScreen() {
           </View>
         </View>
 
-        {/* Dropdown card — Gemini-style model + mode picker */}
-        {dropdownOpen && (
-          <View
-            style={[
-              styles.dropdownCard,
-              {
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                shadowColor: colors.foreground,
-              },
-            ]}
-          >
-            <ModelModeRow
-              label={t("coach.smartLabel", "Smart")}
-              desc={t("coach.smartDesc", "Best answers")}
-              selected={modelChoice === "smart"}
-              onPress={() => { setModelChoice("smart"); setDropdownOpen(false); }}
-              colors={colors}
-            />
-            <View style={[styles.dropdownSep, { backgroundColor: colors.border }]} />
-            <ModelModeRow
-              label={t("coach.fastLabel", "Fast")}
-              desc={t("coach.fastDesc", "Faster responses")}
-              selected={modelChoice === "fast"}
-              onPress={() => { setModelChoice("fast"); setDropdownOpen(false); }}
-              colors={colors}
-            />
-            <View style={[styles.dropdownGroupDivider, { backgroundColor: colors.border }]} />
-            <ModelModeRow
-              label={t("coach.coachLabel", "Coach")}
-              desc={t("coach.coachModeDesc", "Goal-focused coaching")}
-              selected={conversationMode === "coach"}
-              onPress={() => { setConversationMode("coach"); setDropdownOpen(false); }}
-              colors={colors}
-            />
-            <View style={[styles.dropdownSep, { backgroundColor: colors.border }]} />
-            <ModelModeRow
-              label={t("coach.generalLabel", "General")}
-              desc={t("coach.generalModeDesc", "Free conversation")}
-              selected={conversationMode === "normal"}
-              onPress={() => { setConversationMode("normal"); setDropdownOpen(false); }}
-              colors={colors}
-            />
-          </View>
-        )}
       </View>
 
       <FlatList
