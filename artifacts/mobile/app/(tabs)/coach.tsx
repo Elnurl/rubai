@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
   Image,
   Modal,
@@ -189,6 +190,8 @@ export default function CoachScreen() {
   const [pendingAttachment, setPendingAttachment] =
     useState<PendingAttachment | null>(null);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const plusBtnRef = useRef<View>(null);
+  const [menuAnchor, setMenuAnchor] = useState({ x: 0, y: 0, w: 0 });
   const [transcribing, setTranscribing] = useState(false);
   // Streaming state. `isStreaming` is true from request start until the
   // `final` SSE event lands, even before the first delta — so the typing
@@ -1252,9 +1255,15 @@ export default function CoachScreen() {
     }
   }, []);
 
-  // Tapping "+" opens a bottom sheet with Files and Photos options.
+  // Tapping "+" measures button position and opens floating popover above it.
   const onAttachmentPress = useCallback(() => {
-    setAttachMenuOpen(true);
+    plusBtnRef.current?.measureInWindow((px, py, pw) => {
+      const screenW = Dimensions.get("window").width;
+      const menuW = 240;
+      const left = Math.min(Math.max(px, 8), screenW - menuW - 8);
+      setMenuAnchor({ x: left, y: py, w: menuW });
+      setAttachMenuOpen(true);
+    });
   }, []);
 
   // Footer below the chat list: typing indicator, then per-turn suggestions
@@ -1663,6 +1672,7 @@ export default function CoachScreen() {
           ]}
         >
           <Pressable
+            ref={plusBtnRef}
             onPress={onAttachmentPress}
             hitSlop={6}
             disabled={coach.isPending || isRecording}
@@ -1760,129 +1770,84 @@ export default function CoachScreen() {
       onDeleteSession={onDeleteSession}
     />
 
-    {/* Attach-menu bottom sheet — Files vs Photos */}
+    {/* Attach-menu — floating popover above + button */}
     <Modal
       visible={attachMenuOpen}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={() => setAttachMenuOpen(false)}
     >
-      <Pressable
-        style={styles.attachMenuOverlay}
-        onPress={() => setAttachMenuOpen(false)}
-      />
+      <Pressable style={{ flex: 1 }} onPress={() => setAttachMenuOpen(false)} />
       <View
         style={[
           styles.attachMenuSheet,
-          { backgroundColor: colors.card, borderColor: colors.border },
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            left: menuAnchor.x,
+            top: menuAnchor.y - 178,
+            width: menuAnchor.w,
+          },
         ]}
       >
+        {/* Header */}
+        <Text style={[styles.attachMenuHeader, { color: colors.mutedForeground, fontFamily: "Inter_500Medium" }]}>
+          {t("coach.addAttachments", "Add attachments")}
+        </Text>
+
         {/* Camera */}
         <Pressable
           style={styles.attachMenuRow}
-          onPress={() => {
-            setAttachMenuOpen(false);
-            void pickFromCamera();
-          }}
+          onPress={() => { setAttachMenuOpen(false); void pickFromCamera(); }}
         >
-          <View
-            style={[
-              styles.attachMenuIcon,
-              { backgroundColor: colors.primary + "18" },
-            ]}
-          >
-            <Feather name="camera" size={20} color={colors.primary} />
+          <View style={[styles.attachMenuIcon, { backgroundColor: colors.primary + "18" }]}>
+            <Feather name="camera" size={18} color={colors.primary} />
           </View>
-          <View>
-            <Text
-              style={[
-                styles.attachMenuLabel,
-                { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
-              ]}
-            >
+          <View style={styles.attachMenuText}>
+            <Text style={[styles.attachMenuLabel, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
               {t("coach.camera", "Camera")}
             </Text>
-            <Text
-              style={[
-                styles.attachMenuSub,
-                { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-              ]}
-            >
+            <Text style={[styles.attachMenuSub, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
               {t("coach.cameraSub", "Take a photo right now")}
             </Text>
           </View>
         </Pressable>
 
-        {/* Divider */}
         <View style={[styles.attachMenuDivider, { backgroundColor: colors.border }]} />
 
         {/* Photos */}
         <Pressable
           style={styles.attachMenuRow}
-          onPress={() => {
-            setAttachMenuOpen(false);
-            void pickFromLibrary();
-          }}
+          onPress={() => { setAttachMenuOpen(false); void pickFromLibrary(); }}
         >
-          <View
-            style={[
-              styles.attachMenuIcon,
-              { backgroundColor: colors.primary + "18" },
-            ]}
-          >
-            <Feather name="image" size={20} color={colors.primary} />
+          <View style={[styles.attachMenuIcon, { backgroundColor: colors.primary + "18" }]}>
+            <Feather name="image" size={18} color={colors.primary} />
           </View>
-          <View>
-            <Text
-              style={[
-                styles.attachMenuLabel,
-                { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
-              ]}
-            >
+          <View style={styles.attachMenuText}>
+            <Text style={[styles.attachMenuLabel, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
               {t("coach.photos", "Photos")}
             </Text>
-            <Text
-              style={[
-                styles.attachMenuSub,
-                { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-              ]}
-            >
+            <Text style={[styles.attachMenuSub, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
               {t("coach.photosSub", "Pick from your library")}
             </Text>
           </View>
         </Pressable>
 
-        {/* Divider */}
         <View style={[styles.attachMenuDivider, { backgroundColor: colors.border }]} />
 
         {/* Files */}
         <Pressable
           style={styles.attachMenuRow}
-          onPress={() => void pickDocument()}
+          onPress={() => { setAttachMenuOpen(false); void pickDocument(); }}
         >
-          <View
-            style={[
-              styles.attachMenuIcon,
-              { backgroundColor: colors.primary + "18" },
-            ]}
-          >
-            <Feather name="paperclip" size={20} color={colors.primary} />
+          <View style={[styles.attachMenuIcon, { backgroundColor: colors.primary + "18" }]}>
+            <Feather name="paperclip" size={18} color={colors.primary} />
           </View>
-          <View>
-            <Text
-              style={[
-                styles.attachMenuLabel,
-                { color: colors.foreground, fontFamily: "Inter_600SemiBold" },
-              ]}
-            >
+          <View style={styles.attachMenuText}>
+            <Text style={[styles.attachMenuLabel, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
               {t("coach.files", "Files")}
             </Text>
-            <Text
-              style={[
-                styles.attachMenuSub,
-                { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-              ]}
-            >
+            <Text style={[styles.attachMenuSub, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
               {t("coach.filesSub", "PDF, Word, text, CSV…")}
             </Text>
           </View>
@@ -2739,41 +2704,45 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  attachMenuOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-  },
   attachMenuSheet: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderTopWidth: 1,
-    paddingTop: 8,
-    paddingBottom: 36,
+    position: "absolute",
+    borderWidth: 1,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  attachMenuHeader: {
+    fontSize: 11,
+    letterSpacing: 0.2,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 6,
   },
   attachMenuRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   attachMenuIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
+  attachMenuText: { flex: 1 },
   attachMenuLabel: {
     fontSize: 13,
-    marginBottom: 2,
+    marginBottom: 1,
   },
   attachMenuSub: {
-    fontSize: 12.5,
+    fontSize: 11,
   },
   attachMenuDivider: {
     height: StyleSheet.hairlineWidth,
-    marginHorizontal: 24,
+    marginLeft: 56,
   },
 });
 
