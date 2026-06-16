@@ -1,286 +1,331 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 
 const C = {
-  bg: "#141414",
-  surface: "#1E1E1E",
-  surfaceHover: "#2A2A2A",
-  input: "#1E1E1E",
-  inputBorder: "#2A2A2A",
-  inputActive: "#333333",
+  bg: "#0E0E0E",
+  surface: "#1A1A1A",
+  surface2: "#242424",
+  inputBg: "#1A1A1A",
+  inputBorder: "#2E2E2E",
+  inputFocus: "#3E3E3E",
   primary: "#0E7C5A",
-  primaryHover: "#119A6E",
-  primaryFg: "#FAF6EE",
-  fg: "#F0F0F0",
-  muted: "#888888",
-  mutedDark: "#555555",
-  chip: "#2A2A2A",
-  chipFg: "#C0C0C0",
-  chipBorder: "#3A3A3A",
-  divider: "#2A2A2A",
-  card: "#1E1E1E",
-  cardBorder: "#2A2A2A",
-  cardHover: "#252525",
+  primaryLight: "#119A6E",
+  primaryFg: "#FFFFFF",
+  fg: "#F0EDE8",
+  fgMuted: "#888880",
+  fgDim: "#555550",
+  chip: "#1E1E1E",
+  chipBorder: "#2E2E2E",
+  chipFg: "#AAAAAA",
   accent: "#C68A12",
 };
 
-const TEMPLATES = [
-  { id: "ielts", label: "IELTS Preparation", icon: "🏔", desc: "Hit your band score with disciplined daily practice.", color: "#0E7C5A" },
-  { id: "prog", label: "Learning Programming", icon: "💻", desc: "Build real skills, ship real projects.", color: "#5B5BD7" },
-  { id: "fit", label: "Fitness Goals", icon: "🏋", desc: "A body plan you'll actually follow.", color: "#D73A49" },
-  { id: "money", label: "Financial Improvement", icon: "📈", desc: "Move money with intention.", color: "#0E7C5A" },
-  { id: "career", label: "Career Growth", icon: "💼", desc: "Get promoted, build a network, land offers.", color: "#5B5BD7" },
-  { id: "lang", label: "Language Learning", icon: "🗣", desc: "Speak confidently in 6 months.", color: "#D73A49" },
+const CATEGORIES = [
+  { id: "ielts", icon: "📚", label: "IELTS" },
+  { id: "fit", icon: "💪", label: "Fitness" },
+  { id: "code", icon: "💻", label: "Coding" },
+  { id: "finance", icon: "📈", label: "Finance" },
+  { id: "career", icon: "🚀", label: "Career" },
+  { id: "lang", icon: "🗣", label: "Language" },
+  { id: "biz", icon: "💼", label: "Business" },
 ];
 
-const EXAMPLE_PROMPTS = [
-  "Get promoted to senior engineer in 9 months",
-  "Run my first half marathon in 6 months",
-  "Read 30 books and journal weekly this year",
-  "Save 15,000 for a down payment in 9 months",
-  "Move to Berlin and find a job by June",
+const EXAMPLES = [
+  "Get promoted in 9 months",
+  "Run a half marathon by June",
+  "Save $15,000 this year",
+  "Ship a side project in 60 days",
 ];
 
 export function WelcomeNew() {
   const [input, setInput] = useState("");
-  const [selected, setSelected] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [selectedCat, setSelectedCat] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const hasInput = input.trim().length > 0;
-  const canContinue = hasInput || selected !== null;
+  const hasInput = input.trim().length > 0 || selectedCat !== null;
 
-  const onPickTemplate = (id: string) => {
-    setInput("");
-    setSelected(id);
+  const handleMic = () => {
+    setRecording((r) => !r);
+    if (!recording) {
+      setTimeout(() => setRecording(false), 3000);
+    }
   };
 
-  const onExamplePress = (text: string) => {
+  const handleExample = (text: string) => {
     setInput(text);
-    setSelected(null);
+    setSelectedCat(null);
+    textareaRef.current?.focus();
+  };
+
+  const autoResize = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    e.target.style.height = "auto";
+    e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Inter', sans-serif", overflow: "auto", color: C.fg }}>
+    <div
+      style={{
+        height: "100vh",
+        background: C.bg,
+        fontFamily: "'Inter', -apple-system, sans-serif",
+        color: C.fg,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+      }}
+    >
       {/* Status bar */}
-      <div style={{ height: 44, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px" }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: C.fg }}>9:41</span>
-        <span style={{ fontSize: 11, color: C.muted }}>●●●● WiFi 🔋</span>
+      <div style={{ height: 44, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 18px", flexShrink: 0 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.fg }}>9:41</span>
+        <span style={{ fontSize: 11, color: C.fgMuted }}>▐▐▐ WiFi 🔋</span>
       </div>
 
-      {/* Header */}
-      <div style={{ padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 28, height: 28, borderRadius: 14, background: C.primary, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ color: "#FFF", fontSize: 12, fontWeight: 700 }}>r</span>
+      {/* Top bar — workspace selector */}
+      <div style={{ padding: "4px 18px 0", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: C.surface, border: `1px solid ${C.inputBorder}`, borderRadius: 8, padding: "6px 10px 6px 8px" }}>
+          <div style={{ width: 22, height: 22, borderRadius: 6, background: C.primary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#fff" }}>
+            E
           </div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.fg }}>rubai</div>
+          <span style={{ fontSize: 13, fontWeight: 600, color: C.fg }}>My Workspace</span>
+          <span style={{ fontSize: 10, color: C.fgMuted, marginLeft: 2 }}>▾</span>
         </div>
-        <div style={{ width: 28, height: 28, borderRadius: 14, background: C.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: C.muted }}>
-          ⚙️
-        </div>
-      </div>
-
-      {/* Greeting */}
-      <div style={{ padding: "16px 20px 8px" }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: C.primary, letterSpacing: 1.2, marginBottom: 8 }}>EXECUTION COACH</div>
-        <div style={{ fontSize: 26, fontWeight: 700, color: C.fg, lineHeight: 1.2, letterSpacing: -0.5 }}>
-          Hi, what do you want to make happen?
-        </div>
-      </div>
-
-      {/* Input Area - Chat Style */}
-      <div style={{ padding: "12px 16px" }}>
-        <div style={{
-          background: C.input,
-          border: `1.5px solid ${focused ? C.inputActive : C.inputBorder}`,
-          borderRadius: 16,
-          padding: "14px 16px",
-          transition: "border-color 0.2s",
-        }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: C.primary, letterSpacing: 1.2, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 14 }}>🎯</span>
-            DESCRIBE THIS NEW GOAL
+        <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: C.surface, border: `1px solid ${C.inputBorder}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: C.fgMuted }}>
+            ☰
           </div>
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            placeholder="e.g. Get promoted to senior engineer in 9 months"
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: C.surface, border: `1px solid ${C.inputBorder}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>
+            ⊡
+          </div>
+        </div>
+      </div>
+
+      {/* Scrollable body */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 0 24px" }}>
+
+        {/* Greeting */}
+        <div style={{ padding: "32px 20px 20px", textAlign: "center" }}>
+          <div style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.25, letterSpacing: -0.5, color: C.fg }}>
+            Hi, what goal do you
+            <br />
+            want to crush?
+          </div>
+        </div>
+
+        {/* ─── MAIN INPUT ─── */}
+        <div style={{ padding: "0 14px 16px" }}>
+          <div
             style={{
-              width: "100%",
-              background: "transparent",
-              border: "none",
-              outline: "none",
-              color: C.fg,
-              fontSize: 15,
-              fontFamily: "'Inter', sans-serif",
-              lineHeight: 1.5,
-              minHeight: 60,
-              resize: "none",
-            }}
-            rows={2}
-          />
-
-          {/* Input Actions */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.inputBorder}` }}>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button style={{
-                width: 32, height: 32, borderRadius: 8,
-                background: C.surface, border: "none",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", color: C.muted,
-              }}>
-                <span style={{ fontSize: 16 }}>+</span>
-              </button>
-              <button style={{
-                width: 32, height: 32, borderRadius: 8,
-                background: C.surface, border: "none",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", color: C.muted,
-              }}>
-                <span style={{ fontSize: 14 }}>📱</span>
-              </button>
-              <button style={{
-                width: 32, height: 32, borderRadius: 8,
-                background: C.surface, border: "none",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", color: C.muted,
-              }}>
-                <span style={{ fontSize: 14 }}>🎨</span>
-              </button>
-            </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button style={{
-                padding: "6px 14px", borderRadius: 8,
-                background: C.chip, border: "none",
-                color: C.chipFg, fontSize: 11, fontWeight: 600,
-                cursor: "pointer",
-              }}>
-                Plan
-              </button>
-              <button style={{
-                width: 32, height: 32, borderRadius: 8,
-                background: C.surface, border: "none",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", color: C.muted,
-              }}>
-                <span style={{ fontSize: 14 }}>🎤</span>
-              </button>
-              <button style={{
-                width: 32, height: 32, borderRadius: 8,
-                background: canContinue ? C.primary : C.surface,
-                border: "none",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: canContinue ? "pointer" : "default",
-                color: canContinue ? "#FFF" : C.muted,
-                transition: "all 0.2s",
-              }}>
-                <span style={{ fontSize: 14 }}>↑</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Example Prompts */}
-      <div style={{ padding: "0 20px 12px" }}>
-        <div style={{ fontSize: 11, color: C.muted, marginBottom: 8, fontWeight: 500 }}>Try an example prompt →</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {EXAMPLE_PROMPTS.slice(0, 3).map((text) => (
-            <button
-              key={text}
-              onClick={() => onExamplePress(text)}
-              style={{
-                padding: "8px 14px",
-                borderRadius: 10,
-                background: C.chip,
-                border: `1px solid ${C.chipBorder}`,
-                color: C.chipFg,
-                fontSize: 11,
-                fontWeight: 500,
-                cursor: "pointer",
-                transition: "all 0.15s",
-              }}
-            >
-              {text}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Divider */}
-      <div style={{ padding: "0 20px", display: "flex", alignItems: "center", gap: 12, margin: "8px 0" }}>
-        <div style={{ flex: 1, height: 1, background: C.divider }} />
-        <span style={{ fontSize: 10, fontWeight: 600, color: C.muted, letterSpacing: 1.2 }}>OR PICK A TEMPLATE</span>
-        <div style={{ flex: 1, height: 1, background: C.divider }} />
-      </div>
-
-      {/* Templates */}
-      <div style={{ padding: "0 16px 20px" }}>
-        {TEMPLATES.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => onPickTemplate(t.id)}
-            style={{
-              width: "100%",
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              padding: "14px 16px",
-              marginBottom: 8,
-              borderRadius: 12,
-              background: selected === t.id ? C.primary : C.card,
-              border: `1.5px solid ${selected === t.id ? C.primary : C.cardBorder}`,
-              color: selected === t.id ? C.primaryFg : C.fg,
-              cursor: "pointer",
-              transition: "all 0.15s",
-              textAlign: "left",
-              fontFamily: "'Inter', sans-serif",
+              background: C.inputBg,
+              border: `1.5px solid ${focused ? C.inputFocus : C.inputBorder}`,
+              borderRadius: 18,
+              overflow: "hidden",
+              transition: "border-color 0.2s",
+              boxShadow: focused ? `0 0 0 3px ${C.primary}22` : "none",
             }}
           >
-            <div style={{
-              width: 40, height: 40, borderRadius: 10,
-              background: selected === t.id ? "rgba(255,255,255,0.15)" : t.color + "20",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 20,
-            }}>
-              {t.icon}
+            {/* Textarea */}
+            <div style={{ padding: "14px 16px 6px" }}>
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={autoResize}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setFocused(false)}
+                placeholder="Describe your goal or pick a template below…"
+                rows={2}
+                style={{
+                  width: "100%",
+                  background: "transparent",
+                  border: "none",
+                  outline: "none",
+                  color: C.fg,
+                  fontSize: 15,
+                  fontFamily: "inherit",
+                  lineHeight: 1.55,
+                  resize: "none",
+                  minHeight: 52,
+                  boxSizing: "border-box",
+                }}
+              />
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>
-                {t.label}
+
+            {/* Bottom action bar */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                padding: "8px 12px 12px",
+                gap: 6,
+              }}
+            >
+              {/* Left: + media attach */}
+              <button
+                style={{
+                  width: 34, height: 34, borderRadius: 8,
+                  background: C.surface2, border: `1px solid ${C.chipBorder}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer", color: C.fgMuted, fontSize: 18, fontWeight: 300,
+                  flexShrink: 0,
+                }}
+                title="Fayl əlavə et"
+              >
+                +
+              </button>
+
+              {/* Spacer */}
+              <div style={{ flex: 1 }} />
+
+              {/* Mic */}
+              <button
+                onClick={handleMic}
+                style={{
+                  width: 34, height: 34, borderRadius: 8,
+                  background: recording ? C.primary : C.surface2,
+                  border: `1px solid ${recording ? C.primary : C.chipBorder}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer", fontSize: 15, flexShrink: 0,
+                  animation: recording ? "pulse 1s infinite" : "none",
+                }}
+                title="Səsli daxil et"
+              >
+                {recording ? "🔴" : "🎙"}
+              </button>
+
+              {/* Send / Arrow */}
+              <button
+                style={{
+                  width: 34, height: 34, borderRadius: 8,
+                  background: hasInput ? C.primary : C.surface2,
+                  border: `1px solid ${hasInput ? C.primary : C.chipBorder}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: hasInput ? "pointer" : "default",
+                  flexShrink: 0, transition: "all 0.2s",
+                }}
+                title="Göndər"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 14V2M8 2L2 8M8 2L14 8" stroke={hasInput ? "#fff" : C.fgDim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ─── CATEGORY CHIPS (horizontal scroll, Replit style) ─── */}
+        <div style={{ paddingBottom: 12 }}>
+          <div style={{
+            display: "flex",
+            overflowX: "auto",
+            padding: "0 14px",
+            gap: 8,
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+          }}>
+            <button style={{ width: 28, height: 36, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: C.fgMuted, cursor: "pointer", flexShrink: 0 }}>‹</button>
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCat(cat.id === selectedCat ? null : cat.id)}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "8px 14px",
+                  borderRadius: 10,
+                  background: selectedCat === cat.id ? C.primary + "22" : C.surface,
+                  border: `1.5px solid ${selectedCat === cat.id ? C.primary : C.chipBorder}`,
+                  color: selectedCat === cat.id ? C.primary : C.chipFg,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                  fontFamily: "inherit",
+                  transition: "all 0.15s",
+                }}
+              >
+                <span style={{ fontSize: 20 }}>{cat.icon}</span>
+                <span style={{ fontSize: 11, fontWeight: 500, whiteSpace: "nowrap" }}>{cat.label}</span>
+              </button>
+            ))}
+            <button style={{ width: 28, height: 36, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: C.fgMuted, cursor: "pointer", flexShrink: 0 }}>›</button>
+          </div>
+        </div>
+
+        {/* ─── EXAMPLE PROMPTS ─── */}
+        <div style={{ padding: "4px 14px 0" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+            <span style={{ fontSize: 12, color: C.fgMuted, fontWeight: 500 }}>Try an example prompt</span>
+            <span style={{ fontSize: 12, color: C.fgMuted }}>↻</span>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {EXAMPLES.map((ex) => (
+              <button
+                key={ex}
+                onClick={() => handleExample(ex)}
+                style={{
+                  padding: "7px 12px",
+                  borderRadius: 8,
+                  background: C.chip,
+                  border: `1px solid ${C.chipBorder}`,
+                  color: C.chipFg,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  transition: "all 0.15s",
+                }}
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ─── RECENT GOALS ─── */}
+        <div style={{ padding: "20px 14px 0" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: C.fg }}>Your recent goals</span>
+            <span style={{ fontSize: 12, color: C.primary, fontWeight: 500 }}>View All →</span>
+          </div>
+          {[
+            { icon: "🏋", title: "Run 5km without stopping", sub: "Week 4 of 12 · Active" },
+            { icon: "💻", title: "Build a portfolio site", sub: "Week 8 of 8 · Completed" },
+          ].map((goal) => (
+            <div
+              key={goal.title}
+              style={{
+                display: "flex", alignItems: "center", gap: 12,
+                padding: "12px 14px", marginBottom: 8,
+                borderRadius: 12, background: C.surface,
+                border: `1px solid ${C.chipBorder}`,
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ fontSize: 22, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", background: C.surface2, borderRadius: 8 }}>
+                {goal.icon}
               </div>
-              <div style={{
-                fontSize: 11,
-                color: selected === t.id ? "rgba(255,255,255,0.7)" : C.muted,
-                lineHeight: 1.4,
-              }}>
-                {t.desc}
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.fg, marginBottom: 2 }}>{goal.title}</div>
+                <div style={{ fontSize: 11, color: C.fgMuted }}>{goal.sub}</div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <span style={{ fontSize: 12, color: C.fgMuted }}>⛓</span>
+                <span style={{ fontSize: 12, color: C.fgMuted }}>⋯</span>
               </div>
             </div>
-            <div style={{ fontSize: 14, color: selected === t.id ? "#FFF" : C.muted }}>→</div>
-          </button>
-        ))}
+          ))}
+        </div>
+
       </div>
 
-      {/* Footer CTA */}
-      <div style={{ padding: "0 16px 40px" }}>
-        <button style={{
-          width: "100%",
-          padding: "14px",
-          borderRadius: 12,
-          background: canContinue ? C.primary : C.surface,
-          border: "none",
-          color: canContinue ? C.primaryFg : C.muted,
-          fontSize: 14,
-          fontWeight: 600,
-          cursor: canContinue ? "pointer" : "default",
-          transition: "all 0.2s",
-          fontFamily: "'Inter', sans-serif",
-        }}>
-          {canContinue ? "Continue to intake" : "Describe a goal or pick a template"}
-        </button>
-      </div>
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+        ::-webkit-scrollbar { display: none; }
+      `}</style>
     </div>
   );
 }
