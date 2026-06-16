@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Dimensions,
   Modal,
   Platform,
   Pressable,
@@ -76,6 +77,16 @@ export default function NewGoalScreen() {
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  const plusBtnRef = useRef<View>(null);
+  const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+
+  const openAttachMenu = useCallback(() => {
+    if (!canAddMoreGoals) return;
+    plusBtnRef.current?.measureInWindow((x, y, w, h) => {
+      setMenuAnchor({ x, y, w, h });
+      setAttachMenuOpen(true);
+    });
+  }, [canAddMoreGoals]);
 
   // Typewriter animated placeholder
   const [typedHint, setTypedHint] = useState("");
@@ -389,7 +400,8 @@ export default function NewGoalScreen() {
           <View style={[styles.actionBar, { borderTopColor: colors.border }]}>
             {/* + attach */}
             <Pressable
-              onPress={() => { if (canAddMoreGoals) setAttachMenuOpen(true); }}
+              ref={plusBtnRef as React.RefObject<View>}
+              onPress={openAttachMenu}
               style={[styles.actionBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
               hitSlop={6}
               disabled={!canAddMoreGoals}
@@ -470,70 +482,98 @@ export default function NewGoalScreen() {
         )}
       </ScrollView>
 
-      {/* ── ATTACH BOTTOM SHEET ── */}
-      <Modal visible={attachMenuOpen} transparent animationType="slide" onRequestClose={() => setAttachMenuOpen(false)}>
-        <Pressable style={styles.attachOverlay} onPress={() => setAttachMenuOpen(false)} />
-        <View style={[styles.attachSheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
-
-          {/* Camera */}
-          <Pressable style={styles.attachRow} onPress={() => void pickFromCamera()}>
-            <View style={[styles.attachIcon, { backgroundColor: colors.primary + "18" }]}>
-              <Feather name="camera" size={20} color={colors.primary} />
-            </View>
-            <View style={styles.attachText}>
-              <Text style={[styles.attachLabel, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
-                {t("newGoal.camera", "Camera")}
+      {/* ── ATTACH FLOATING POPOVER ── */}
+      <Modal visible={attachMenuOpen} transparent animationType="fade" onRequestClose={() => setAttachMenuOpen(false)}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setAttachMenuOpen(false)} />
+        {menuAnchor && (() => {
+          const sw = Dimensions.get("window").width;
+          const menuW = 230;
+          const left = Math.min(menuAnchor.x, sw - menuW - 12);
+          const bottom = Dimensions.get("window").height - menuAnchor.y + 8;
+          return (
+            <View
+              style={[
+                styles.floatingMenu,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  borderRadius: colors.radius,
+                  left,
+                  bottom,
+                  width: menuW,
+                  shadowColor: "#000",
+                  shadowOpacity: 0.18,
+                  shadowRadius: 16,
+                  shadowOffset: { width: 0, height: 4 },
+                  elevation: 12,
+                },
+              ]}
+            >
+              {/* Section header */}
+              <Text style={[styles.floatingHeader, { color: colors.mutedForeground, fontFamily: "Inter_500Medium" }]}>
+                {t("newGoal.addAttachments", "Add attachments")}
               </Text>
-              <Text style={[styles.attachSub, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
-                {t("newGoal.cameraSub", "Take a photo right now")}
-              </Text>
-            </View>
-          </Pressable>
 
-          <View style={[styles.attachDivider, { backgroundColor: colors.border }]} />
+              {/* Camera */}
+              <Pressable
+                style={({ pressed }) => [styles.floatingItem, pressed && { opacity: 0.7 }]}
+                onPress={() => void pickFromCamera()}
+              >
+                <View style={[styles.floatingIcon, { backgroundColor: colors.primary + "18" }]}>
+                  <Feather name="camera" size={16} color={colors.primary} />
+                </View>
+                <View style={styles.floatingText}>
+                  <Text style={[styles.floatingLabel, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
+                    {t("newGoal.camera", "Camera")}
+                  </Text>
+                  <Text style={[styles.floatingSub, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
+                    {t("newGoal.cameraSub", "Take a photo right now")}
+                  </Text>
+                </View>
+              </Pressable>
 
-          {/* Photos */}
-          <Pressable style={styles.attachRow} onPress={() => void pickFromLibrary()}>
-            <View style={[styles.attachIcon, { backgroundColor: colors.primary + "18" }]}>
-              <Feather name="image" size={20} color={colors.primary} />
-            </View>
-            <View style={styles.attachText}>
-              <Text style={[styles.attachLabel, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
-                {t("newGoal.photos", "Photos")}
-              </Text>
-              <Text style={[styles.attachSub, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
-                {t("newGoal.photosSub", "Pick from your library")}
-              </Text>
-            </View>
-          </Pressable>
+              <View style={[styles.floatingDivider, { backgroundColor: colors.border }]} />
 
-          <View style={[styles.attachDivider, { backgroundColor: colors.border }]} />
+              {/* Photos */}
+              <Pressable
+                style={({ pressed }) => [styles.floatingItem, pressed && { opacity: 0.7 }]}
+                onPress={() => void pickFromLibrary()}
+              >
+                <View style={[styles.floatingIcon, { backgroundColor: colors.primary + "18" }]}>
+                  <Feather name="image" size={16} color={colors.primary} />
+                </View>
+                <View style={styles.floatingText}>
+                  <Text style={[styles.floatingLabel, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
+                    {t("newGoal.photos", "Photos")}
+                  </Text>
+                  <Text style={[styles.floatingSub, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
+                    {t("newGoal.photosSub", "Pick from your library")}
+                  </Text>
+                </View>
+              </Pressable>
 
-          {/* Files */}
-          <Pressable style={styles.attachRow} onPress={() => void pickDocument()}>
-            <View style={[styles.attachIcon, { backgroundColor: colors.primary + "18" }]}>
-              <Feather name="paperclip" size={20} color={colors.primary} />
-            </View>
-            <View style={styles.attachText}>
-              <Text style={[styles.attachLabel, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
-                {t("newGoal.files", "Files")}
-              </Text>
-              <Text style={[styles.attachSub, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
-                {t("newGoal.filesSub", "PDF, Word, text, CSV…")}
-              </Text>
-            </View>
-          </Pressable>
+              <View style={[styles.floatingDivider, { backgroundColor: colors.border }]} />
 
-          {/* Cancel */}
-          <Pressable
-            style={[styles.attachCancel, { borderTopColor: colors.border }]}
-            onPress={() => setAttachMenuOpen(false)}
-          >
-            <Text style={[styles.attachCancelText, { color: colors.mutedForeground, fontFamily: "Inter_500Medium" }]}>
-              {t("common.cancel", "Cancel")}
-            </Text>
-          </Pressable>
-        </View>
+              {/* Files */}
+              <Pressable
+                style={({ pressed }) => [styles.floatingItem, pressed && { opacity: 0.7 }]}
+                onPress={() => void pickDocument()}
+              >
+                <View style={[styles.floatingIcon, { backgroundColor: colors.primary + "18" }]}>
+                  <Feather name="paperclip" size={16} color={colors.primary} />
+                </View>
+                <View style={styles.floatingText}>
+                  <Text style={[styles.floatingLabel, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
+                    {t("newGoal.files", "Files")}
+                  </Text>
+                  <Text style={[styles.floatingSub, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
+                    {t("newGoal.filesSub", "PDF, Word, text, CSV…")}
+                  </Text>
+                </View>
+              </Pressable>
+            </View>
+          );
+        })()}
       </Modal>
     </KeyboardAvoidingView>
   );
@@ -674,39 +714,35 @@ const styles = StyleSheet.create({
   exampleChip: { paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1 },
   exampleChipText: { fontSize: 12 },
 
-  attachOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-  },
-  attachSheet: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+  floatingMenu: {
+    position: "absolute",
     borderWidth: 1,
-    paddingTop: 8,
     overflow: "hidden",
   },
-  attachRow: {
+  floatingHeader: {
+    fontSize: 11,
+    letterSpacing: 0.2,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  floatingItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  attachIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+  floatingIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
-  attachText: { flex: 1 },
-  attachLabel: { fontSize: 15, marginBottom: 2 },
-  attachSub: { fontSize: 12 },
-  attachDivider: { height: StyleSheet.hairlineWidth, marginLeft: 78 },
-  attachCancel: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  attachCancelText: { fontSize: 15 },
+  floatingText: { flex: 1 },
+  floatingLabel: { fontSize: 13, marginBottom: 1 },
+  floatingSub: { fontSize: 11 },
+  floatingDivider: { height: StyleSheet.hairlineWidth, marginLeft: 56 },
 });
