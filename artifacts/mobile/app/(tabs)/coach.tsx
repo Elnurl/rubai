@@ -1446,37 +1446,20 @@ export default function CoachScreen() {
             <Feather name="menu" size={16} color={colors.foreground} />
           </Pressable>
 
-          {/* Logo + mode pill — taps open/close the dropdown */}
+          {/* Logo + chevron — taps open/close the dropdown */}
           <Pressable
             onPress={() => setDropdownOpen((v) => !v)}
-            hitSlop={8}
+            hitSlop={10}
             testID="model-mode-dropdown-trigger"
             style={styles.logoPillWrap}
           >
             <AtlasLogo size="lg" />
-            <View
-              style={[
-                styles.logoPill,
-                { backgroundColor: colors.muted, borderColor: colors.border },
-              ]}
-            >
-              <Text
-                style={[styles.logoPillText, { color: colors.mutedForeground }]}
-              >
-                {modelChoice === "fast"
-                  ? t("coach.fastLabel", "Fast")
-                  : t("coach.smartLabel", "Smart")}
-                {" · "}
-                {conversationMode === "normal"
-                  ? t("coach.generalLabel", "General")
-                  : t("coach.coachLabel", "Coach")}
-              </Text>
-              <Feather
-                name={dropdownOpen ? "chevron-up" : "chevron-down"}
-                size={12}
-                color={colors.mutedForeground}
-              />
-            </View>
+            <Feather
+              name={dropdownOpen ? "chevron-up" : "chevron-down"}
+              size={14}
+              color={colors.mutedForeground}
+              style={{ marginLeft: 2, marginTop: 2 }}
+            />
           </Pressable>
 
           {/* Right chips */}
@@ -2517,35 +2500,21 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-  },
-  logoPill: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  logoPillText: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    letterSpacing: 0.1,
   },
   dropdownCard: {
     position: "absolute",
     top: "100%",
     left: 0,
-    right: 0,
-    marginTop: 6,
+    width: 240,
+    marginTop: 8,
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.14,
+    shadowRadius: 14,
+    elevation: 10,
     zIndex: 200,
   },
   dropdownSep: {
