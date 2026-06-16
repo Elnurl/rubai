@@ -13,10 +13,11 @@ export function ActiveGoalChip() {
   const { goals, activeGoal, activeGoalId, setActiveGoal } = useAtlas();
   const [open, setOpen] = useState(false);
 
-  if (!activeGoal || goals.length < 2) return null;
+  if (!activeGoal) return null;
 
   const meta = GOAL_META[activeGoal.profile.goalType];
   const label = profileGoalLabel(activeGoal.profile);
+  const canSwitch = goals.length >= 2;
 
   const handleSelect = async (id: string) => {
     setOpen(false);
@@ -32,12 +33,12 @@ export function ActiveGoalChip() {
   return (
     <>
       <Pressable
-        onPress={() => setOpen(true)}
+        onPress={() => canSwitch && setOpen(true)}
         style={({ pressed }) => [
           styles.chip,
           {
             backgroundColor: colors.muted,
-            opacity: pressed ? 0.85 : 1,
+            opacity: pressed && canSwitch ? 0.85 : 1,
           },
         ]}
         hitSlop={6}
@@ -52,7 +53,9 @@ export function ActiveGoalChip() {
         >
           {label}
         </Text>
-        <Ionicons name="chevron-down" size={14} color={colors.mutedForeground} />
+        {canSwitch && (
+          <Ionicons name="chevron-down" size={14} color={colors.mutedForeground} />
+        )}
       </Pressable>
 
       <Modal
