@@ -14,7 +14,7 @@ import { logger } from "./logger";
  * `MODEL_VISION` — coach turns that include an inline image
  * `MODEL_MODERATION` — input safety classifier (cheap, used per-turn)
  */
-export const MODEL_SMART = process.env.OPENAI_MODEL_SMART ?? "gpt-4o";
+export const MODEL_SMART = process.env.OPENAI_MODEL_SMART ?? "gpt-5.4";
 export const MODEL_FAST = process.env.OPENAI_MODEL_FAST ?? "gpt-4o-mini";
 export const MODEL_VISION = process.env.OPENAI_MODEL_VISION ?? "gpt-4o";
 export const MODEL_MODERATION =
