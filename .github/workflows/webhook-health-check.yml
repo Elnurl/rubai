@@ -1,9 +1,9 @@
 name: Webhook Health Check
 
 on:
-  schedule:
-    # Every 5 minutes. GitHub Actions cron runs in UTC.
-    - cron: "*/5 * * * *"
+  # schedule:
+  #   # Every 5 minutes. GitHub Actions cron runs in UTC.
+  #   - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:
