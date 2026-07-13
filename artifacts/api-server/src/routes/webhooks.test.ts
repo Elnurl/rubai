@@ -146,7 +146,7 @@ beforeEach(() => {
 // ── Helpers ────────────────────────────────────────────────────────────────
 const WEBHOOK_URL = () => `${baseUrl}/api/webhooks/revenuecat`;
 
-const MOCK_USER = { id: 42, clerkUserId: "user_abc123", tier: "free" };
+const MOCK_USER = { id: 42, authUserId: "user_abc123", tier: "free" };
 
 function buildBody(event: Record<string, unknown>) {
   return JSON.stringify({ event });
@@ -814,7 +814,7 @@ describe("POST /api/webhooks/revenuecat — edge cases", () => {
     mockFindFirst.mockImplementation(
       (opts: { where: unknown }) => {
         // Verify it was queried with original_app_user_id
-        return Promise.resolve({ ...MOCK_USER, clerkUserId: "user_original" });
+        return Promise.resolve({ ...MOCK_USER, authUserId: "user_original" });
       },
     );
 

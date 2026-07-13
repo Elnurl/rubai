@@ -10,7 +10,7 @@ import type { MeStateDraftBlob } from "./meStateDraftBlob";
 import type { MeStateGoalBlob } from "./meStateGoalBlob";
 
 export interface MeStateResponse {
-  clerkUserId: string;
+  authUserId: string;
   email: string | null;
   tier: string;
   goals: MeStateGoalBlob[];

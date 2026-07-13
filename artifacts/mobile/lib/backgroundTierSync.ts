@@ -7,7 +7,7 @@
  * 1. TIER_SYNC_TASK — notification-triggered (Notifications.registerTaskAsync)
  *    Runs when the server fires a tier_changed push with content_available:1.
  *    iOS wakes the app briefly; we call GET /api/me with the most-recently
- *    cached Clerk session token to get the DB-authoritative tier, then patch
+ *    cached Auth session token to get the DB-authoritative tier, then patch
  *    the AsyncStorage snapshot so the next foreground launch paints
  *    immediately with the correct tier.
  *
@@ -20,12 +20,12 @@
  *
  * ## Auth in background context
  *
- * Clerk's useAuth / getToken hooks are only available inside a mounted React
+ * Auth's useAuth / getToken hooks are only available inside a mounted React
  * tree.  When the app is fully terminated and iOS wakes it for background
  * work, the React tree is never mounted.  We work around this by caching the
- * most-recent Clerk JWT in SecureStore every time the foreground getter is
+ * most-recent Auth JWT in SecureStore every time the foreground getter is
  * called (see cacheSessionToken / wrapAuthGetterWithCache exported below).
- * The background task reads that cached token.  Clerk JWTs are short-lived
+ * The background task reads that cached token.  Auth JWTs are short-lived
  * (60 s), but getToken() refreshes them automatically in the foreground — the
  * cache therefore contains a recently-minted token that should still be valid
  * for the first seconds after the app is woken.  If the token is expired the
@@ -42,20 +42,21 @@
 
 import * as TaskManager from "expo-task-manager";
 import * as BackgroundFetch from "expo-background-fetch";
-import * as Notifications from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { loadUserCache, saveUserCache } from "./storage";
+import { getNotifications } from "./notifications";
+import { supportsRemotePush } from "./expoGo";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 export const TIER_SYNC_TASK = "rubai-tier-sync";
 export const TIER_SYNC_PERIODIC_TASK = "rubai-tier-sync-periodic";
 
-/** SecureStore key for the most-recently-seen Clerk JWT. */
+/** SecureStore key for the most-recently-seen Auth JWT. */
 const SESSION_TOKEN_KEY = "atlas:bg:session_token";
-/** AsyncStorage key for the last signed-in Clerk user ID. */
+/** AsyncStorage key for the last signed-in Auth user ID. */
 const LAST_USER_KEY = "atlas:v2:lastActiveUserId";
 /** AsyncStorage key for the API base URL (baked from env at foreground boot). */
 const API_BASE_URL_KEY = "atlas:bg:apiBaseUrl";
@@ -63,7 +64,7 @@ const API_BASE_URL_KEY = "atlas:bg:apiBaseUrl";
 // ─── Foreground helpers — call these from _layout.tsx and AtlasProvider ──────
 
 /**
- * Cache the most-recently-obtained Clerk session token so the background
+ * Cache the most-recently-obtained Auth session token so the background
  * task can attach it as an Authorization header without the React tree.
  * Call this every time the auth token getter is invoked (see _layout.tsx).
  */
@@ -101,7 +102,7 @@ export async function cacheApiBaseUrl(url: string): Promise<void> {
 
 /**
  * Persist the signed-in user ID so the background task can locate the
- * correct AsyncStorage cache entry without React or Clerk hooks.
+ * correct AsyncStorage cache entry without React or Auth hooks.
  */
 export async function setLastActiveUserId(userId: string): Promise<void> {
   try {
@@ -125,7 +126,7 @@ export async function clearLastActiveUserId(): Promise<void> {
 // ─── Core background sync logic ───────────────────────────────────────────────
 
 /**
- * Attempt to call GET /api/me with the cached Clerk JWT and update the
+ * Attempt to call GET /api/me with the cached Auth JWT and update the
  * local AsyncStorage cache with the DB-authoritative tier.
  *
  * Uses the same endpoint as the existing foreground push-handler and AppState
@@ -143,7 +144,7 @@ async function runTierSync(): Promise<boolean> {
       return false;
     }
 
-    // Read the cached Clerk JWT from SecureStore.
+    // Read the cached Auth JWT from SecureStore.
     const token = await SecureStore.getItemAsync(SESSION_TOKEN_KEY);
     if (!token) {
       if (__DEV__)
@@ -155,9 +156,11 @@ async function runTierSync(): Promise<boolean> {
     // (written by _layout.tsx at boot), then fall back to the env var baked
     // into the bundle.
     const storedBase = await AsyncStorage.getItem(API_BASE_URL_KEY);
-    const envBase = process.env.EXPO_PUBLIC_DOMAIN
-      ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-      : null;
+    const envBase =
+      process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") ??
+      (process.env.EXPO_PUBLIC_DOMAIN
+        ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+        : null);
     const baseUrl = storedBase ?? envBase ?? "";
 
     if (!baseUrl) {
@@ -197,7 +200,7 @@ async function runTierSync(): Promise<boolean> {
 
     const data = (await response.json()) as {
       tier?: string;
-      clerkUserId?: string;
+      AuthUserId?: string;
     };
     const newTier = data.tier;
     if (!newTier) {
@@ -238,7 +241,9 @@ if (Platform.OS !== "web") {
       data,
       error,
     }: TaskManager.TaskManagerTaskBody<{
-      notification?: Notifications.Notification;
+      notification?: {
+        request?: { content?: { data?: Record<string, unknown> } };
+      };
     }>) => {
       if (error) {
         if (__DEV__) console.warn("[tier-sync-bg] task error:", error);
@@ -283,6 +288,9 @@ if (Platform.OS !== "web") {
  */
 export async function registerTierSyncNotificationTask(): Promise<void> {
   if (Platform.OS === "web") return;
+  if (!supportsRemotePush()) return;
+  const Notifications = getNotifications();
+  if (!Notifications) return;
   try {
     const already = await TaskManager.isTaskRegisteredAsync(TIER_SYNC_TASK);
     if (!already) {
@@ -340,8 +348,9 @@ export async function registerPeriodicTierSyncTask(): Promise<void> {
  */
 export async function unregisterTierSyncTasks(): Promise<void> {
   if (Platform.OS === "web") return;
+  const Notifications = getNotifications();
   try {
-    if (await TaskManager.isTaskRegisteredAsync(TIER_SYNC_TASK)) {
+    if (Notifications && (await TaskManager.isTaskRegisteredAsync(TIER_SYNC_TASK))) {
       await Notifications.unregisterTaskAsync(TIER_SYNC_TASK);
     }
   } catch {

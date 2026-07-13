@@ -26,11 +26,9 @@ Production builds pick up secrets that are **not** in `eas.json` to avoid commit
 # The production domain (without https://) — e.g. myapp.replit.app
 eas secret:create --scope project --name EXPO_PUBLIC_DOMAIN --value "YOUR_PRODUCTION_DOMAIN" --profile production
 
-# Clerk production publishable key (pk_live_...)
-eas secret:create --scope project --name EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY --value "pk_live_..." --profile production
-
-# Clerk proxy URL for native Expo (leave empty if not using a proxy)
-eas secret:create --scope project --name EXPO_PUBLIC_CLERK_PROXY_URL --value "" --profile production
+# Supabase Auth (project URL + anon key)
+eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_URL --value "https://YOUR_PROJECT.supabase.co" --profile production
+eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value "eyJ..." --profile production
 
 # RevenueCat iOS production public API key (appl_...)
 eas secret:create --scope project --name EXPO_PUBLIC_REVENUECAT_IOS_API_KEY --value "appl_..." --profile production
@@ -123,7 +121,7 @@ The `.aab` is uploaded to the internal testing track. Open Google Play Console t
 
 Once installed from TestFlight or the internal track on a **real device**:
 
-1. Sign in with your Clerk account
+1. Sign in with your Supabase account (email or Google)
 2. Create a new goal and complete intake
 3. Verify the roadmap generates successfully
 4. Open the Coach tab and send a message

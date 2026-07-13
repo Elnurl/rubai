@@ -20,7 +20,7 @@ export const HealthCheckResponse = zod.object({
  */
 export const GetMeResponse = zod
   .object({
-    clerkUserId: zod.string(),
+    authUserId: zod.string(),
     email: zod.union([zod.string(), zod.null()]),
     tier: zod
       .string()
@@ -34,7 +34,7 @@ export const GetMeResponse = zod
  * @summary Full personal state for the signed-in user (goals, prefs, draft)
  */
 export const GetMeStateResponse = zod.object({
-  clerkUserId: zod.string(),
+  authUserId: zod.string(),
   email: zod.union([zod.string(), zod.null()]),
   tier: zod.string(),
   goals: zod.array(
@@ -94,7 +94,7 @@ export const PutMeStateBody = zod.object({
 });
 
 export const PutMeStateResponse = zod.object({
-  clerkUserId: zod.string(),
+  authUserId: zod.string(),
   email: zod.union([zod.string(), zod.null()]),
   tier: zod.string(),
   goals: zod.array(
@@ -172,9 +172,9 @@ Requires the `X-Admin-Key` header to match the server's `ADMIN_API_KEY` environm
  * @summary Subscription tier history for any user (support lookup)
  */
 export const AdminGetUserTierHistoryParams = zod.object({
-  clerkUserId: zod.coerce
+  authUserId: zod.coerce
     .string()
-    .describe("The Clerk user ID of the user to look up."),
+    .describe("The Auth user ID of the user to look up."),
 });
 
 export const adminGetUserTierHistoryQueryLimitDefault = 50;

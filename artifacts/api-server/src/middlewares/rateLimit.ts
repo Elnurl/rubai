@@ -7,7 +7,7 @@ import rateLimit, {
 /**
  * Per-user rate limit for AI endpoints.
  *
- * Keys by the authenticated Clerk user id when present (so multiple
+ * Keys by the authenticated Auth user id when present (so multiple
  * devices for the same user share a budget) and falls back to the IP
  * address for unauthenticated callers — though in practice /atlas is
  * mounted behind requireAuth so the IP fallback should rarely be hit.
@@ -28,9 +28,9 @@ export const aiRateLimiter: RateLimitRequestHandler = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req: Request) => {
     // Prefer the resolved local user id (set by requireAuth); fall back to
-    // the Clerk user id from session claims, then to a (IPv6-safe) IP key.
+    // the Auth user id from session claims, then to a (IPv6-safe) IP key.
     if (typeof req.userId === "number") return `user:${req.userId}`;
-    if (typeof req.clerkUserId === "string") return `clerk:${req.clerkUserId}`;
+    if (typeof req.authUserId === "string") return `auth:${req.authUserId}`;
     return `ip:${ipKeyGenerator(req.ip ?? "unknown")}`;
   },
   message: {

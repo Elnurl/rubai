@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 import Purchases, { type PurchasesPackage } from "react-native-purchases";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
-import { useUser } from "@clerk/expo";
+import { useUser } from "@/providers/AuthProvider";
 import { customFetch } from "@workspace/api-client-react";
 
 const REVENUECAT_TEST_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY ?? "";
@@ -15,10 +15,16 @@ export const RC_ENTITLEMENT_PREMIUM = "premium";
 export const RC_OFFERING_PRO = "pro";
 export const RC_OFFERING_PREMIUM = "premium";
 
-function getRevenueCatApiKey(): string {
+function getRevenueCatApiKey(): string | null {
   // In development and Expo Go, use the sandbox test key.
   if (__DEV__ || Platform.OS === "web" || Constants.executionEnvironment === "storeClient") {
     if (!REVENUECAT_TEST_API_KEY) {
+      if (__DEV__) {
+        console.warn(
+          "[rubai] EXPO_PUBLIC_REVENUECAT_TEST_API_KEY not set — subscriptions disabled in dev.",
+        );
+        return null;
+      }
       throw new Error("EXPO_PUBLIC_REVENUECAT_TEST_API_KEY is not set");
     }
     return REVENUECAT_TEST_API_KEY;
@@ -42,17 +48,47 @@ const RC_LOG_LEVEL_MAP: Record<string, (typeof Purchases.LOG_LEVEL)[keyof typeof
   ERROR: Purchases.LOG_LEVEL.ERROR,
 };
 
+let revenueCatConfigured = false;
+
+export function isRevenueCatConfigured(): boolean {
+  return revenueCatConfigured;
+}
+
 export function initializeRevenueCat() {
   const apiKey = getRevenueCatApiKey();
+  if (!apiKey) return;
+
+  // Never escalate RC logs to console.error — that opens a full-screen LogBox
+  // and blocks auth testing when the test-store backend hiccups.
+  try {
+    Purchases.setLogHandler((_level, message) => {
+      // eslint-disable-next-line no-console
+      console.warn("[RevenueCat]", typeof message === "string" ? message : String(message));
+    });
+  } catch {
+    // Older SDK without setLogHandler — fall through to setLogLevel.
+  }
+
   const envLevel = process.env.EXPO_PUBLIC_RC_LOG_LEVEL?.toUpperCase();
   const logLevel =
     envLevel && envLevel in RC_LOG_LEVEL_MAP
       ? RC_LOG_LEVEL_MAP[envLevel]
-      : __DEV__
-        ? Purchases.LOG_LEVEL.DEBUG
-        : Purchases.LOG_LEVEL.WARN;
+      : Purchases.LOG_LEVEL.WARN;
   Purchases.setLogLevel(logLevel);
-  Purchases.configure({ apiKey });
+
+  try {
+    Purchases.configure({ apiKey });
+    revenueCatConfigured = true;
+  } catch (err) {
+    revenueCatConfigured = false;
+    if (__DEV__) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[rubai] RevenueCat configure failed — subscriptions disabled:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
 }
 
 export type ActiveTier = "free" | "pro" | "premium";
@@ -72,44 +108,72 @@ async function callSyncTier(): Promise<{ tier: ActiveTier }> {
 function useSubscriptionContext() {
   const { user } = useUser();
   const userId = user?.id ?? null;
+  const rcReady = isRevenueCatConfigured();
 
   // Track which userId we've already called logIn for to avoid re-running.
   const loggedInUserId = useRef<string | null>(null);
 
   const customerInfoQuery = useQuery({
     queryKey: ["revenuecat", "customer-info"],
-    queryFn: () => Purchases.getCustomerInfo(),
+    queryFn: async () => {
+      try {
+        return await Purchases.getCustomerInfo();
+      } catch (err) {
+        if (__DEV__) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            "[rubai] RevenueCat getCustomerInfo failed:",
+            err instanceof Error ? err.message : err,
+          );
+        }
+        return null;
+      }
+    },
     staleTime: 60_000,
+    enabled: rcReady,
+    retry: false,
   });
 
   const proOfferingQuery = useQuery({
     queryKey: ["revenuecat", "offering", "pro"],
     queryFn: async () => {
-      const all = await Purchases.getOfferings();
-      return all.all[RC_OFFERING_PRO] ?? null;
+      try {
+        const all = await Purchases.getOfferings();
+        return all.all[RC_OFFERING_PRO] ?? null;
+      } catch {
+        return null;
+      }
     },
     staleTime: 300_000,
+    enabled: rcReady,
+    retry: false,
   });
 
   const premiumOfferingQuery = useQuery({
     queryKey: ["revenuecat", "offering", "premium"],
     queryFn: async () => {
-      const all = await Purchases.getOfferings();
-      return all.all[RC_OFFERING_PREMIUM] ?? null;
+      try {
+        const all = await Purchases.getOfferings();
+        return all.all[RC_OFFERING_PREMIUM] ?? null;
+      } catch {
+        return null;
+      }
     },
     staleTime: 300_000,
+    enabled: rcReady,
+    retry: false,
   });
 
   const syncTierMutation = useMutation({
     mutationFn: callSyncTier,
   });
 
-  // When a Clerk user becomes available, identify them in RevenueCat so
-  // server-side entitlement lookups can use the Clerk user ID. Then sync
+  // When a Supabase user becomes available, identify them in RevenueCat so
+  // server-side entitlement lookups can use the auth user ID. Then sync
   // the verified tier into our DB (fire-and-forget — errors are swallowed
   // so they never block the UI).
   useEffect(() => {
-    if (!userId) return;
+    if (!rcReady || !userId) return;
     if (loggedInUserId.current === userId) return;
 
     loggedInUserId.current = userId;

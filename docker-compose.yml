@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: rubai-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: rubai
+      POSTGRES_PASSWORD: rubai_dev_password
+      POSTGRES_DB: rubai
+    volumes:
+      - rubai_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rubai -d rubai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  rubai_pg_data:

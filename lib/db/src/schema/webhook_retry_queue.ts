@@ -37,10 +37,10 @@ export const webhookRetryQueueTable = pgTable(
   "webhook_retry_queue",
   {
     id: serial("id").primaryKey(),
-    /** Dedup key: "<event_type>:<transaction_id>" or "<event_type>:<clerk_user_id>:<event_timestamp_ms>" */
+    /** Dedup key: "<event_type>:<transaction_id>" or "<event_type>:<auth_user_id>:<event_timestamp_ms>" */
     idempotencyKey: text("idempotency_key").notNull(),
     eventType: text("event_type").notNull(),
-    clerkUserId: text("clerk_user_id"),
+    authUserId: text("auth_user_id"),
     /** Full RcWebhookEvent JSON as received from RevenueCat. */
     payload: jsonb("payload").notNull(),
     /** pending | processing | done | dead */

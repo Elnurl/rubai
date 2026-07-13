@@ -183,7 +183,7 @@ router.post("/legal/accept", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
-  // Resolve internal user id from the Clerk-bound row.
+  // Resolve internal user id from the auth-bound row.
   const [user] = await db
     .select({ id: usersTable.id })
     .from(usersTable)

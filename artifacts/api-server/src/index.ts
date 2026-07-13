@@ -10,10 +10,14 @@ import { runMigrations } from "@workspace/db";
 const REQUIRED_ENV: string[] = [
   "PORT",
   "DATABASE_URL",
-  "CLERK_SECRET_KEY",
+  "SUPABASE_JWT_SECRET",
   "SESSION_SECRET",
-  "REVENUECAT_V2_SECRET_KEY",
 ];
+
+// Billing sync is optional in local development — tier defaults to "free".
+if (process.env["NODE_ENV"] === "production") {
+  REQUIRED_ENV.push("REVENUECAT_V2_SECRET_KEY");
+}
 
 // In production, REVENUECAT_WEBHOOK_SECRET must be set so the webhook
 // handler can authenticate incoming events.  Without it, any caller could

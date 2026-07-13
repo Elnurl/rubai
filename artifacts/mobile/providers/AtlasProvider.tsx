@@ -1,5 +1,6 @@
-import { useAuth } from "@clerk/expo";
-import * as Notifications from "expo-notifications";
+import { useAuth } from "@/providers/AuthProvider";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import React, {
   createContext,
   useCallback,
@@ -9,7 +10,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AppState, type AppStateStatus } from "react-native";
+import { AppState, type AppStateStatus, Platform } from "react-native";
 import type {
   BehavioralProfile,
   BehavioralSnapshot,
@@ -30,10 +31,15 @@ import {
   ApiError,
   atlasRegisterPushToken,
   customFetch,
+  getGetMeStateQueryKey,
   getMeState,
   putMeState,
+  setAuthTokenGetter,
+  useLegalMyAcceptances,
 } from "@workspace/api-client-react";
 import { registerForPushAsync } from "@/lib/push";
+import { getNotifications } from "@/lib/notifications";
+import { supportsRemotePush } from "@/lib/expoGo";
 import {
   clearCachedSessionToken,
   clearLastActiveUserId,
@@ -399,7 +405,7 @@ function pickCalendarSync(blob: unknown): AccountPrefs["calendarSync"] {
 }
 
 export function AtlasProvider({ children }: { children: React.ReactNode }) {
-  const { isLoaded: clerkLoaded, isSignedIn, userId, signOut: clerkSignOut } =
+  const { isLoaded: authLoaded, isSignedIn, userId, signOut: authSignOut } =
     useAuth();
 
   const [loaded, setLoaded] = useState(false);
@@ -548,8 +554,8 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  const writeCacheSnapshot = useCallback(async (clerkUserId: string) => {
-    await saveUserCache(clerkUserId, {
+  const writeCacheSnapshot = useCallback(async (authUserId: string) => {
+    await saveUserCache(authUserId, {
       goals: goalsRef.current,
       activeGoalId: activeIdRef.current,
       accountPrefs: accountRef.current,
@@ -657,7 +663,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
   // When Clerk reports a fresh signed-in user, adopt their cloud state. When
   // they sign out (or a different user signs in) reset in-memory state.
   useEffect(() => {
-    if (!clerkLoaded) return;
+    if (!authLoaded) return;
 
     if (!isSignedIn || !userId) {
       // Sign-out (or pre-sign-in). Wipe in-memory state so the next user
@@ -902,14 +908,14 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
       clearTimeout(safetyTimer);
     };
-  }, [clerkLoaded, isSignedIn, userId, adoptServerState, writeCacheSnapshot]);
+  }, [authLoaded, isSignedIn, userId, adoptServerState, writeCacheSnapshot]);
 
   // Register the device's Expo push token once per signed-in session.
   // Bootstrapped after Clerk is ready so requireAuth sees the token. Web
   // and simulators short-circuit inside registerForPushAsync.
   const pushBootstrappedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (!clerkLoaded || !isSignedIn || !userId) {
+    if (!authLoaded || !isSignedIn || !userId) {
       pushBootstrappedFor.current = null;
       return;
     }
@@ -936,7 +942,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [clerkLoaded, isSignedIn, userId]);
+  }, [authLoaded, isSignedIn, userId]);
 
   // ----- Background tier sync: task registration -----------------------
   // Register the two background tasks (notification-triggered + periodic)
@@ -971,7 +977,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       if (localTierOverrideRef.current !== null) return;
 
       const owner = ownerRef.current;
-      void customFetch<{ tier: string; clerkUserId: string; email: string }>(
+      void customFetch<{ tier: string; authUserId: string; email: string }>(
         "/api/me",
       )
         .then((res) => {
@@ -1006,6 +1012,9 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
   // CANCELLATION downgrade is never overwritten by a stale RC entitlement.
   useEffect(() => {
     if (!isSignedIn || !userId) return;
+    if (!supportsRemotePush()) return;
+    const Notifications = getNotifications();
+    if (!Notifications) return;
 
     const sub = Notifications.addNotificationReceivedListener((notification) => {
       const data = notification.request.content.data as
@@ -1017,7 +1026,7 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       if (localTierOverrideRef.current !== null) return;
 
       const owner = ownerRef.current;
-      void customFetch<{ tier: string; clerkUserId: string; email: string }>(
+      void customFetch<{ tier: string; authUserId: string; email: string }>(
         "/api/me",
       )
         .then((res) => {
@@ -1679,12 +1688,12 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       await clearUserCache(owner);
     }
     try {
-      await clerkSignOut();
+      await authSignOut();
     } catch (err) {
       // eslint-disable-next-line no-console
       if (__DEV__) console.warn("[atlas] signOut failed", err);
     }
-  }, [clerkSignOut, flushToastQueue]);
+  }, [authSignOut, flushToastQueue]);
 
   const dismissSyncMessage = useCallback(() => {
     setSyncMessage(null);

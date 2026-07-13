@@ -37,12 +37,12 @@ interface RcSubscriberResponse {
   };
 }
 
-async function fetchRcTier(clerkUserId: string): Promise<ActiveTier> {
+async function fetchRcTier(authUserId: string): Promise<ActiveTier> {
   const secretKey = process.env.REVENUECAT_V2_SECRET_KEY;
   if (!secretKey) throw new Error("REVENUECAT_V2_SECRET_KEY not configured");
 
   const res = await fetch(
-    `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(clerkUserId)}`,
+    `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(authUserId)}`,
     {
       headers: {
         Authorization: `Bearer ${secretKey}`,
@@ -167,7 +167,7 @@ router.post("/me/sync-tier", async (req, res): Promise<void> => {
 
   let tier: ActiveTier;
   try {
-    tier = await fetchRcTier(user.clerkUserId);
+    tier = await fetchRcTier(user.authUserId);
   } catch (err) {
     req.log.warn({ err }, "RC tier fetch failed — keeping existing tier");
     res.status(502).json({ error: "Failed to reach RevenueCat" });
@@ -276,7 +276,7 @@ router.get("/me", async (req, res): Promise<void> => {
   }
   res.json(
     GetMeResponse.parse({
-      clerkUserId: user.clerkUserId,
+      authUserId: user.authUserId,
       email: user.email,
       tier: user.tier,
     }),
@@ -307,7 +307,7 @@ router.get("/me/state", async (req, res): Promise<void> => {
 
   const payload = state
     ? {
-        clerkUserId: user.clerkUserId,
+        authUserId: user.authUserId,
         email: user.email,
         tier: user.tier,
         goals: (state.goals as Array<Record<string, unknown>>) ?? [],
@@ -319,7 +319,7 @@ router.get("/me/state", async (req, res): Promise<void> => {
         version: state.version,
       }
     : {
-        clerkUserId: user.clerkUserId,
+        authUserId: user.authUserId,
         email: user.email,
         tier: user.tier,
         ...EMPTY_STATE,
@@ -355,7 +355,7 @@ router.put("/me/state", async (req, res): Promise<void> => {
     row: typeof userStateTable.$inferSelect,
   ): unknown =>
     PutMeStateResponse.parse({
-      clerkUserId: user.clerkUserId,
+      authUserId: user.authUserId,
       email: user.email,
       tier: user.tier,
       goals: (row.goals as Array<Record<string, unknown>>) ?? [],
@@ -371,7 +371,7 @@ router.put("/me/state", async (req, res): Promise<void> => {
   ): unknown => {
     const latestPayload = row
       ? {
-          clerkUserId: user.clerkUserId,
+          authUserId: user.authUserId,
           email: user.email,
           tier: user.tier,
           goals: (row.goals as Array<Record<string, unknown>>) ?? [],
@@ -382,7 +382,7 @@ router.put("/me/state", async (req, res): Promise<void> => {
           version: row.version,
         }
       : {
-          clerkUserId: user.clerkUserId,
+          authUserId: user.authUserId,
           email: user.email,
           tier: user.tier,
           ...EMPTY_STATE,

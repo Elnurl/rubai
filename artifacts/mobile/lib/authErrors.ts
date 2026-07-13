@@ -1,70 +1,79 @@
 /**
- * Map raw Clerk / network errors into short, friendly user-facing strings.
- *
- * Clerk error objects look like:
- *   { code: "form_password_incorrect", message: "Password is incorrect." }
- * but plain JS errors and unknown shapes also flow through here, so we are
- * defensive about reading them.
+ * Map Supabase / network auth errors into short, friendly user-facing strings.
  */
 
-type ClerkLikeError = {
+type AuthLikeError = {
   code?: string;
   message?: string;
-  longMessage?: string;
-  errors?: Array<{ code?: string; message?: string; longMessage?: string }>;
+  status?: number;
+  name?: string;
 };
 
 export function friendlyAuthError(input: unknown): string {
-  const err = extractClerkError(input);
+  const err = extractAuthError(input);
   if (!err) {
     if (input instanceof Error && input.message) return input.message;
     return "Something went wrong. Please try again.";
   }
 
-  switch (err.code) {
-    case "form_identifier_not_found":
-      return "We couldn't find an account with that email.";
-    case "form_password_incorrect":
-    case "form_password_pwned":
-      return "That password isn't right. Try again or reset it.";
-    case "form_param_format_invalid":
-    case "form_param_nil":
-      return "Please check the email and password fields.";
-    case "form_password_length_too_short":
-      return "Password is too short — use at least 8 characters.";
-    case "form_identifier_exists":
-      return "An account with that email already exists. Try signing in instead.";
-    case "verification_failed":
-    case "verification_expired":
-      return "That code didn't work or has expired. Request a new one.";
-    case "form_code_incorrect":
-      return "That verification code isn't right. Try again.";
-    case "too_many_requests":
-      return "Too many attempts. Please wait a minute and try again.";
-    case "session_exists":
-      return "You're already signed in.";
-    case "network_error":
-      return "Network problem. Check your connection and try again.";
-    case "phone_number_exists":
-      return "That phone number is already linked to an account.";
-    case "form_param_format_invalid_phone_number":
-      return "Please enter a valid phone number.";
-    case "resource_forbidden":
-    case "feature_not_available_on_development_instance":
-      return "Phone verification isn't enabled on this account. Contact support to activate it.";
-    default:
-      return err.longMessage || err.message || "Something went wrong.";
+  const code = (err.code ?? "").toLowerCase();
+  const message = (err.message ?? "").toLowerCase();
+
+  if (
+    code === "invalid_credentials" ||
+    message.includes("invalid login credentials")
+  ) {
+    return "That email or password isn't right. Try again or reset it.";
   }
+  if (code === "user_already_registered" || message.includes("already registered")) {
+    return "An account with that email already exists. Try signing in instead.";
+  }
+  if (
+    code === "email_not_confirmed" ||
+    message.includes("email not confirmed")
+  ) {
+    return "Confirm your email first, then sign in.";
+  }
+  if (
+    code === "weak_password" ||
+    message.includes("password should be at least")
+  ) {
+    return "Password is too short — use at least 8 characters.";
+  }
+  if (
+    code === "otp_expired" ||
+    code === "token_expired" ||
+    message.includes("expired")
+  ) {
+    return "That code didn't work or has expired. Request a new one.";
+  }
+  if (
+    code === "otp_disabled" ||
+    message.includes("token has expired") ||
+    (message.includes("invalid") && message.includes("otp"))
+  ) {
+    return "That verification code isn't right. Try again.";
+  }
+  if (code === "over_request_rate_limit" || err.status === 429) {
+    return "Too many attempts. Please wait a minute and try again.";
+  }
+  if (
+    message.includes("network") ||
+    code === "network_error" ||
+    err.name === "AuthRetryableFetchError"
+  ) {
+    return "Network problem. Check your connection and try again.";
+  }
+  if (message.includes("phone") && message.includes("provider")) {
+    return "Phone verification isn't enabled yet. Use email for now.";
+  }
+
+  return err.message || "Something went wrong.";
 }
 
-function extractClerkError(input: unknown): ClerkLikeError | null {
+function extractAuthError(input: unknown): AuthLikeError | null {
   if (!input || typeof input !== "object") return null;
-  const obj = input as ClerkLikeError;
-  if (Array.isArray(obj.errors) && obj.errors[0]) {
-    return obj.errors[0];
-  }
-  if (obj.code || obj.message || obj.longMessage) {
-    return obj;
-  }
+  const obj = input as AuthLikeError;
+  if (obj.code || obj.message || obj.name) return obj;
   return null;
 }

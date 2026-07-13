@@ -29,19 +29,19 @@ function requireAdminKey(req: Request, res: Response, next: NextFunction): void 
 
 router.use("/admin", requireAdminKey);
 
-// GET /admin/users/:clerkUserId/tier-history
+// GET /admin/users/:authUserId/tier-history
 // Returns the full tier-transition history for any user, identified by their
-// Clerk user ID. Intended for support staff answering billing questions without
+// Auth user ID. Intended for support staff answering billing questions without
 // requiring the user to be present or the support agent to have DB access.
 router.get(
-  "/admin/users/:clerkUserId/tier-history",
+  "/admin/users/:authUserId/tier-history",
   async (req: Request, res: Response): Promise<void> => {
-    const clerkUserId = req.params["clerkUserId"] as string;
+    const authUserId = req.params["authUserId"] as string;
 
     const [user] = await db
       .select()
       .from(usersTable)
-      .where(eq(usersTable.clerkUserId, clerkUserId));
+      .where(eq(usersTable.authUserId, authUserId));
 
     if (!user) {
       res.status(404).json({ error: "User not found" });
@@ -77,7 +77,7 @@ router.get(
     }));
 
     req.log.info(
-      { clerkUserId, userId: user.id, count: transitions.length },
+      { authUserId, userId: user.id, count: transitions.length },
       "Admin tier-history lookup"
     );
 

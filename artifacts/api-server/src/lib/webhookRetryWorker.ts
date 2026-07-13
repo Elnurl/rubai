@@ -98,7 +98,7 @@ async function processEntry(id: number): Promise<boolean> {
       {
         queueId: id,
         eventType: row.eventType,
-        clerkUserId: row.clerkUserId,
+        authUserId: row.authUserId,
         attemptCount: row.attemptCount + 1,
       },
       "webhook retry: event applied successfully",
@@ -125,7 +125,7 @@ async function processEntry(id: number): Promise<boolean> {
       {
         queueId: id,
         eventType: row.eventType,
-        clerkUserId: row.clerkUserId,
+        authUserId: row.authUserId,
         attemptCount: newAttemptCount,
         maxAttempts: MAX_ATTEMPTS,
         lastError: result.error,
@@ -143,7 +143,7 @@ async function processEntry(id: number): Promise<boolean> {
         {
           queueId: id,
           eventType: row.eventType,
-          clerkUserId: row.clerkUserId,
+          authUserId: row.authUserId,
         },
         "webhook retry: PURCHASE LOST — subscriber completed in-app purchase but never signed up within the recovery window; check RevenueCat dashboard for this subscriber and reconcile manually",
       );
@@ -171,7 +171,7 @@ async function processEntry(id: number): Promise<boolean> {
     {
       queueId: id,
       eventType: row.eventType,
-      clerkUserId: row.clerkUserId,
+      authUserId: row.authUserId,
       attemptCount: newAttemptCount,
       nextRetryAt: nextRetryAt.toISOString(),
       lastError: result.error,

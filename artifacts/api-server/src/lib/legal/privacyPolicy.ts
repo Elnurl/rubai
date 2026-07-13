@@ -12,7 +12,7 @@ The data controller is Horizon, founded by Elnur Ahmadzada. For all privacy ques
 2. Data we collect and why
 We process only the data we need to operate rubai and respect the consent model described in Section 6.
 
-a) Account data — your Clerk-managed authentication identifier and email address. Legal basis: contract performance (Art. 6(1)(b) GDPR).
+a) Account data — your Supabase-managed authentication identifier and email address. Legal basis: contract performance (Art. 6(1)(b) GDPR).
 
 b) App state — your goals, intake answers, generated roadmaps, daily plans, reflections, behavioral profile, subscription tier, and account preferences. Stored in our PostgreSQL database. Legal basis: contract performance.
 
@@ -29,7 +29,7 @@ g) Legal acceptance audit trail — the version, timestamp, locale, hashed IP, a
 3. Sub-processors
 We rely on the following processors to operate rubai. Each is bound by a written processing agreement.
 
-- Clerk — authentication and identity management.
+- Supabase — authentication and identity management.
 - OpenAI — large-language-model inference for roadmap, daily plan, and coach features.
 - Google (Calendar API) — only when you explicitly connect and enable calendar access.
 - Replit — application hosting, database, and connector infrastructure.
@@ -70,7 +70,7 @@ Məlumat nəzarətçisi Elnur Ahmadzada tərəfindən təsis edilən Horizon şi
 2. Topladığımız məlumatlar və məqsəd
 Yalnız rubai-nin işləməsi üçün lazım olan məlumatları emal edirik və 6-cı Bölmədə təsvir olunan razılıq modelinə hörmət edirik.
 
-a) Hesab məlumatları — Clerk vasitəsilə idarə olunan identifikator və email ünvanınız. Hüquqi əsas: müqavilənin icrası (GDPR Mad. 6(1)(b)).
+a) Hesab məlumatları — Supabase vasitəsilə idarə olunan identifikator və email ünvanınız. Hüquqi əsas: müqavilənin icrası (GDPR Mad. 6(1)(b)).
 
 b) Tətbiq vəziyyəti — hədəfləriniz, intake cavablarınız, yaradılan yol xəritələri, günlük planlar, refleksiyalar, davranış profili, abunə səviyyəsi və hesab seçimləri. PostgreSQL bazamızda saxlanır. Hüquqi əsas: müqavilənin icrası.
 
@@ -85,7 +85,7 @@ f) Əməliyyat logları — sorğu metadata-sı (vaxt damğaları, status kodlar
 g) Hüquqi razılıq audit izi — Məxfilik Siyasəti və İstifadə Şərtlərinin hər qəbulu üçün versiya, vaxt damğası, dil, hash-lənmiş IP və user agent. Hüquqi əsas: GDPR Mad. 7(1)-ə əsasən razılığı sübut etmək qanuni öhdəliyi (Mad. 6(1)(c)).
 
 3. Alt-prosessorlar
-- Clerk — autentifikasiya.
+- Supabase — autentifikasiya.
 - OpenAI — AI inferensiya.
 - Google (Calendar API) — yalnız siz açıq şəkildə qoşduqda.
 - Replit — hosting, baza və konnektor infrastrukturu.
@@ -126,7 +126,7 @@ const ru: LocalizedDocument = {
 2. Какие данные мы собираем и зачем
 Мы обрабатываем только данные, необходимые для работы rubai, и соблюдаем модель согласия из раздела 6.
 
-а) Данные аккаунта — идентификатор Clerk и email. Правовое основание: исполнение договора (ст. 6(1)(b) GDPR).
+а) Данные аккаунта — идентификатор Supabase и email. Правовое основание: исполнение договора (ст. 6(1)(b) GDPR).
 б) Состояние приложения — цели, ответы анкеты, дорожные карты, ежедневные планы, рефлексии, поведенческий профиль, тариф и настройки. Хранится в PostgreSQL. Основание: исполнение договора.
 в) Содержимое AI-запросов — промпты и контекст, отправляемые в OpenAI. Мы не используем их для обучения собственных моделей. Основание: исполнение договора.
 г) Данные календаря (опционально, по согласию) — при подключении устройства или Google-календаря и явном включении переключателей «читать события» или «записывать задачи». Содержимое календаря на сервере не сохраняется дольше одного AI-запроса. Основание: явное согласие (ст. 6(1)(a)).
@@ -135,7 +135,7 @@ const ru: LocalizedDocument = {
 ж) Аудит согласий — версия, время, локаль, хеш IP и user agent каждого принятия Политики и Условий. Основание: юридическая обязанность (ст. 6(1)(c)) подтверждать согласие по ст. 7(1).
 
 3. Субпроцессоры
-Clerk (аутентификация), OpenAI (AI), Google Calendar (только при подключении), Replit (хостинг и БД), Expo (push). Некоторые работают за пределами ЕЭП — мы используем стандартные договорные положения ЕС или эквивалентные механизмы передачи.
+Supabase (аутентификация), OpenAI (AI), Google Calendar (только при подключении), Replit (хостинг и БД), Expo (push). Некоторые работают за пределами ЕЭП — мы используем стандартные договорные положения ЕС или эквивалентные механизмы передачи.
 
 4. Сроки хранения
 Данные хранятся, пока активен аккаунт. Удалить аккаунт можно из экрана Account или письмом на support@rubai.app — персональные данные удаляются в течение 30 дней (за исключением записей, требуемых законом).
@@ -168,7 +168,7 @@ const ar: LocalizedDocument = {
 2. البيانات التي نجمعها ولماذا
 نعالج فقط البيانات اللازمة لتشغيل rubai، ونحترم نموذج الموافقة في القسم 6.
 
-(أ) بيانات الحساب — معرف Clerk وعنوان البريد الإلكتروني. الأساس القانوني: تنفيذ العقد (المادة 6(1)(ب)).
+(أ) بيانات الحساب — معرف Supabase وعنوان البريد الإلكتروني. الأساس القانوني: تنفيذ العقد (المادة 6(1)(ب)).
 (ب) حالة التطبيق — أهدافك، إجابات الاستبيان، خرائط الطريق، الخطط اليومية، التأملات، الملف السلوكي، فئة الاشتراك، التفضيلات. مخزّنة في PostgreSQL. الأساس: تنفيذ العقد.
 (ج) محتوى الذكاء الاصطناعي — التوجيهات والسياق المُرسلة إلى OpenAI. لا نستخدمها لتدريب نماذجنا. الأساس: تنفيذ العقد.
 (د) بيانات التقويم (اختياري، بموافقة صريحة) — عند ربط جهازك أو Google Calendar وتفعيل المفاتيح بشكل صريح. لا نخزن محتوى التقويم على الخادم بعد طلب الذكاء الاصطناعي. الأساس: الموافقة الصريحة (المادة 6(1)(أ)).
@@ -177,7 +177,7 @@ const ar: LocalizedDocument = {
 (ز) سجل قبول الوثائق القانونية — الإصدار، الوقت، اللغة، تجزئة IP، وكيل المستخدم لكل قبول. الأساس: التزام قانوني (المادة 6(1)(ج)) بإثبات الموافقة وفق المادة 7(1).
 
 3. المعالجون الفرعيون
-Clerk (المصادقة)، OpenAI (الذكاء الاصطناعي)، Google Calendar (فقط عند الربط الصريح)، Replit (الاستضافة وقاعدة البيانات)، Expo (الإشعارات). بعضها يعمل خارج المنطقة الاقتصادية الأوروبية — نعتمد على البنود التعاقدية القياسية للاتحاد الأوروبي أو آليات نقل مكافئة.
+Supabase (المصادقة)، OpenAI (الذكاء الاصطناعي)، Google Calendar (فقط عند الربط الصريح)، Replit (الاستضافة وقاعدة البيانات)، Expo (الإشعارات). بعضها يعمل خارج المنطقة الاقتصادية الأوروبية — نعتمد على البنود التعاقدية القياسية للاتحاد الأوروبي أو آليات نقل مكافئة.
 
 4. مدة الاحتفاظ
 نحتفظ بالبيانات طالما الحساب نشط. يمكنك حذف الحساب من شاشة Account أو عبر البريد إلى support@rubai.app — تُمحى البيانات الشخصية خلال 30 يومًا (ما لم يُلزم القانون بالاحتفاظ).
@@ -210,7 +210,7 @@ const zh: LocalizedDocument = {
 2. 我们收集的数据及目的
 我们只处理运营 rubai 所必需的数据，并遵守第 6 节的同意模型。
 
-a) 账户数据 — Clerk 身份标识和电子邮件。法律依据：合同履行（第 6(1)(b) 条）。
+a) 账户数据 — Supabase 身份标识和电子邮件。法律依据：合同履行（第 6(1)(b) 条）。
 b) 应用状态 — 您的目标、问卷答案、生成的路线图、每日计划、反思、行为档案、订阅等级和偏好。存储在 PostgreSQL。依据：合同履行。
 c) AI 推理内容 — 发送给 OpenAI 的提示和上下文。我们不将其用于自有模型训练。依据：合同履行。
 d) 日历数据（可选，明示同意） — 当您连接设备或 Google 日历并明确开启相关开关时。日历内容不会在服务器端保存超过单次 AI 请求的时长。依据：明示同意（第 6(1)(a) 条）。
@@ -219,7 +219,7 @@ f) 运营日志 — 请求元数据（时间戳、状态码、路径、IP 哈希
 g) 法律接受审计记录 — 版本、时间、语言、IP 哈希、用户代理。依据：第 6(1)(c) 条的法律义务，证明第 7(1) 条要求的同意。
 
 3. 子处理方
-Clerk（身份验证）、OpenAI（AI）、Google Calendar（仅在您明示连接时）、Replit（托管和数据库）、Expo（推送）。部分位于欧洲经济区之外 — 我们依赖欧盟标准合同条款或等效转移机制。
+Supabase（身份验证）、OpenAI（AI）、Google Calendar（仅在您明示连接时）、Replit（托管和数据库）、Expo（推送）。部分位于欧洲经济区之外 — 我们依赖欧盟标准合同条款或等效转移机制。
 
 4. 保留期限
 账户活跃期间保留。您可在 Account 屏幕或写信至 support@rubai.app 删除账户 — 30 天内删除个人数据（法律要求保留的记录除外）。
@@ -252,7 +252,7 @@ El responsable del tratamiento es Horizon, fundada por Elnur Ahmadzada. Para pre
 2. Qué datos recopilamos y por qué
 Procesamos solo los datos necesarios para operar rubai y respetamos el modelo de consentimiento de la Sección 6.
 
-a) Datos de cuenta — identificador de Clerk y dirección de correo. Base legal: ejecución del contrato (Art. 6(1)(b) RGPD).
+a) Datos de cuenta — identificador de Supabase y dirección de correo. Base legal: ejecución del contrato (Art. 6(1)(b) RGPD).
 b) Estado de la aplicación — objetivos, respuestas del cuestionario, hojas de ruta, planes diarios, reflexiones, perfil conductual, nivel de suscripción y preferencias. Almacenado en PostgreSQL. Base: ejecución del contrato.
 c) Contenido de inferencia AI — los prompts y contexto enviados a OpenAI. No los usamos para entrenar nuestros propios modelos. Base: ejecución del contrato.
 d) Datos de calendario (opcional, con consentimiento) — cuando conectas un calendario de dispositivo o de Google y activas explícitamente los interruptores. No almacenamos el contenido del calendario en el servidor más allá de la duración de una sola solicitud AI. Base: consentimiento explícito (Art. 6(1)(a)).
@@ -261,7 +261,7 @@ f) Registros operativos — metadatos de solicitud (marcas temporales, códigos,
 g) Registro de auditoría de aceptación legal — versión, marca temporal, idioma, hash de IP, agente de usuario. Base: obligación legal (Art. 6(1)(c)) de demostrar el consentimiento conforme al Art. 7(1).
 
 3. Subencargados
-Clerk (autenticación), OpenAI (AI), Google Calendar (solo cuando conectas explícitamente), Replit (alojamiento y base de datos), Expo (push). Algunos operan fuera del EEE — utilizamos las Cláusulas Contractuales Tipo de la UE u otros mecanismos equivalentes.
+Supabase (autenticación), OpenAI (AI), Google Calendar (solo cuando conectas explícitamente), Replit (alojamiento y base de datos), Expo (push). Algunos operan fuera del EEE — utilizamos las Cláusulas Contractuales Tipo de la UE u otros mecanismos equivalentes.
 
 4. Conservación
 Conservamos los datos mientras la cuenta esté activa. Puedes eliminar la cuenta desde la pantalla Account o escribiendo a support@rubai.app — los datos personales se eliminan en 30 días (excepto registros que la ley exija conservar).

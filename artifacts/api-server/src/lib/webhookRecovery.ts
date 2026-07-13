@@ -17,13 +17,13 @@ import { logger } from "./logger";
 
 /**
  * Reset any pending or dead "user_not_found" webhook retry queue entries for
- * the given clerkUserId so the background worker picks them up on the next
+ * the given authUserId so the background worker picks them up on the next
  * tick.  Safe to call even when no such entries exist.
  *
- * @param clerkUserId  The Clerk user ID of the newly created user row.
+ * @param authUserId  The Auth user ID of the newly created user row.
  */
 export async function replayWebhookEventsForUser(
-  clerkUserId: string,
+  authUserId: string,
 ): Promise<void> {
   const replayed = await db
     .update(webhookRetryQueueTable)
@@ -36,7 +36,7 @@ export async function replayWebhookEventsForUser(
     })
     .where(
       and(
-        eq(webhookRetryQueueTable.clerkUserId, clerkUserId),
+        eq(webhookRetryQueueTable.authUserId, authUserId),
         inArray(webhookRetryQueueTable.status, ["pending", "dead"]),
         eq(webhookRetryQueueTable.lastError, "user_not_found"),
       ),
@@ -46,7 +46,7 @@ export async function replayWebhookEventsForUser(
   if (replayed.length > 0) {
     logger.info(
       {
-        clerkUserId,
+        authUserId,
         count: replayed.length,
         ids: replayed.map((r) => r.id),
       },

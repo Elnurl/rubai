@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { useUser } from "@clerk/expo";
+import { useUser } from "@/providers/AuthProvider";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
@@ -1134,10 +1134,7 @@ function NameModal(props: {
 
 // ---- Email / Phone (2-step verify) ----------------------------------------
 
-// Resource shape we keep across the 2-step flow. Holding the actual Clerk
-// resource (not just its id) lets us call attemptVerification + destroy on
-// the same instance even after it disappears from `user.emailAddresses` due
-// to a stale snapshot.
+// Resource shape we keep across the 2-step verify flow (email / phone change).
 type PendingResource = {
   id: string;
   attempt: (code: string) => Promise<void>;

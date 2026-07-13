@@ -3,10 +3,20 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
+    "preinstall": "node scripts/preinstall.mjs",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "dev:api": "node scripts/dev-api.mjs",
+    "dev:mobile": "node scripts/dev-mobile.mjs",
+    "dev:android": "node scripts/dev-android.mjs",
+    "verify:supabase": "node scripts/verify-supabase.mjs",
+    "verify:clerk": "node scripts/verify-supabase.mjs",
+    "build:android:dev": "node scripts/build-android-dev.mjs",
+    "run:android:local": "node scripts/run-android-local.mjs",
+    "db:up": "node scripts/db-up.mjs",
+    "db:down": "node scripts/db-down.mjs",
+    "db:logs": "node scripts/db-logs.mjs"
   },
   "private": true,
   "devDependencies": {

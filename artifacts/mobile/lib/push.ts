@@ -1,35 +1,9 @@
 import Constants from "expo-constants";
 import * as Device from "expo-device";
-import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
-// Foreground presentation: when a push lands while the app is open we still
-// want it to show as a banner/sound — otherwise the user sees nothing for
-// scheduled morning nudges they're already inside the app for.
-// Exception: tier_changed pushes are data-only signals — the UI itself is
-// the feedback, so we suppress the banner to avoid a double alert.
-Notifications.setNotificationHandler({
-  handleNotification: async (notification) => {
-    const data = notification.request.content.data as
-      | Record<string, unknown>
-      | null
-      | undefined;
-    if (data?.type === "tier_changed") {
-      return {
-        shouldShowBanner: false,
-        shouldShowList: false,
-        shouldPlaySound: false,
-        shouldSetBadge: false,
-      };
-    }
-    return {
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    };
-  },
-});
+import { getNotifications } from "@/lib/notifications";
+import { supportsRemotePush } from "@/lib/expoGo";
 
 export type PushRegistration = {
   token: string;
@@ -38,15 +12,17 @@ export type PushRegistration = {
 
 /**
  * Request push permission and resolve an Expo push token. Returns null on
- * web, simulators, when permission was denied, or when no projectId is
- * configured (Expo Go without an account, EAS preview without a project).
+ * web, simulators, Expo Go, when permission was denied, or when no projectId
+ * is configured.
  */
 export async function registerForPushAsync(): Promise<PushRegistration | null> {
   if (Platform.OS === "web") return null;
   if (!Device.isDevice) return null;
+  if (!supportsRemotePush()) return null;
 
-  // Android needs a notification channel before a push can render. Set it
-  // up unconditionally — it's idempotent.
+  const Notifications = getNotifications();
+  if (!Notifications) return null;
+
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("default", {
       name: "Default",
@@ -64,9 +40,6 @@ export async function registerForPushAsync(): Promise<PushRegistration | null> {
   }
   if (status !== "granted") return null;
 
-  // The projectId is required so Expo's push service can route the token
-  // to the right app. EAS-built clients have it on `extra.eas.projectId`;
-  // some Expo Go shells expose it on `easConfig.projectId`.
   const projectId =
     Constants.expoConfig?.extra?.eas?.projectId ??
     (Constants as unknown as { easConfig?: { projectId?: string } })
@@ -78,13 +51,9 @@ export async function registerForPushAsync(): Promise<PushRegistration | null> {
       projectId ? { projectId } : undefined,
     );
     if (!tokenResp.data) return null;
-    // -getTimezoneOffset returns minutes WEST of UTC; we want east of UTC.
     const tzOffsetMinutes = -new Date().getTimezoneOffset();
     return { token: tokenResp.data, tzOffsetMinutes };
   } catch {
-    // Most common cause: running inside Expo Go on SDK 53+ where push
-    // tokens are no longer issued without a project. Fail silently — the
-    // app still works without push.
     return null;
   }
 }

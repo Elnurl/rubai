@@ -132,7 +132,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /admin/users/{clerkUserId}/tier-history:
+  /admin/users/{authUserId}/tier-history:
     get:
       operationId: adminGetUserTierHistory
       tags: [admin]
@@ -143,12 +143,12 @@ paths:
         to be present or granting direct database access.
         Requires the `X-Admin-Key` header to match the server's `ADMIN_API_KEY` environment variable.
       parameters:
-        - name: clerkUserId
+        - name: authUserId
           in: path
           required: true
           schema:
             type: string
-          description: The Clerk user ID of the user to look up.
+          description: The Auth user ID of the user to look up.
         - name: limit
           in: query
           required: false
@@ -792,7 +792,7 @@ components:
       type: object
       description: Public-safe identity and tier for the signed-in user.
       properties:
-        clerkUserId:
+        authUserId:
           type: string
         email:
           oneOf:
@@ -801,7 +801,7 @@ components:
         tier:
           type: string
           description: Server-side subscription tier. "free" today; later "pro" etc.
-      required: [clerkUserId, email, tier]
+      required: [authUserId, email, tier]
 
     MeStateGoalBlob:
       type: object
@@ -821,7 +821,7 @@ components:
     MeStateResponse:
       type: object
       properties:
-        clerkUserId:
+        authUserId:
           type: string
         email:
           oneOf:
@@ -846,7 +846,7 @@ components:
         version:
           type: integer
           description: Monotonic version used for optimistic concurrency. Bumped on every successful PUT.
-      required: [clerkUserId, email, tier, goals, activeGoalId, accountPrefs, pendingDraft, version]
+      required: [authUserId, email, tier, goals, activeGoalId, accountPrefs, pendingDraft, version]
 
     MeStateRequest:
       type: object

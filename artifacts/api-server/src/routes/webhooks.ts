@@ -13,7 +13,7 @@ const router: IRouter = Router();
 // How long after an ACTIVE event's own timestamp we will still return 404
 // (triggering a RevenueCat retry) when the user row doesn't exist yet.
 // Within this window the missing row is most likely a sign-up race;
-// outside it the clerkUserId is genuinely unknown and we stop retrying.
+// outside it the authUserId is genuinely unknown and we stop retrying.
 // Configurable via env so tests and ops can override without code changes.
 const WEBHOOK_RACE_WINDOW_MS =
   Number(process.env["WEBHOOK_RACE_WINDOW_MS"] ?? "") || 5 * 60 * 1000; // 5 min
@@ -158,10 +158,10 @@ router.post("/webhooks/revenuecat", async (req, res) => {
     return;
   }
 
-  const clerkUserId =
+  const authUserId =
     event.original_app_user_id ?? event.app_user_id ?? null;
 
-  if (!clerkUserId) {
+  if (!authUserId) {
     res.status(200).json({ ok: true, skipped: "no_user_id" });
     return;
   }
@@ -192,7 +192,7 @@ router.post("/webhooks/revenuecat", async (req, res) => {
 
       if (result.ok) {
         req.log?.info(
-          { clerkUserId, eventType: event.type },
+          { authUserId, eventType: event.type },
           "RC webhook processed (inline)",
         );
         res.status(200).json({ ok: true });
@@ -205,7 +205,7 @@ router.post("/webhooks/revenuecat", async (req, res) => {
       // retryable:true for user_not_found, so we check the error string here.
       if (result.error === "user_not_found") {
         req.log?.warn(
-          { clerkUserId, eventType: event.type, eventAgeMs },
+          { authUserId, eventType: event.type, eventAgeMs },
           "RC webhook: user not found for recent active event — returning 404 to trigger RC retry",
         );
         res.status(404).json({ error: "user_not_found" });
@@ -224,13 +224,13 @@ router.post("/webhooks/revenuecat", async (req, res) => {
       const enqueued = await enqueueEvent(event, req.log ?? console, result.error);
       if (enqueued) {
         req.log?.warn(
-          { clerkUserId, eventType: event.type },
+          { authUserId, eventType: event.type },
           "RC webhook: inline processing failed — queued for retry",
         );
         res.status(200).json({ ok: true, queued: true });
       } else {
         req.log?.error(
-          { clerkUserId, eventType: event.type },
+          { authUserId, eventType: event.type },
           "RC webhook: inline processing failed and could not enqueue — returning 500",
         );
         res.status(500).json({ error: "Internal error" });
@@ -251,7 +251,7 @@ router.post("/webhooks/revenuecat", async (req, res) => {
 
   if (result.ok) {
     req.log?.info(
-      { clerkUserId, eventType: event.type },
+      { authUserId, eventType: event.type },
       "RC webhook processed (inline)",
     );
     res.status(200).json({ ok: true });
@@ -261,7 +261,7 @@ router.post("/webhooks/revenuecat", async (req, res) => {
   if (!result.retryable) {
     // Permanent skip: unknown user for inactive event, unhandled event type, etc.
     req.log?.warn(
-      { clerkUserId, eventType: event.type, reason: result.error },
+      { authUserId, eventType: event.type, reason: result.error },
       "RC webhook: permanent skip",
     );
     res.status(200).json({ ok: true, skipped: result.error });
@@ -274,7 +274,7 @@ router.post("/webhooks/revenuecat", async (req, res) => {
   // will keep retrying until the user row appears.
   if (result.error === "user_not_found") {
     req.log?.warn(
-      { clerkUserId, eventType: event.type },
+      { authUserId, eventType: event.type },
       "RC webhook: active purchase for unknown user outside race window — enqueuing for recovery",
     );
   }
@@ -282,7 +282,7 @@ router.post("/webhooks/revenuecat", async (req, res) => {
   const enqueued = await enqueueEvent(event, req.log ?? console, result.error);
   if (enqueued) {
     req.log?.warn(
-      { clerkUserId, eventType: event.type, reason: result.error },
+      { authUserId, eventType: event.type, reason: result.error },
       "RC webhook: inline processing failed — queued for retry",
     );
     res.status(200).json({ ok: true, queued: true });
@@ -290,7 +290,7 @@ router.post("/webhooks/revenuecat", async (req, res) => {
     // Could not enqueue (DB completely unavailable) — return 500 so RC
     // keeps retrying while the database recovers.
     req.log?.error(
-      { clerkUserId, eventType: event.type },
+      { authUserId, eventType: event.type },
       "RC webhook: inline processing failed and could not enqueue — returning 500",
     );
     res.status(500).json({ error: "Internal error" });
@@ -313,7 +313,7 @@ async function enqueueEvent(
   log: { warn?(obj: object, msg: string): void; error?(obj: object, msg: string): void },
   initialLastError?: string,
 ): Promise<boolean> {
-  const clerkUserId =
+  const authUserId =
     event.original_app_user_id ?? event.app_user_id ?? null;
   const idempotencyKey = buildIdempotencyKey(event);
 
@@ -323,7 +323,7 @@ async function enqueueEvent(
       .values({
         idempotencyKey,
         eventType: event.type,
-        clerkUserId,
+        authUserId,
         payload: event as unknown as Record<string, unknown>,
         lastError: initialLastError ?? null,
       })

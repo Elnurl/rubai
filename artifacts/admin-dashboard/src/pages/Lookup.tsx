@@ -121,7 +121,7 @@ export default function Lookup() {
           <CardContent>
             <form onSubmit={handleSearch} className="flex gap-3">
               <Input
-                placeholder="Enter Clerk User ID (e.g. user_2Xy...)"
+                placeholder="Enter Auth user ID (e.g. user_2Xy...)"
                 value={userId}
                 onChange={(e) => setUserId(e.target.value)}
                 className="font-mono text-sm max-w-md h-10"

@@ -87,7 +87,7 @@ export interface TierHistoryResponse {
  * Public-safe identity and tier for the signed-in user.
  */
 export interface MeResponse {
-  clerkUserId: string;
+  authUserId: string;
   email: string | null;
   /** Server-side subscription tier. "free" today; later "pro" etc. */
   tier: string;
@@ -115,7 +115,7 @@ export interface MeStateDraftBlob {
 }
 
 export interface MeStateResponse {
-  clerkUserId: string;
+  authUserId: string;
   email: string | null;
   tier: string;
   goals: MeStateGoalBlob[];

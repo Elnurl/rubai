@@ -1,5 +1,4 @@
 import { Feather } from "@expo/vector-icons";
-import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import React, { useMemo, useRef, useState } from "react";
 import {
@@ -19,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { useColors } from "@/hooks/useColors";
+import { getNotifications } from "@/lib/notifications";
 import { useAtlas } from "@/providers/AtlasProvider";
 import { formatTime } from "@/lib/languageLocales";
 import i18n from "@/lib/i18n";
@@ -27,6 +27,8 @@ const REMINDER_TAG = "rubai-daily-reminder";
 
 async function scheduleReminder(timeStr: string): Promise<void> {
   if (Platform.OS === "web") return;
+  const Notifications = getNotifications();
+  if (!Notifications) return;
   const [h, m] = timeStr.split(":").map(Number);
   if (isNaN(h) || isNaN(m)) return;
   // Cancel any existing rubai reminder first.
@@ -52,6 +54,8 @@ async function scheduleReminder(timeStr: string): Promise<void> {
 
 async function cancelReminder(): Promise<void> {
   if (Platform.OS === "web") return;
+  const Notifications = getNotifications();
+  if (!Notifications) return;
   const existing = await Notifications.getAllScheduledNotificationsAsync();
   for (const n of existing) {
     if ((n.content.data as Record<string, unknown>)?.[REMINDER_TAG]) {
@@ -146,6 +150,17 @@ export default function NotificationsScreen() {
               value={account.notificationsEnabled}
               onValueChange={async (v) => {
                 if (v && Platform.OS !== "web") {
+                  const Notifications = getNotifications();
+                  if (!Notifications) {
+                    Alert.alert(
+                      t("notifications.permissionTitle", "Permission needed"),
+                      t(
+                        "notifications.expoGoBody",
+                        "Push reminders need a development build. You can still use the app in Expo Go.",
+                      ),
+                    );
+                    return;
+                  }
                   const { status } = await Notifications.requestPermissionsAsync();
                   if (status !== "granted") {
                     Alert.alert(

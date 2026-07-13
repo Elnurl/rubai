@@ -38,7 +38,7 @@ type QueueRow = {
   id: number;
   idempotencyKey: string;
   eventType: string;
-  clerkUserId: string | null;
+  authUserId: string | null;
   payload: unknown;
   status: string;
   attemptCount: number;
@@ -57,7 +57,7 @@ function makeQueueRow(overrides: Partial<QueueRow> = {}): QueueRow {
     id,
     idempotencyKey: `TEST:txn:${id}`,
     eventType: "INITIAL_PURCHASE",
-    clerkUserId: "user_abc",
+    authUserId: "user_abc",
     payload: {
       type: "INITIAL_PURCHASE",
       app_user_id: "user_abc",
@@ -192,7 +192,7 @@ const { buildIdempotencyKey, processWebhookEvent } = await import(
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-const MOCK_USER = { id: 42, clerkUserId: "user_abc", tier: "free", expoPushToken: null };
+const MOCK_USER = { id: 42, authUserId: "user_abc", tier: "free", expoPushToken: null };
 
 function resetState() {
   capturedInserts = [];

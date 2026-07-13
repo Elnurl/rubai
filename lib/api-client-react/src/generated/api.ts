@@ -484,7 +484,7 @@ Requires the `X-Admin-Key` header to match the server's `ADMIN_API_KEY` environm
  * @summary Subscription tier history for any user (support lookup)
  */
 export const getAdminGetUserTierHistoryUrl = (
-  clerkUserId: string,
+  authUserId: string,
   params?: AdminGetUserTierHistoryParams,
 ) => {
   const normalizedParams = new URLSearchParams();
@@ -498,17 +498,17 @@ export const getAdminGetUserTierHistoryUrl = (
   const stringifiedParams = normalizedParams.toString();
 
   return stringifiedParams.length > 0
-    ? `/api/admin/users/${clerkUserId}/tier-history?${stringifiedParams}`
-    : `/api/admin/users/${clerkUserId}/tier-history`;
+    ? `/api/admin/users/${authUserId}/tier-history?${stringifiedParams}`
+    : `/api/admin/users/${authUserId}/tier-history`;
 };
 
 export const adminGetUserTierHistory = async (
-  clerkUserId: string,
+  authUserId: string,
   params?: AdminGetUserTierHistoryParams,
   options?: RequestInit,
 ): Promise<TierHistoryResponse> => {
   return customFetch<TierHistoryResponse>(
-    getAdminGetUserTierHistoryUrl(clerkUserId, params),
+    getAdminGetUserTierHistoryUrl(authUserId, params),
     {
       ...options,
       method: "GET",
@@ -517,11 +517,11 @@ export const adminGetUserTierHistory = async (
 };
 
 export const getAdminGetUserTierHistoryQueryKey = (
-  clerkUserId: string,
+  authUserId: string,
   params?: AdminGetUserTierHistoryParams,
 ) => {
   return [
-    `/api/admin/users/${clerkUserId}/tier-history`,
+    `/api/admin/users/${authUserId}/tier-history`,
     ...(params ? [params] : []),
   ] as const;
 };
@@ -530,7 +530,7 @@ export const getAdminGetUserTierHistoryQueryOptions = <
   TData = Awaited<ReturnType<typeof adminGetUserTierHistory>>,
   TError = ErrorType<ErrorResponse>,
 >(
-  clerkUserId: string,
+  authUserId: string,
   params?: AdminGetUserTierHistoryParams,
   options?: {
     query?: UseQueryOptions<
@@ -545,17 +545,17 @@ export const getAdminGetUserTierHistoryQueryOptions = <
 
   const queryKey =
     queryOptions?.queryKey ??
-    getAdminGetUserTierHistoryQueryKey(clerkUserId, params);
+    getAdminGetUserTierHistoryQueryKey(authUserId, params);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof adminGetUserTierHistory>>
   > = ({ signal }) =>
-    adminGetUserTierHistory(clerkUserId, params, { signal, ...requestOptions });
+    adminGetUserTierHistory(authUserId, params, { signal, ...requestOptions });
 
   return {
     queryKey,
     queryFn,
-    enabled: !!clerkUserId,
+    enabled: !!authUserId,
     ...queryOptions,
   } as UseQueryOptions<
     Awaited<ReturnType<typeof adminGetUserTierHistory>>,
@@ -577,7 +577,7 @@ export function useAdminGetUserTierHistory<
   TData = Awaited<ReturnType<typeof adminGetUserTierHistory>>,
   TError = ErrorType<ErrorResponse>,
 >(
-  clerkUserId: string,
+  authUserId: string,
   params?: AdminGetUserTierHistoryParams,
   options?: {
     query?: UseQueryOptions<
@@ -589,7 +589,7 @@ export function useAdminGetUserTierHistory<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getAdminGetUserTierHistoryQueryOptions(
-    clerkUserId,
+    authUserId,
     params,
     options,
   );

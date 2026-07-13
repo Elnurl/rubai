@@ -15,7 +15,7 @@ router.use(healthRouter);
 // Webhooks mount BEFORE requireAuth — RevenueCat posts without user auth.
 router.use(webhooksRouter);
 // Admin routes mount before requireAuth — they use their own X-Admin-Key gate
-// and must not be intercepted by the Clerk auth middleware.
+// and must not be intercepted by the session auth middleware.
 router.use(adminRouter);
 // Legal routes mount BEFORE meRouter because meRouter installs requireAuth
 // as a router-level middleware that, due to Express middleware ordering,

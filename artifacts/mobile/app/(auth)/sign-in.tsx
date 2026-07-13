@@ -1,7 +1,5 @@
-import { useAuth, useSignIn, useSSO } from "@clerk/expo";
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import { Link, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
@@ -22,46 +20,22 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { GoogleGIcon } from "@/components/GoogleGIcon";
 import { friendlyAuthError } from "@/lib/authErrors";
+import { useAuth } from "@/providers/AuthProvider";
 
-// Remembers the last email the user signed in with on this device, so
-// repeat sign-ins are one tap + password. Storing the email itself is
-// industry-standard "remember me" UX. We never store the password.
 const REMEMBER_EMAIL_KEY = "atlas:v2:auth:rememberEmail";
 const REMEMBER_FLAG_KEY = "atlas:v2:auth:rememberFlag";
 
 WebBrowser.maybeCompleteAuthSession();
 
-// Detects when the web build is being rendered inside another window's iframe
-// (e.g. Replit's workspace preview). In that case, popup-based OAuth flows
-// frequently fail silently because third-party cookies / popups / postMessage
-// to the grandparent window are blocked. We surface a hint to the user.
-function isWebInIframe(): boolean {
-  if (Platform.OS !== "web") return false;
-  try {
-    return typeof window !== "undefined" && window.self !== window.top;
-  } catch {
-    // Cross-origin access threw — that means we're definitely framed.
-    return true;
-  }
-}
-
 const BRAND = {
   primary: "#0E7C5A",
   bg: "#FAF6EE",
   fg: "#1B1812",
-  accent: "#C68A12",
   muted: "#807763",
   border: "#E1D9C5",
   card: "#FFFFFF",
   destructive: "#B43E3E",
 };
-
-function debug(...args: unknown[]) {
-  if (__DEV__) {
-    // eslint-disable-next-line no-console
-    console.log("[auth/sign-in]", ...args);
-  }
-}
 
 function useWarmUpBrowser() {
   useEffect(() => {
@@ -77,18 +51,15 @@ export default function SignInScreen() {
   const { t } = useTranslation();
   useWarmUpBrowser();
   const router = useRouter();
-  const { signIn, errors, fetchStatus } = useSignIn();
-  const { startSSOFlow } = useSSO();
-  const { isLoaded: authLoaded, isSignedIn } = useAuth();
+  const {
+    isLoaded: authLoaded,
+    isSignedIn,
+    signInWithPassword,
+    signInWithGoogle,
+  } = useAuth();
 
-  // If a session already exists (e.g. user navigated back to /sign-in after a
-  // prior successful login, or restored a cached Clerk session), Clerk will
-  // reject any new sign-in attempt with "You're already signed in." Send
-  // them straight to the app instead of letting them re-enter credentials.
   useEffect(() => {
-    if (authLoaded && isSignedIn) {
-      router.replace("/");
-    }
+    if (authLoaded && isSignedIn) router.replace("/");
   }, [authLoaded, isSignedIn, router]);
 
   const [emailAddress, setEmailAddress] = useState("");
@@ -99,18 +70,6 @@ export default function SignInScreen() {
   const [oauthLoading, setOauthLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Two-factor step — shown when Clerk returns needs_second_factor / needs_client_trust
-  const [twoFactorStep, setTwoFactorStep] = useState(false);
-  const [twoFactorCode, setTwoFactorCode] = useState("");
-  // Which status triggered the 2FA step (affects which Clerk method to call)
-  const [twoFactorKind, setTwoFactorKind] = useState<"second_factor" | "client_trust">("second_factor");
-  // The actual Clerk strategy being used for second factor
-  const [twoFactorStrategy, setTwoFactorStrategy] = useState<string>("email_code");
-  // Separate loading flag so Clerk's fetchStatus doesn't lock the code input
-  const [twoFactorSubmitting, setTwoFactorSubmitting] = useState(false);
-
-  // Hydrate "remember me" choice + last-used email from local storage on
-  // first mount. Defaults: flag = true (remember), email = empty.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -124,7 +83,7 @@ export default function SignInScreen() {
         setRememberMe(remembered);
         if (remembered && savedEmail) setEmailAddress(savedEmail);
       } catch {
-        // ignore — remembering email is best-effort
+        // ignore
       }
     })();
     return () => {
@@ -132,8 +91,6 @@ export default function SignInScreen() {
     };
   }, []);
 
-  // Persist remember preference + saved email each time the toggle flips
-  // or the email field changes. Only the email is stored; never the password.
   useEffect(() => {
     void AsyncStorage.setItem(REMEMBER_FLAG_KEY, rememberMe ? "1" : "0");
     if (!rememberMe) {
@@ -144,222 +101,36 @@ export default function SignInScreen() {
   }, [rememberMe, emailAddress]);
 
   const handleSubmit = useCallback(async () => {
-    if (!signIn) return;
     setSubmitError(null);
     setSubmitting(true);
     try {
-      // Defensive: if a session already exists (Clerk hydrated late or the
-      // user navigated back here from inside the app), don't even attempt
-      // signIn.password — it will fail with "You're already signed in."
-      // Just route them into the app.
       if (isSignedIn) {
         router.replace("/");
         return;
       }
-      debug("password attempt", { email: emailAddress });
-      const { error } = await signIn.password({ emailAddress, password });
-      if (error) {
-        debug("password error", error);
-        // Clerk surfaces this as `session_exists` in error.code. If we
-        // somehow got here despite the guards above (race), still recover
-        // gracefully instead of dead-ending the user on the sign-in form.
-        const code = (error as { code?: string }).code;
-        const msg = (error as { message?: string }).message ?? "";
-        if (code === "session_exists" || /already signed in/i.test(msg)) {
-          router.replace("/");
-          return;
-        }
-        setSubmitError(friendlyAuthError(error));
-        return;
-      }
-
-      debug("password ok, status =", signIn.status);
-
-      if (signIn.status === "complete") {
-        await signIn.finalize({
-          navigate: ({ session }) => {
-            if (session?.currentTask) return;
-            router.replace("/");
-          },
-        });
-        return;
-      }
-
-      if (signIn.status === "needs_second_factor") {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const si = signIn as any;
-        const supported: Array<{ strategy: string; emailAddressId?: string }> =
-          si.supportedSecondFactors ?? [];
-        debug("needs_second_factor supported strategies", supported.map((f) => f.strategy));
-
-        // Pick best available strategy: prefer totp/phone, fall back to email
-        const picked =
-          supported.find((f) => f.strategy === "totp") ??
-          supported.find((f) => f.strategy === "phone_code") ??
-          supported.find((f) => f.strategy === "email_code");
-        const strategy = picked?.strategy ?? "email_code";
-        setTwoFactorStrategy(strategy);
-        setTwoFactorKind("second_factor");
-
-        // For email_code MFA send the email now; for phone_code send SMS now.
-        // Clerk v3 Future API: sendMFAEmailCode / sendMFAPhoneCode.
-        if (strategy === "email_code") {
-          try {
-            const { error: sendErr } = await si.sendMFAEmailCode();
-            if (sendErr) debug("sendMFAEmailCode error", sendErr);
-            else debug("needs_second_factor — MFA email sent");
-          } catch (prepErr) {
-            debug("sendMFAEmailCode threw", prepErr);
-            // Non-fatal — show input anyway
-          }
-        } else if (strategy === "phone_code") {
-          try {
-            const { error: sendErr } = await si.sendMFAPhoneCode();
-            if (sendErr) debug("sendMFAPhoneCode error", sendErr);
-            else debug("needs_second_factor — MFA SMS sent");
-          } catch (prepErr) {
-            debug("sendMFAPhoneCode threw", prepErr);
-            // Non-fatal
-          }
-        }
-
-        setTwoFactorStep(true);
-        return;
-      }
-
-      // needs_client_trust means Clerk wants an email OTP to trust this
-      // device. Clerk v3 Future API: sendEmailCode() dispatches the email.
-      if (signIn.status === "needs_client_trust") {
-        debug("needs_client_trust — sending email code");
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const si = signIn as any;
-          const { error: sendErr } = await si.sendEmailCode();
-          if (sendErr) debug("sendEmailCode error", sendErr);
-          else debug("needs_client_trust — email code sent");
-        } catch (prepErr) {
-          debug("sendEmailCode threw", prepErr);
-          // Non-fatal: show the input anyway
-        }
-        setTwoFactorStrategy("email_code");
-        setTwoFactorKind("client_trust");
-        setTwoFactorStep(true);
-        return;
-      }
-
-      // Catch-all: surface the actual status code so we never silently
-      // dead-end the user.
-      setSubmitError(
-        t("signIn.signInIncomplete", "Sign-in didn't complete ({{status}}). Please try again.", { status: signIn.status ?? "unknown" }),
-      );
+      await signInWithPassword(emailAddress.trim(), password);
+      router.replace("/");
     } catch (err) {
-      debug("password threw", err);
       setSubmitError(friendlyAuthError(err));
     } finally {
       setSubmitting(false);
     }
-  }, [signIn, emailAddress, password, router]);
+  }, [signInWithPassword, emailAddress, password, router, isSignedIn]);
 
   const handleGoogle = useCallback(async () => {
     setSubmitError(null);
     setOauthLoading(true);
     try {
-      debug("google sso start");
-      const { createdSessionId, setActive } = await startSSOFlow({
-        strategy: "oauth_google",
-        redirectUrl: AuthSession.makeRedirectUri(),
-      });
-      debug("google sso result", { createdSessionId: !!createdSessionId });
-      if (createdSessionId && setActive) {
-        await setActive({
-          session: createdSessionId,
-          navigate: async ({ session }) => {
-            if (session?.currentTask) return;
-            router.replace("/");
-          },
-        });
-      } else {
-        // No session was created and no error was thrown. Two real causes:
-        //   1. The user closed the OAuth sheet — that's fine.
-        //   2. The OAuth popup was blocked or the redirect callback couldn't
-        //      reach the app (very common inside the workspace preview iframe).
-        // Either way, give the user actionable feedback rather than silence.
-        debug("google sso cancelled or missing requirements");
-        if (isWebInIframe()) {
-          setSubmitError(
-            t("signIn.googleIncompleteIframe", "Google sign-in didn't complete. Inside the workspace preview, OAuth popups can be blocked — open this page in a new browser tab and try again."),
-          );
-        } else {
-          setSubmitError(
-            t("signIn.googleIncomplete", "Google sign-in didn't complete. Please try again."),
-          );
-        }
-      }
+      await signInWithGoogle();
+      router.replace("/");
     } catch (err) {
-      debug("google sso threw", err);
       setSubmitError(friendlyAuthError(err));
     } finally {
       setOauthLoading(false);
     }
-  }, [startSSOFlow, router]);
+  }, [signInWithGoogle, router]);
 
-  // Submit the 2FA verification code.
-  // Clerk v3 Future API uses strategy-specific verify methods that all
-  // return { error } — null error means success, then call finalize().
-  const handleTwoFactor = useCallback(async () => {
-    if (!signIn) return;
-    setSubmitError(null);
-    setTwoFactorSubmitting(true);
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const si = signIn as any;
-      const code = twoFactorCode.trim();
-      let verifyError: unknown = null;
-
-      if (twoFactorKind === "client_trust") {
-        // Device-trust email OTP → verifyEmailCode (first-factor path)
-        debug("2FA client_trust verifyEmailCode");
-        const { error } = await si.verifyEmailCode({ code });
-        verifyError = error;
-      } else if (twoFactorStrategy === "totp") {
-        debug("2FA verifyTOTP");
-        const { error } = await si.verifyTOTP({ code });
-        verifyError = error;
-      } else if (twoFactorStrategy === "phone_code") {
-        debug("2FA verifyMFAPhoneCode");
-        const { error } = await si.verifyMFAPhoneCode({ code });
-        verifyError = error;
-      } else {
-        // email_code MFA (default)
-        debug("2FA verifyMFAEmailCode");
-        const { error } = await si.verifyMFAEmailCode({ code });
-        verifyError = error;
-      }
-
-      if (verifyError) {
-        debug("2FA verify error", verifyError);
-        setSubmitError(friendlyAuthError(verifyError));
-        return;
-      }
-
-      // Verification succeeded — finalize the session
-      debug("2FA verify ok — finalizing");
-      await si.finalize({
-        navigate: ({ session }: { session?: { currentTask?: unknown } }) => {
-          if (session?.currentTask) return;
-          router.replace("/");
-        },
-      });
-    } catch (err) {
-      debug("2FA threw", err);
-      setSubmitError(friendlyAuthError(err));
-    } finally {
-      setTwoFactorSubmitting(false);
-    }
-  }, [signIn, twoFactorCode, twoFactorKind, twoFactorStrategy, router]);
-
-  const isFetching = fetchStatus === "fetching" || submitting;
-  const disabled = !emailAddress || !password || isFetching;
+  const disabled = !emailAddress || !password || submitting;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -376,17 +147,12 @@ export default function SignInScreen() {
               {t("signIn.title", "Welcome back")}
             </Text>
             <Text style={styles.subtitle} maxFontSizeMultiplier={1.4}>
-              {t("signIn.subtitle", "Sign in to continue with your AI goal coach.")}
+              {t(
+                "signIn.subtitle",
+                "Sign in to continue with your AI goal coach.",
+              )}
             </Text>
           </View>
-
-          {isWebInIframe() && (
-            <View style={styles.iframeNotice}>
-              <Text style={styles.iframeNoticeText} maxFontSizeMultiplier={1.3}>
-                {t("signIn.iframeNotice", "Tip: Google sign-in opens a popup. To use it from the workspace preview, open this page in a new browser tab first.")}
-              </Text>
-            </View>
-          )}
 
           <Pressable
             style={({ pressed }) => [
@@ -395,245 +161,120 @@ export default function SignInScreen() {
               oauthLoading && { opacity: 0.6 },
             ]}
             android_ripple={{ color: "#0000000D" }}
-            onPress={handleGoogle}
+            onPress={() => void handleGoogle()}
             disabled={oauthLoading}
             accessibilityRole="button"
-            accessibilityLabel={t("signIn.continueWithGoogle", "Continue with Google")}
-            accessibilityState={{ disabled: oauthLoading }}
           >
             {oauthLoading ? (
               <ActivityIndicator color={BRAND.fg} />
             ) : (
               <>
                 <GoogleGIcon size={20} />
-                <Text
-                  style={styles.googleBtnText}
-                  maxFontSizeMultiplier={1.3}
-                  numberOfLines={1}
-                >
+                <Text style={styles.googleBtnText} maxFontSizeMultiplier={1.3}>
                   {t("signIn.continueWithGoogle", "Continue with Google")}
                 </Text>
               </>
             )}
           </Pressable>
 
-          {twoFactorStep ? (
-            /* ── Two-factor verification step ── */
-            <>
-              <View style={styles.twoFactorInfo}>
-                <Text style={styles.twoFactorTitle} maxFontSizeMultiplier={1.3}>
-                  {twoFactorKind === "client_trust" || twoFactorStrategy === "email_code"
-                    ? t("signIn.checkEmail", "Check your email")
-                    : t("signIn.twoFactorVerification", "Two-factor verification")}
-                </Text>
-                <Text style={styles.twoFactorSubtitle} maxFontSizeMultiplier={1.3}>
-                  {twoFactorKind === "client_trust" || twoFactorStrategy === "email_code"
-                    ? t("signIn.twoFactorEmailHint", "We sent a 6-digit code to your email address. Enter it below to sign in.")
-                    : twoFactorStrategy === "phone_code"
-                      ? t("signIn.twoFactorPhoneHint", "Enter the 6-digit code sent to your phone number.")
-                      : t("signIn.twoFactorAppHint", "Enter the 6-digit code from your authenticator app (e.g. Google Authenticator, Authy).")}
-                </Text>
-              </View>
+          <View style={styles.dividerRow}>
+            <View style={styles.divider} />
+            <Text style={styles.dividerText}>{t("signIn.or", "or")}</Text>
+            <View style={styles.divider} />
+          </View>
 
-              <Text style={styles.label} maxFontSizeMultiplier={1.3}>
-                {t("signIn.verificationCode", "Verification code")}
-              </Text>
-              <TextInput
-                style={styles.input}
-                value={twoFactorCode}
-                onChangeText={setTwoFactorCode}
-                placeholder="000000"
-                placeholderTextColor={BRAND.muted}
-                keyboardType="number-pad"
-                returnKeyType="go"
-                maxLength={8}
-                autoFocus
-                onSubmitEditing={handleTwoFactor}
-                editable={!twoFactorSubmitting}
+          <Text style={styles.label}>{t("signIn.email", "Email")}</Text>
+          <TextInput
+            style={styles.input}
+            value={emailAddress}
+            onChangeText={setEmailAddress}
+            placeholder="you@example.com"
+            placeholderTextColor={BRAND.muted}
+            autoCapitalize="none"
+            autoComplete="email"
+            keyboardType="email-address"
+            editable={!submitting}
+          />
+
+          <View style={styles.passwordHeaderRow}>
+            <Text style={styles.label}>{t("signIn.password", "Password")}</Text>
+            <Link href="/(auth)/forgot-password" asChild>
+              <Pressable hitSlop={8}>
+                <Text style={styles.forgotText}>
+                  {t("signIn.forgot", "Forgot?")}
+                </Text>
+              </Pressable>
+            </Link>
+          </View>
+          <View style={styles.passwordRow}>
+            <TextInput
+              style={[styles.input, styles.passwordInput]}
+              value={password}
+              onChangeText={setPassword}
+              placeholder={t("signIn.passwordPlaceholder", "Your password")}
+              placeholderTextColor={BRAND.muted}
+              secureTextEntry={!showPassword}
+              autoComplete="password"
+              onSubmitEditing={() => void handleSubmit()}
+              editable={!submitting}
+            />
+            <Pressable
+              onPress={() => setShowPassword((v) => !v)}
+              hitSlop={10}
+              style={styles.eyeBtn}
+            >
+              <Feather
+                name={showPassword ? "eye-off" : "eye"}
+                size={18}
+                color={BRAND.muted}
               />
+            </Pressable>
+          </View>
 
-              {submitError && (
-                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
-                  {submitError}
-                </Text>
-              )}
+          <Pressable
+            onPress={() => setRememberMe((v) => !v)}
+            style={styles.rememberRow}
+          >
+            <View
+              style={[styles.checkbox, rememberMe && styles.checkboxChecked]}
+            >
+              {rememberMe && <Feather name="check" size={14} color="#FAF6EE" />}
+            </View>
+            <Text style={styles.rememberText}>
+              {t("signIn.rememberMe", "Remember me on this device")}
+            </Text>
+          </Pressable>
 
-              <Pressable
-                style={({ pressed }) => [
-                  styles.primaryBtn,
-                  (!twoFactorCode.trim() || twoFactorSubmitting) && styles.primaryBtnDisabled,
-                  pressed && !!twoFactorCode.trim() && !twoFactorSubmitting && Platform.OS === "ios" && { opacity: 0.9 },
-                ]}
-                android_ripple={{ color: "#FFFFFF22" }}
-                onPress={handleTwoFactor}
-                disabled={!twoFactorCode.trim() || twoFactorSubmitting}
-                accessibilityRole="button"
-              >
-                {twoFactorSubmitting ? (
-                  <ActivityIndicator color="#FAF6EE" />
-                ) : (
-                  <Text style={styles.primaryBtnText} maxFontSizeMultiplier={1.3}>
-                    {t("signIn.verify", "Verify")}
-                  </Text>
-                )}
-              </Pressable>
+          {submitError ? (
+            <Text style={styles.errorText}>{submitError}</Text>
+          ) : null}
 
-              <Pressable
-                onPress={() => {
-                  setTwoFactorStep(false);
-                  setTwoFactorCode("");
-                  setSubmitError(null);
-                }}
-                style={styles.backRow}
-                hitSlop={8}
-                accessibilityRole="button"
-              >
-                <Feather name="arrow-left" size={14} color={BRAND.primary} />
-                <Text style={styles.backText} maxFontSizeMultiplier={1.3}>
-                  {t("signIn.backToSignIn", "Back to sign in")}
-                </Text>
-              </Pressable>
-            </>
-          ) : (
-            /* ── Normal email / password form ── */
-            <>
-              <View style={styles.dividerRow}>
-                <View style={styles.divider} />
-                <Text style={styles.dividerText} maxFontSizeMultiplier={1.2}>
-                  {t("signIn.or", "or")}
-                </Text>
-                <View style={styles.divider} />
-              </View>
-
-              <Text style={styles.label} maxFontSizeMultiplier={1.3}>
-                {t("signIn.email", "Email")}
+          <Pressable
+            style={[styles.primaryBtn, disabled && styles.primaryBtnDisabled]}
+            onPress={() => void handleSubmit()}
+            disabled={disabled}
+          >
+            {submitting ? (
+              <ActivityIndicator color="#FAF6EE" />
+            ) : (
+              <Text style={styles.primaryBtnText}>
+                {t("signIn.signInBtn", "Sign in")}
               </Text>
-              <TextInput
-                style={styles.input}
-                value={emailAddress}
-                onChangeText={setEmailAddress}
-                placeholder="you@example.com"
-                placeholderTextColor={BRAND.muted}
-                autoCapitalize="none"
-                autoComplete="email"
-                keyboardType="email-address"
-                returnKeyType="next"
-                editable={!isFetching}
-              />
-              {errors?.fields?.identifier?.message && (
-                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
-                  {errors.fields.identifier.message}
-                </Text>
-              )}
+            )}
+          </Pressable>
 
-              <View style={styles.passwordHeaderRow}>
-                <Text style={styles.label} maxFontSizeMultiplier={1.3}>
-                  {t("signIn.password", "Password")}
-                </Text>
-                <Link href="/(auth)/forgot-password" asChild>
-                  <Pressable hitSlop={8} accessibilityRole="link">
-                    <Text style={styles.forgotText} maxFontSizeMultiplier={1.3}>
-                      {t("signIn.forgot", "Forgot?")}
-                    </Text>
-                  </Pressable>
-                </Link>
-              </View>
-              <View style={styles.passwordRow}>
-                <TextInput
-                  style={[styles.input, styles.passwordInput]}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder={t("signIn.passwordPlaceholder", "Your password")}
-                  placeholderTextColor={BRAND.muted}
-                  secureTextEntry={!showPassword}
-                  autoComplete="password"
-                  returnKeyType="go"
-                  onSubmitEditing={handleSubmit}
-                  editable={!isFetching}
-                />
-                <Pressable
-                  onPress={() => setShowPassword((v) => !v)}
-                  hitSlop={10}
-                  accessibilityRole="button"
-                  accessibilityLabel={showPassword ? t("signIn.hidePassword", "Hide password") : t("signIn.showPassword", "Show password")}
-                  style={styles.eyeBtn}
-                >
-                  <Feather
-                    name={showPassword ? "eye-off" : "eye"}
-                    size={18}
-                    color={BRAND.muted}
-                  />
-                </Pressable>
-              </View>
-              {errors?.fields?.password?.message && (
-                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
-                  {errors.fields.password.message}
-                </Text>
-              )}
-
-              <Pressable
-                onPress={() => setRememberMe((v) => !v)}
-                style={styles.rememberRow}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: rememberMe }}
-                hitSlop={6}
-              >
-                <View
-                  style={[
-                    styles.checkbox,
-                    rememberMe && styles.checkboxChecked,
-                  ]}
-                >
-                  {rememberMe && (
-                    <Feather name="check" size={14} color="#FAF6EE" />
-                  )}
-                </View>
-                <Text style={styles.rememberText} maxFontSizeMultiplier={1.3}>
-                  {t("signIn.rememberMe", "Remember me on this device")}
+          <View style={styles.linkRow}>
+            <Text style={styles.linkRowText}>
+              {t("signIn.noAccount", "Don't have an account?")}
+            </Text>
+            <Link href="/(auth)/sign-up" asChild>
+              <Pressable hitSlop={8}>
+                <Text style={styles.linkText}>
+                  {t("signIn.signUpLink", "Sign up")}
                 </Text>
               </Pressable>
-
-              {submitError && (
-                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
-                  {submitError}
-                </Text>
-              )}
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.primaryBtn,
-                  disabled && styles.primaryBtnDisabled,
-                  pressed && !disabled && Platform.OS === "ios" && { opacity: 0.9 },
-                ]}
-                android_ripple={{ color: "#FFFFFF22" }}
-                onPress={handleSubmit}
-                disabled={disabled}
-                accessibilityRole="button"
-                accessibilityState={{ disabled }}
-              >
-                {isFetching ? (
-                  <ActivityIndicator color="#FAF6EE" />
-                ) : (
-                  <Text style={styles.primaryBtnText} maxFontSizeMultiplier={1.3}>
-                    {t("signIn.signInBtn", "Sign in")}
-                  </Text>
-                )}
-              </Pressable>
-
-              <View style={styles.linkRow}>
-                <Text style={styles.linkRowText} maxFontSizeMultiplier={1.3}>
-                  {t("signIn.noAccount", "Don't have an account?")}
-                </Text>
-                <Link href="/(auth)/sign-up" asChild>
-                  <Pressable hitSlop={8} accessibilityRole="link">
-                    <Text style={styles.linkText} maxFontSizeMultiplier={1.3}>
-                      {t("signIn.signUpLink", "Sign up")}
-                    </Text>
-                  </Pressable>
-                </Link>
-              </View>
-            </>
-          )}
+            </Link>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -657,21 +298,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
   },
-  iframeNotice: {
-    backgroundColor: "#FFF6E0",
-    borderColor: "#E8D08A",
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  iframeNoticeText: {
-    color: "#6B4F1A",
-    fontFamily: "Inter_500Medium",
-    fontSize: 12,
-    lineHeight: 17,
-  },
   googleBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -684,13 +310,11 @@ const styles = StyleSheet.create({
     minHeight: 52,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    overflow: "hidden",
   },
   googleBtnText: {
     fontFamily: "Inter_600SemiBold",
     color: BRAND.fg,
     fontSize: 15,
-    includeFontPadding: false,
   },
   dividerRow: {
     flexDirection: "row",
@@ -736,27 +360,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: BRAND.fg,
   },
-  passwordRow: {
-    position: "relative",
-    justifyContent: "center",
-  },
-  passwordInput: {
-    paddingRight: 44,
-  },
+  passwordRow: { position: "relative", justifyContent: "center" },
+  passwordInput: { paddingRight: 44 },
   eyeBtn: {
     position: "absolute",
     right: 12,
     top: 0,
     bottom: 0,
     justifyContent: "center",
-    paddingHorizontal: 4,
   },
   rememberRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     marginTop: 14,
-    paddingVertical: 4,
   },
   checkbox: {
     width: 20,
@@ -791,14 +408,12 @@ const styles = StyleSheet.create({
     minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
   },
   primaryBtnDisabled: { opacity: 0.4 },
   primaryBtnText: {
     fontFamily: "Inter_600SemiBold",
     color: BRAND.bg,
     fontSize: 16,
-    includeFontPadding: false,
   },
   linkRow: {
     flexDirection: "row",
@@ -814,35 +429,6 @@ const styles = StyleSheet.create({
   },
   linkText: {
     fontFamily: "Inter_600SemiBold",
-    color: BRAND.primary,
-    fontSize: 14,
-  },
-  twoFactorInfo: {
-    marginTop: 4,
-    marginBottom: 20,
-    gap: 6,
-  },
-  twoFactorTitle: {
-    fontFamily: "Inter_700Bold",
-    color: BRAND.fg,
-    fontSize: 20,
-  },
-  twoFactorSubtitle: {
-    fontFamily: "Inter_400Regular",
-    color: BRAND.muted,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  backRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    marginTop: 16,
-    paddingVertical: 4,
-  },
-  backText: {
-    fontFamily: "Inter_500Medium",
     color: BRAND.primary,
     fontSize: 14,
   },

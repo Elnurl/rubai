@@ -36,13 +36,25 @@ import { logger } from "./logger";
  * Route is derived from the Express request (e.g. "/atlas/coach"),
  * which is sufficient to slice usage by endpoint.
  */
+export type TrackedCallOpts = {
+  /**
+   * Appended to the derived route (e.g. "#tool" for agent-loop tool
+   * rounds). Lets the quota middleware distinguish the single
+   * user-visible turn (counted) from internal follow-up rounds (free).
+   */
+  routeTag?: string;
+};
+
 export async function trackedCreate(
   req: Request,
   params: ChatCompletionCreateParamsNonStreaming,
+  opts: TrackedCallOpts = {},
 ): Promise<ChatCompletion> {
   const start = Date.now();
   const userId = req.userId;
-  const route = `${req.baseUrl ?? ""}${req.path ?? ""}` || "unknown";
+  const route =
+    (`${req.baseUrl ?? ""}${req.path ?? ""}` || "unknown") +
+    (opts.routeTag ?? "");
   const model = typeof params.model === "string" ? params.model : "unknown";
 
   try {
@@ -117,10 +129,13 @@ export async function trackedCreate(
 export async function* trackedStream(
   req: Request,
   params: ChatCompletionCreateParamsStreaming,
+  opts: TrackedCallOpts = {},
 ): AsyncGenerator<ChatCompletionChunk, void, void> {
   const start = Date.now();
   const userId = req.userId;
-  const route = `${req.baseUrl ?? ""}${req.path ?? ""}` || "unknown";
+  const route =
+    (`${req.baseUrl ?? ""}${req.path ?? ""}` || "unknown") +
+    (opts.routeTag ?? "");
   const model = typeof params.model === "string" ? params.model : "unknown";
 
   let usage: ChatCompletionChunk["usage"] | null = null;

@@ -86,10 +86,10 @@ export async function processWebhookEvent(
     return { ok: false, retryable: false, error: "unhandled_event_type" };
   }
 
-  const clerkUserId =
+  const authUserId =
     event.original_app_user_id ?? event.app_user_id ?? null;
 
-  if (!clerkUserId) {
+  if (!authUserId) {
     return { ok: false, retryable: false, error: "no_user_id" };
   }
 
@@ -99,7 +99,7 @@ export async function processWebhookEvent(
 
   try {
     const user = await db.query.usersTable.findFirst({
-      where: eq(usersTable.clerkUserId, clerkUserId),
+      where: eq(usersTable.authUserId, authUserId),
     });
 
     if (!user) {
@@ -113,7 +113,7 @@ export async function processWebhookEvent(
         // background worker will keep attempting until the user row appears or
         // MAX_ATTEMPTS is exhausted.
         log.warn(
-          { clerkUserId, eventType: event.type },
+          { authUserId, eventType: event.type },
           "processWebhookEvent: user not found for active event — scheduling recovery retry",
         );
         return { ok: false, retryable: true, error: "user_not_found" };
@@ -121,7 +121,7 @@ export async function processWebhookEvent(
       // Inactive event (CANCELLATION, EXPIRATION, BILLING_ISSUE, …) for a
       // user that never existed: nothing to cancel, safe to skip permanently.
       log.warn(
-        { clerkUserId, eventType: event.type },
+        { authUserId, eventType: event.type },
         "processWebhookEvent: user not found for inactive event — permanent skip",
       );
       return { ok: false, retryable: false, error: "user_not_found" };
@@ -195,7 +195,7 @@ export async function processWebhookEvent(
     });
 
     log.info(
-      { clerkUserId, eventType: event.type, provider, newTier, tierChanged },
+      { authUserId, eventType: event.type, provider, newTier, tierChanged },
       "processWebhookEvent: tier update applied",
     );
 
@@ -209,7 +209,7 @@ export async function processWebhookEvent(
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     log.error(
-      { err, clerkUserId, eventType: event.type },
+      { err, authUserId, eventType: event.type },
       "processWebhookEvent: DB transaction failed — retryable",
     );
     return { ok: false, retryable: true, error: errorMsg };
@@ -222,18 +222,18 @@ export async function processWebhookEvent(
  *
  * Priority:
  *   1. transaction_id  (most specific; unique per store transaction)
- *   2. event_timestamp_ms + clerkUserId  (fallback for events without a txn id)
- *   3. clerkUserId alone  (last resort)
+ *   2. event_timestamp_ms + authUserId  (fallback for events without a txn id)
+ *   3. authUserId alone  (last resort)
  */
 export function buildIdempotencyKey(event: RcWebhookEvent): string {
-  const clerkUserId =
+  const authUserId =
     event.original_app_user_id ?? event.app_user_id ?? "unknown";
 
   if (event.transaction_id) {
     return `${event.type}:txn:${event.transaction_id}`;
   }
   if (event.event_timestamp_ms != null) {
-    return `${event.type}:${clerkUserId}:${event.event_timestamp_ms}`;
+    return `${event.type}:${authUserId}:${event.event_timestamp_ms}`;
   }
-  return `${event.type}:${clerkUserId}`;
+  return `${event.type}:${authUserId}`;
 }

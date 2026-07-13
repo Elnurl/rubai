@@ -54,27 +54,27 @@ export const STORAGE_KEYS = {
 // Cloud-sync helpers (Phase 4)
 // ---------------------------------------------------------------------------
 //
-// `migrated:<clerkUserId>` — once we've uploaded any pre-existing local
+// `migrated:<authUserId>` — once we've uploaded any pre-existing local
 // goals on this device for this user, we set the flag so we never re-upload.
-// `cache:<clerkUserId>` — fast-paint snapshot of the last server state we
+// `cache:<authUserId>` — fast-paint snapshot of the last server state we
 // observed, scoped per user so multiple accounts on the same device don't
 // leak data into each other.
 
 const MIGRATED_PREFIX = `${PREFIX}migrated:`;
 const USER_CACHE_PREFIX = `${PREFIX}cache:`;
 
-export async function getMigratedFlag(clerkUserId: string): Promise<boolean> {
+export async function getMigratedFlag(authUserId: string): Promise<boolean> {
   try {
-    const raw = await AsyncStorage.getItem(MIGRATED_PREFIX + clerkUserId);
+    const raw = await AsyncStorage.getItem(MIGRATED_PREFIX + authUserId);
     return raw === "1";
   } catch {
     return false;
   }
 }
 
-export async function setMigratedFlag(clerkUserId: string): Promise<void> {
+export async function setMigratedFlag(authUserId: string): Promise<void> {
   try {
-    await AsyncStorage.setItem(MIGRATED_PREFIX + clerkUserId, "1");
+    await AsyncStorage.setItem(MIGRATED_PREFIX + authUserId, "1");
   } catch {
     // ignore
   }
@@ -90,10 +90,10 @@ export type UserCacheSnapshot<G = unknown, AP = unknown, PD = unknown> = {
 };
 
 export async function loadUserCache<G = unknown, AP = unknown, PD = unknown>(
-  clerkUserId: string,
+  authUserId: string,
 ): Promise<UserCacheSnapshot<G, AP, PD> | null> {
   try {
-    const raw = await AsyncStorage.getItem(USER_CACHE_PREFIX + clerkUserId);
+    const raw = await AsyncStorage.getItem(USER_CACHE_PREFIX + authUserId);
     if (!raw) return null;
     return JSON.parse(raw) as UserCacheSnapshot<G, AP, PD>;
   } catch {
@@ -102,12 +102,12 @@ export async function loadUserCache<G = unknown, AP = unknown, PD = unknown>(
 }
 
 export async function saveUserCache<G = unknown, AP = unknown, PD = unknown>(
-  clerkUserId: string,
+  authUserId: string,
   snapshot: UserCacheSnapshot<G, AP, PD>,
 ): Promise<void> {
   try {
     await AsyncStorage.setItem(
-      USER_CACHE_PREFIX + clerkUserId,
+      USER_CACHE_PREFIX + authUserId,
       JSON.stringify(snapshot),
     );
   } catch {
@@ -115,9 +115,9 @@ export async function saveUserCache<G = unknown, AP = unknown, PD = unknown>(
   }
 }
 
-export async function clearUserCache(clerkUserId: string): Promise<void> {
+export async function clearUserCache(authUserId: string): Promise<void> {
   try {
-    await AsyncStorage.removeItem(USER_CACHE_PREFIX + clerkUserId);
+    await AsyncStorage.removeItem(USER_CACHE_PREFIX + authUserId);
   } catch {
     // ignore
   }
@@ -242,9 +242,9 @@ export type TierChangeEvent = {
   source: "foreground" | "push";
 };
 
-export async function loadTierHistory(clerkUserId: string): Promise<TierChangeEvent[]> {
+export async function loadTierHistory(authUserId: string): Promise<TierChangeEvent[]> {
   try {
-    const raw = await AsyncStorage.getItem(TIER_HISTORY_PREFIX + clerkUserId);
+    const raw = await AsyncStorage.getItem(TIER_HISTORY_PREFIX + authUserId);
     if (!raw) return [];
     return JSON.parse(raw) as TierChangeEvent[];
   } catch {
@@ -253,13 +253,13 @@ export async function loadTierHistory(clerkUserId: string): Promise<TierChangeEv
 }
 
 export async function appendTierHistory(
-  clerkUserId: string,
+  authUserId: string,
   event: TierChangeEvent,
 ): Promise<void> {
   try {
-    const existing = await loadTierHistory(clerkUserId);
+    const existing = await loadTierHistory(authUserId);
     const updated = [event, ...existing].slice(0, MAX_TIER_HISTORY);
-    await AsyncStorage.setItem(TIER_HISTORY_PREFIX + clerkUserId, JSON.stringify(updated));
+    await AsyncStorage.setItem(TIER_HISTORY_PREFIX + authUserId, JSON.stringify(updated));
   } catch {
     // ignore — history is informational only
   }

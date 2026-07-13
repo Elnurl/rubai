@@ -1,4 +1,3 @@
-import { useSignIn } from "@clerk/expo";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import React, { useCallback, useState } from "react";
@@ -17,6 +16,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AtlasLogo } from "@/components/AtlasLogo";
 import { friendlyAuthError } from "@/lib/authErrors";
+import { useAuth } from "@/providers/AuthProvider";
+import { supabase } from "@/lib/supabase";
 
 const BRAND = {
   primary: "#0E7C5A",
@@ -28,124 +29,71 @@ const BRAND = {
   destructive: "#B43E3E",
 };
 
-function debug(...args: unknown[]) {
-  if (__DEV__) {
-    // eslint-disable-next-line no-console
-    console.log("[auth/forgot]", ...args);
-  }
-}
-
-type Step = "request" | "reset";
+type Step = "request" | "done";
 
 export default function ForgotPasswordScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { signIn, fetchStatus } = useSignIn();
-  const isFetching = fetchStatus === "fetching";
+  const { requestPasswordReset } = useAuth();
 
   const [step, setStep] = useState<Step>("request");
   const [emailAddress, setEmailAddress] = useState("");
-  const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const handleRequest = useCallback(async () => {
-    if (!signIn) return;
     setSubmitError(null);
     setInfo(null);
-    if (!emailAddress) {
-      setSubmitError(t("forgotPassword.enterEmailError", "Enter the email on your account."));
+    if (!emailAddress.trim()) {
+      setSubmitError(
+        t("forgotPassword.enterEmailError", "Enter the email on your account."),
+      );
       return;
     }
     setBusy(true);
     try {
-      // The Future API password-reset flow is two phone calls:
-      //   1. signIn.create({ identifier }) — anchors the sign-in to this user
-      //   2. signIn.resetPasswordEmailCode.sendCode() — emails a 6-digit code
-      debug("create signIn for reset", emailAddress);
-      const created = await signIn.create({ identifier: emailAddress });
-      if (created.error) {
-        debug("create error", created.error);
-        setSubmitError(friendlyAuthError(created.error));
-        return;
-      }
-      debug("sendCode (reset)");
-      const sent = await signIn.resetPasswordEmailCode.sendCode();
-      if (sent.error) {
-        debug("sendCode error", sent.error);
-        setSubmitError(friendlyAuthError(sent.error));
-        return;
-      }
-      setInfo(t("forgotPassword.codeSent", "We just emailed a 6-digit reset code to {{email}}.", { email: emailAddress }));
-      setStep("reset");
+      await requestPasswordReset(emailAddress.trim());
+      setInfo(
+        t(
+          "forgotPassword.linkSent",
+          "We emailed a reset link to {{email}}. Open it on this device, then set a new password below.",
+          { email: emailAddress.trim() },
+        ),
+      );
+      setStep("done");
     } catch (err) {
-      debug("request threw", err);
       setSubmitError(friendlyAuthError(err));
     } finally {
       setBusy(false);
     }
-  }, [signIn, emailAddress]);
+  }, [requestPasswordReset, emailAddress, t]);
 
-  const handleReset = useCallback(async () => {
-    if (!signIn) return;
+  const handleSetPassword = useCallback(async () => {
     setSubmitError(null);
-    setInfo(null);
-    const trimmedCode = code.trim().replace(/\s+/g, "");
-    if (trimmedCode.length === 0) {
-      setSubmitError(t("forgotPassword.enterCodeError", "Enter the 6-digit code we emailed you."));
-      return;
-    }
     if (newPassword.length < 8) {
-      setSubmitError(t("forgotPassword.passwordTooShort", "New password must be at least 8 characters."));
+      setSubmitError(
+        t(
+          "forgotPassword.passwordTooShort",
+          "Password must be at least 8 characters.",
+        ),
+      );
       return;
     }
     setBusy(true);
     try {
-      // Two-step submit per the Future API:
-      //   verifyCode → status becomes 'needs_new_password'
-      //   submitPassword → status becomes 'complete'
-      debug("verifyCode");
-      const verified = await signIn.resetPasswordEmailCode.verifyCode({
-        code: trimmedCode,
-      });
-      if (verified.error) {
-        debug("verifyCode error", verified.error);
-        setSubmitError(friendlyAuthError(verified.error));
-        return;
-      }
-      debug("submitPassword");
-      const submitted = await signIn.resetPasswordEmailCode.submitPassword({
+      const { error } = await supabase.auth.updateUser({
         password: newPassword,
       });
-      if (submitted.error) {
-        debug("submitPassword error", submitted.error);
-        setSubmitError(friendlyAuthError(submitted.error));
-        return;
-      }
-      debug("reset ok, status =", signIn.status);
-      if (signIn.status === "complete") {
-        await signIn.finalize({
-          navigate: ({ session }) => {
-            if (session?.currentTask) return;
-            router.replace("/");
-          },
-        });
-        return;
-      }
-      setSubmitError(
-        t("forgotPassword.resetIncomplete", "Couldn't finish reset ({{status}}). Try again.", { status: signIn.status ?? "unknown" }),
-      );
+      if (error) throw error;
+      router.replace("/(auth)/sign-in");
     } catch (err) {
-      debug("reset threw", err);
       setSubmitError(friendlyAuthError(err));
     } finally {
       setBusy(false);
     }
-  }, [signIn, code, newPassword, router]);
-
-  const isWorking = busy || isFetching;
+  }, [newPassword, router, t]);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -155,169 +103,86 @@ export default function ForgotPasswordScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <View style={styles.brandWrap}>
-              <AtlasLogo size="lg" />
-            </View>
-            <Text style={styles.title} maxFontSizeMultiplier={1.4}>
-              {step === "request" ? t("forgotPassword.requestTitle", "Reset your password") : t("forgotPassword.resetTitle", "Choose a new password")}
+            <AtlasLogo size="lg" />
+            <Text style={styles.title}>
+              {t("forgotPassword.title", "Reset password")}
             </Text>
-            <Text style={styles.subtitle} maxFontSizeMultiplier={1.4}>
-              {step === "request"
-                ? t("forgotPassword.requestSubtitle", "Enter the email on your account and we'll send you a 6-digit code.")
-                : t("forgotPassword.resetSubtitle", "Enter the code we emailed to {{email}} and pick a new password.", { email: emailAddress })}
+            <Text style={styles.subtitle}>
+              {t(
+                "forgotPassword.subtitle",
+                "We'll email you a link to choose a new password.",
+              )}
             </Text>
           </View>
 
           {step === "request" ? (
             <>
-              <Text style={styles.label} maxFontSizeMultiplier={1.3}>
-                {t("forgotPassword.email", "Email")}
-              </Text>
+              <Text style={styles.label}>{t("forgotPassword.email", "Email")}</Text>
               <TextInput
                 style={styles.input}
                 value={emailAddress}
                 onChangeText={setEmailAddress}
+                autoCapitalize="none"
+                keyboardType="email-address"
                 placeholder="you@example.com"
                 placeholderTextColor={BRAND.muted}
-                autoCapitalize="none"
-                autoComplete="email"
-                keyboardType="email-address"
-                returnKeyType="go"
-                onSubmitEditing={handleRequest}
-                editable={!isWorking}
+                editable={!busy}
               />
-              {info && !submitError && (
-                <Text style={styles.infoText} maxFontSizeMultiplier={1.3}>
-                  {info}
-                </Text>
-              )}
-              {submitError && (
-                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
-                  {submitError}
-                </Text>
-              )}
-
+              {submitError ? (
+                <Text style={styles.errorText}>{submitError}</Text>
+              ) : null}
               <Pressable
-                style={({ pressed }) => [
-                  styles.primaryBtn,
-                  (!emailAddress || isWorking) && styles.primaryBtnDisabled,
-                  pressed &&
-                    !!emailAddress &&
-                    !isWorking &&
-                    Platform.OS === "ios" && { opacity: 0.9 },
-                ]}
-                android_ripple={{ color: "#FFFFFF22" }}
-                onPress={handleRequest}
-                disabled={!emailAddress || isWorking}
-                accessibilityRole="button"
+                style={[styles.primaryBtn, busy && { opacity: 0.6 }]}
+                onPress={() => void handleRequest()}
+                disabled={busy}
               >
-                {isWorking ? (
+                {busy ? (
                   <ActivityIndicator color="#FAF6EE" />
                 ) : (
-                  <Text
-                    style={styles.primaryBtnText}
-                    maxFontSizeMultiplier={1.3}
-                  >
-                    {t("forgotPassword.sendCodeBtn", "Send reset code")}
+                  <Text style={styles.primaryBtnText}>
+                    {t("forgotPassword.sendLink", "Send reset link")}
                   </Text>
                 )}
               </Pressable>
             </>
           ) : (
             <>
-              <Text style={styles.label} maxFontSizeMultiplier={1.3}>
-                {t("forgotPassword.resetCode", "Reset code")}
-              </Text>
-              <TextInput
-                style={[styles.input, styles.codeInput]}
-                value={code}
-                onChangeText={setCode}
-                placeholder="123456"
-                placeholderTextColor={BRAND.muted}
-                keyboardType="number-pad"
-                autoComplete="one-time-code"
-                textContentType="oneTimeCode"
-                maxLength={6}
-                returnKeyType="next"
-                editable={!isWorking}
-              />
-
-              <Text
-                style={[styles.label, { marginTop: 12 }]}
-                maxFontSizeMultiplier={1.3}
-              >
+              {info ? <Text style={styles.infoText}>{info}</Text> : null}
+              <Text style={[styles.label, { marginTop: 16 }]}>
                 {t("forgotPassword.newPassword", "New password")}
               </Text>
               <TextInput
                 style={styles.input}
                 value={newPassword}
                 onChangeText={setNewPassword}
-                placeholder={t("forgotPassword.passwordPlaceholder", "At least 8 characters")}
-                placeholderTextColor={BRAND.muted}
                 secureTextEntry
-                autoComplete="password-new"
-                returnKeyType="go"
-                onSubmitEditing={handleReset}
-                editable={!isWorking}
+                placeholderTextColor={BRAND.muted}
+                editable={!busy}
               />
-
-              {info && !submitError && (
-                <Text style={styles.infoText} maxFontSizeMultiplier={1.3}>
-                  {info}
-                </Text>
-              )}
-              {submitError && (
-                <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
-                  {submitError}
-                </Text>
-              )}
-
+              {submitError ? (
+                <Text style={styles.errorText}>{submitError}</Text>
+              ) : null}
               <Pressable
-                style={({ pressed }) => [
-                  styles.primaryBtn,
-                  (!code || !newPassword || isWorking) && styles.primaryBtnDisabled,
-                  pressed &&
-                    !!code &&
-                    !!newPassword &&
-                    !isWorking &&
-                    Platform.OS === "ios" && { opacity: 0.9 },
-                ]}
-                android_ripple={{ color: "#FFFFFF22" }}
-                onPress={handleReset}
-                disabled={!code || !newPassword || isWorking}
-                accessibilityRole="button"
+                style={[styles.primaryBtn, busy && { opacity: 0.6 }]}
+                onPress={() => void handleSetPassword()}
+                disabled={busy}
               >
-                {isWorking ? (
+                {busy ? (
                   <ActivityIndicator color="#FAF6EE" />
                 ) : (
-                  <Text
-                    style={styles.primaryBtnText}
-                    maxFontSizeMultiplier={1.3}
-                  >
-                    {t("forgotPassword.setPasswordBtn", "Set new password")}
+                  <Text style={styles.primaryBtnText}>
+                    {t("forgotPassword.savePassword", "Save password")}
                   </Text>
                 )}
-              </Pressable>
-
-              <Pressable
-                hitSlop={8}
-                onPress={handleRequest}
-                disabled={isWorking}
-                style={{ alignSelf: "center", marginTop: 14 }}
-              >
-                <Text style={styles.linkText} maxFontSizeMultiplier={1.3}>
-                  {t("forgotPassword.resendCode", "Resend code")}
-                </Text>
               </Pressable>
             </>
           )}
 
           <Pressable
-            onPress={() => router.replace("/sign-in")}
+            onPress={() => router.replace("/(auth)/sign-in")}
             style={styles.backRow}
-            accessibilityRole="button"
           >
-            <Text style={styles.backText} maxFontSizeMultiplier={1.3}>
+            <Text style={styles.backText}>
               {t("forgotPassword.backToSignIn", "Back to sign in")}
             </Text>
           </Pressable>
@@ -329,9 +194,8 @@ export default function ForgotPasswordScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BRAND.bg },
-  container: { padding: 24, paddingTop: 32, gap: 4 },
+  container: { padding: 24, paddingTop: 32 },
   header: { marginBottom: 24, gap: 6 },
-  brandWrap: { marginBottom: 4 },
   title: {
     fontFamily: "Inter_700Bold",
     color: BRAND.fg,
@@ -362,12 +226,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: BRAND.fg,
   },
-  codeInput: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 22,
-    letterSpacing: 6,
-    textAlign: "center",
-  },
   errorText: {
     fontFamily: "Inter_500Medium",
     color: BRAND.destructive,
@@ -376,9 +234,9 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontFamily: "Inter_500Medium",
-    color: BRAND.fg,
+    color: BRAND.primary,
     fontSize: 13,
-    marginTop: 6,
+    lineHeight: 20,
   },
   primaryBtn: {
     marginTop: 20,
@@ -388,29 +246,16 @@ const styles = StyleSheet.create({
     minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
   },
-  primaryBtnDisabled: { opacity: 0.4 },
   primaryBtnText: {
     fontFamily: "Inter_600SemiBold",
     color: BRAND.bg,
     fontSize: 16,
-    includeFontPadding: false,
   },
-  linkText: {
-    fontFamily: "Inter_600SemiBold",
-    color: BRAND.primary,
-    fontSize: 14,
-  },
-  backRow: {
-    alignSelf: "center",
-    marginTop: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
+  backRow: { marginTop: 20, alignItems: "center" },
   backText: {
-    color: BRAND.muted,
     fontFamily: "Inter_500Medium",
+    color: BRAND.primary,
     fontSize: 14,
   },
 });

@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
-import { getAuth } from "@clerk/express";
 import { eq } from "drizzle-orm";
+import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 import { db, usersTable, analyticsEventsTable } from "@workspace/db";
 import { replayWebhookEventsForUser } from "../lib/webhookRecovery";
 
@@ -8,9 +8,60 @@ declare global {
   namespace Express {
     interface Request {
       userId?: number;
-      clerkUserId?: string;
+      authUserId?: string;
     }
   }
+}
+
+type VerifiedClaims = JWTPayload & {
+  email?: string;
+  user_metadata?: { email?: string };
+};
+
+let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+
+function getSupabaseUrl(): string {
+  const url = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
+  if (!url) throw new Error("SUPABASE_URL is not set");
+  return url.replace(/\/$/, "");
+}
+
+function getJwks() {
+  if (!jwks) {
+    jwks = createRemoteJWKSet(
+      new URL(`${getSupabaseUrl()}/auth/v1/.well-known/jwks.json`),
+    );
+  }
+  return jwks;
+}
+
+async function verifyAccessToken(token: string): Promise<VerifiedClaims> {
+  const secret = process.env.SUPABASE_JWT_SECRET;
+  const issuer = `${getSupabaseUrl()}/auth/v1`;
+
+  // Prefer HS256 with project JWT secret (default Supabase setup).
+  if (secret) {
+    const key = new TextEncoder().encode(secret);
+    const { payload } = await jwtVerify(token, key, {
+      issuer,
+      algorithms: ["HS256"],
+    });
+    return payload as VerifiedClaims;
+  }
+
+  // Fallback: asymmetric JWKS (if project uses ECC/RSA signing).
+  const { payload } = await jwtVerify(token, getJwks(), {
+    issuer,
+  });
+  return payload as VerifiedClaims;
+}
+
+function extractBearer(req: Request): string | null {
+  const header = req.headers.authorization;
+  if (!header) return null;
+  const [scheme, token] = header.split(" ");
+  if (scheme?.toLowerCase() !== "bearer" || !token) return null;
+  return token;
 }
 
 export async function requireAuth(
@@ -18,55 +69,54 @@ export async function requireAuth(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const auth = getAuth(req);
-  const clerkUserId = auth?.userId;
-  if (!clerkUserId) {
+  const token = extractBearer(req);
+  if (!token) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
   try {
-    const sessionClaims = (auth?.sessionClaims ?? {}) as {
-      email?: string;
-      primary_email_address?: string;
-      email_address?: string;
-    };
+    const claims = await verifyAccessToken(token);
+    const authUserId = typeof claims.sub === "string" ? claims.sub : null;
+    if (!authUserId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
     const email =
-      sessionClaims.email ??
-      sessionClaims.primary_email_address ??
-      sessionClaims.email_address ??
-      null;
+      (typeof claims.email === "string" ? claims.email : null) ??
+      (typeof claims.user_metadata?.email === "string"
+        ? claims.user_metadata.email
+        : null);
 
     const [existing] = await db
       .select()
       .from(usersTable)
-      .where(eq(usersTable.clerkUserId, clerkUserId));
+      .where(eq(usersTable.authUserId, authUserId));
 
     let row = existing;
     if (!row) {
       const [created] = await db
         .insert(usersTable)
-        .values({ clerkUserId, email: email ?? null })
+        .values({ authUserId, email: email ?? null })
         .returning();
       row = created;
-      req.log.info({ clerkUserId, userId: row.id }, "Provisioned new user");
-      // Best-effort: log a sign-up event for product analytics. A failure
-      // here must never block the auth flow.
+      req.log.info({ authUserId, userId: row.id }, "Provisioned new user");
       void db
         .insert(analyticsEventsTable)
         .values({
           userId: row.id,
           eventType: "user.signed_up",
-          payload: { clerkUserId, email: email ?? null },
+          payload: { authUserId, email: email ?? null },
         })
         .catch((err) =>
           req.log.warn({ err }, "Failed to record user.signed_up event"),
         );
-      // Best-effort: replay any RevenueCat purchase webhook events that were
-      // queued while this user row didn't exist yet (sign-up race recovery).
-      // Errors are swallowed so a replay failure never blocks sign-in.
-      void replayWebhookEventsForUser(clerkUserId).catch((err) =>
-        req.log.warn({ err }, "Failed to replay webhook events after user creation"),
+      void replayWebhookEventsForUser(authUserId).catch((err) =>
+        req.log.warn(
+          { err },
+          "Failed to replay webhook events after user creation",
+        ),
       );
     } else if (email && email !== row.email) {
       const [updated] = await db
@@ -78,10 +128,10 @@ export async function requireAuth(
     }
 
     req.userId = row.id;
-    req.clerkUserId = clerkUserId;
+    req.authUserId = authUserId;
     next();
   } catch (err) {
-    req.log.error({ err }, "requireAuth failed");
-    res.status(500).json({ error: "Auth resolution failed" });
+    req.log.warn({ err }, "requireAuth token verification failed");
+    res.status(401).json({ error: "Unauthorized" });
   }
 }

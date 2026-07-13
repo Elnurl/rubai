@@ -4,7 +4,8 @@ import { z } from "zod/v4";
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
-  clerkUserId: text("clerk_user_id").notNull().unique(),
+  /** Supabase Auth user id (UUID string). */
+  authUserId: text("auth_user_id").notNull().unique(),
   email: text("email"),
   tier: text("tier").notNull().default("free"),
   // Expo push token captured on app open. Null on web or when permission

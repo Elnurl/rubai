@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { useUser } from "@clerk/expo";
+import { useUser } from "@/providers/AuthProvider";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
