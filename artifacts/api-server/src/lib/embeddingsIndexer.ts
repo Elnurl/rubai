@@ -14,7 +14,7 @@ import { logger } from "./logger";
  * so a deploy with new logic invalidates every cached fingerprint and
  * forces a one-time full re-index.
  */
-const EMBEDDING_INDEX_VERSION = "v1";
+const EMBEDDING_INDEX_VERSION = "v2";
 
 /**
  * Per-batch upsert size. The transaction wrapping the upserts runs in
@@ -26,8 +26,8 @@ const UPSERT_BATCH_SIZE = 50;
 
 /**
  * Content types this indexer owns. Pruning is scoped to these so that
- * future content types written by other indexers (e.g. 'message') are
- * never accidentally deleted.
+ * future content types written by other indexers are never accidentally
+ * deleted.
  */
 const INDEXABLE_TYPES = [
   "learned_profile",
@@ -35,7 +35,17 @@ const INDEXABLE_TYPES = [
   "coach_memory",
   "evolution",
   "plan",
+  "message",
 ] as const;
+
+/**
+ * Chat-turn indexing limits. We index USER turns only (the assistant's
+ * replies are derivative of context we already index) and only turns long
+ * enough to carry real signal. Capped per goal so a chatty user doesn't
+ * balloon the corpus — the most recent turns win.
+ */
+const MIN_MESSAGE_CHARS = 30;
+const MAX_MESSAGES_PER_GOAL = 100;
 
 /**
  * RAG indexer for `user_state.goals` JSONB.
@@ -440,6 +450,45 @@ export function extractIndexableChunks(goals: unknown): Chunk[] {
           sourceText,
           metadata: { createdAt: rec.createdAt ?? null },
         });
+      });
+    }
+
+    // -- chat turns: coachSessions[].messages[] (fallback: legacy
+    // coachHistory[]). USER turns only — assistant replies restate context
+    // we already index. contentId is a hash of the text so identical turns
+    // dedupe and reorders don't re-embed.
+    const userTurns: string[] = [];
+    const collectTurns = (messages: unknown) => {
+      if (!Array.isArray(messages)) return;
+      for (const m of messages) {
+        if (!m || typeof m !== "object") continue;
+        const rec = m as Record<string, unknown>;
+        if (rec.role !== "user") continue;
+        const content =
+          typeof rec.content === "string" ? rec.content.trim() : "";
+        if (content.length < MIN_MESSAGE_CHARS) continue;
+        userTurns.push(content);
+      }
+    };
+    if (Array.isArray(g.coachSessions)) {
+      for (const session of g.coachSessions) {
+        if (!session || typeof session !== "object") continue;
+        collectTurns((session as Record<string, unknown>).messages);
+      }
+    } else {
+      collectTurns(g.coachHistory);
+    }
+    const seenTurnHashes = new Set<string>();
+    for (const content of userTurns.slice(-MAX_MESSAGES_PER_GOAL)) {
+      const hash = sha256(content).slice(0, 16);
+      if (seenTurnHashes.has(hash)) continue;
+      seenTurnHashes.add(hash);
+      out.push({
+        contentType: "message",
+        contentId: `goal:${goalId}:message:${hash}`,
+        goalId,
+        sourceText: content,
+        metadata: { role: "user" },
       });
     }
 

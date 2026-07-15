@@ -81,7 +81,10 @@ export async function embedTexts(
   const client = getEmbeddingsClient();
   if (!client) return out; // No key — leave every slot null; callers skip.
   const userId = req.userId ?? null;
-  const route = `${req.baseUrl ?? ""}${req.path ?? ""}` || "embeddings";
+  // "#embed" tag: embedding calls piggyback on a user-facing request (RAG
+  // retrieval inside /atlas/coach, indexing inside /me/state) but must NOT
+  // count against the daily AI turn quota — requireAiQuota filters the tag.
+  const route = (`${req.baseUrl ?? ""}${req.path ?? ""}` || "embeddings") + "#embed";
 
   for (let start = 0; start < texts.length; start += BATCH_SIZE) {
     const slice = texts.slice(start, start + BATCH_SIZE);

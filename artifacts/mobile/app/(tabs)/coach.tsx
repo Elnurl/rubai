@@ -201,6 +201,10 @@ export default function CoachScreen() {
   // reply pop in all at once). `typer.displayed` is what we render.
   const typer = useTypewriter();
   const [isStreaming, setIsStreaming] = useState(false);
+  // True while the server-side agent is running tools (memory search /
+  // task history) before the reply starts streaming. Drives a small
+  // caption under the thinking indicator.
+  const [agentWorking, setAgentWorking] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const lastSpokenIndexRef = useRef<number>(-1);
   // Cancels any in-flight streaming request when the user starts a new
@@ -449,11 +453,15 @@ export default function CoachScreen() {
                   // Feed the full accumulated reply to the typewriter; it
                   // reveals it at a steady cadence regardless of how the
                   // SSE bytes were chunked over the wire.
+                  setAgentWorking(false);
                   accumulated += chunk;
                   typer.push(accumulated);
                 },
                 onFinal: (res) => {
                   finalRes = res;
+                },
+                onStatus: (stage) => {
+                  if (stage === "tools") setAgentWorking(true);
                 },
               },
               controller.signal,
@@ -478,6 +486,7 @@ export default function CoachScreen() {
           } finally {
             typer.reset();
             setIsStreaming(false);
+            setAgentWorking(false);
             if (streamAbortRef.current === controller) {
               streamAbortRef.current = null;
             }
@@ -1285,6 +1294,11 @@ export default function CoachScreen() {
           <View style={styles.typingDotSlot}>
             <BrandDot size="sm" mode="thinking" />
           </View>
+          {agentWorking ? (
+            <Text style={[styles.agentWorkingText, { color: colors.mutedForeground }]}>
+              {t("coach.agentWorking", "Tarixçənə baxıram…")}
+            </Text>
+          ) : null}
         </View>
       );
     }
@@ -2459,6 +2473,10 @@ const styles = StyleSheet.create({
   },
   typingDotSlot: {
     paddingLeft: 4,
+  },
+  agentWorkingText: {
+    fontSize: 12,
+    fontStyle: "italic",
   },
   headerChipRow: {
     flexDirection: "row",

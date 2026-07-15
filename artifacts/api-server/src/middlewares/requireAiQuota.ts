@@ -1,8 +1,25 @@
-import { and, count, eq, gte } from "drizzle-orm";
+import { and, count, eq, gte, notLike } from "drizzle-orm";
 import type { NextFunction, Request, Response } from "express";
 
 import { aiUsageTable, db, usersTable } from "@workspace/db";
 
+import { logger } from "../lib/logger";
+
+/**
+ * Daily AI-turn quota, counted from the `ai_usage` table.
+ *
+ * What counts as ONE turn: a successful user-facing AI request (coach turn,
+ * roadmap generation, daily plan). Internal calls that piggyback on a turn
+ * are tagged in the route and EXCLUDED:
+ *   - "%#tool"  — extra model rounds made by the coach agent loop
+ *   - "%#embed" — embedding calls (RAG retrieval + indexing)
+ * Without the exclusions a single agentic coach turn with two tool rounds
+ * plus a RAG query would burn 4 quota units instead of 1.
+ *
+ * Premium: unlimited. On a DB failure the middleware fails OPEN (allows the
+ * request) — availability beats strict enforcement for a coaching app — but
+ * logs loudly so a broken quota check is visible in ops.
+ */
 const DAILY_LIMITS: Record<string, number> = {
   free: 20,
   pro: 100,
@@ -46,6 +63,8 @@ export async function requireAiQuota(
           eq(aiUsageTable.userId, req.userId),
           gte(aiUsageTable.createdAt, todayStart),
           eq(aiUsageTable.status, "ok"),
+          notLike(aiUsageTable.route, "%#tool"),
+          notLike(aiUsageTable.route, "%#embed"),
         ),
       );
 
@@ -65,7 +84,11 @@ export async function requireAiQuota(
     }
 
     next();
-  } catch {
+  } catch (err) {
+    logger.error(
+      { err, userId: req.userId },
+      "requireAiQuota check failed — failing open",
+    );
     next();
   }
 }

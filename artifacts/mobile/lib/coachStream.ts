@@ -41,11 +41,17 @@ export type CoachStreamCallbacks = {
   onDelta: (text: string) => void;
   /** Called once with the structured response after the JSON object closes. */
   onFinal: (data: CoachStreamFinal) => void;
+  /**
+   * Optional: server progress hints (e.g. the agent is running tools
+   * before answering). Safe to omit — purely informational.
+   */
+  onStatus?: (stage: string) => void;
 };
 
 type StreamEvent =
   | { type: "delta"; text: string }
   | ({ type: "final" } & CoachStreamFinal)
+  | { type: "status"; stage: string }
   | { type: "error"; error: string }
   | { type: "done" };
 
@@ -164,6 +170,8 @@ export async function streamCoachReply(
           memoryUpdate: evt.memoryUpdate,
           proposedAction: evt.proposedAction,
         });
+      } else if (evt.type === "status") {
+        callbacks.onStatus?.(evt.stage);
       } else if (evt.type === "error") {
         throw new Error(evt.error || "Coach stream failed");
       } else if (evt.type === "done") {

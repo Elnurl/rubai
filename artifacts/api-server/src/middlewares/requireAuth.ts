@@ -39,8 +39,13 @@ async function verifyAccessToken(token: string): Promise<VerifiedClaims> {
   const secret = process.env.SUPABASE_JWT_SECRET;
   const issuer = `${getSupabaseUrl()}/auth/v1`;
 
-  // Prefer HS256 with project JWT secret (default Supabase setup).
-  if (secret) {
+  // Prefer JWKS (ECC/RSA) — new Supabase projects sign with asymmetric keys.
+  // Fall back to legacy HS256 shared secret when JWKS fails or is unavailable.
+  try {
+    const { payload } = await jwtVerify(token, getJwks(), { issuer });
+    return payload as VerifiedClaims;
+  } catch (jwksErr) {
+    if (!secret) throw jwksErr;
     const key = new TextEncoder().encode(secret);
     const { payload } = await jwtVerify(token, key, {
       issuer,
@@ -48,12 +53,6 @@ async function verifyAccessToken(token: string): Promise<VerifiedClaims> {
     });
     return payload as VerifiedClaims;
   }
-
-  // Fallback: asymmetric JWKS (if project uses ECC/RSA signing).
-  const { payload } = await jwtVerify(token, getJwks(), {
-    issuer,
-  });
-  return payload as VerifiedClaims;
 }
 
 function extractBearer(req: Request): string | null {

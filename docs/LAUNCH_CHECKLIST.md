@@ -2,14 +2,23 @@
 
 Track progress toward App Store + Play Store release. Update checkboxes as you complete each item.
 
-## Phase A — Local dev (you are here)
+## Phase A — Local dev
 
-- [ ] `pnpm install` succeeds on Windows
-- [ ] Docker Postgres running (`pnpm db:up`)
-- [ ] `.env` filled with Supabase, OpenAI, RevenueCat keys
-- [ ] `pnpm dev:api` → server listens on :5000
-- [ ] `pnpm dev:mobile` → app loads in Expo Go / simulator
-- [ ] End-to-end: sign up → goal → roadmap → today tasks → coach chat
+- [x] `pnpm install` succeeds on Windows
+- [x] Docker Postgres running (`pnpm db:up`)
+- [x] `.env` filled with Supabase, OpenAI, RevenueCat keys
+- [x] `pnpm dev:api` → server listens on :5000
+- [x] Android **development** build + Metro (`pnpm dev:android`)
+- [x] End-to-end: sign up → goal → intake (OpenAI billing required)
+
+## Phase A2 — MVP standalone (next)
+
+See **[docs/MVP_ANDROID.md](MVP_ANDROID.md)**.
+
+- [ ] Host API (Railway/Render) + `/api/healthz` OK
+- [ ] EAS `preview` env: `EXPO_PUBLIC_API_URL` = HTTPS API
+- [ ] `pnpm build:android:preview` → install APK
+- [ ] App works **without** Metro / PC LAN
 
 ## Phase B — Accounts & compliance
 

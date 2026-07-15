@@ -42,7 +42,7 @@ const MAX_CHARS_PER_CHUNK = 320;
 // timeout we just skip injection — the coach still has buildCoachContext.
 const RETRIEVAL_TIMEOUT_MS = 350;
 
-type RetrievedChunk = {
+export type RetrievedChunk = {
   sourceText: string;
   contentType: string;
   goalId: string | null;
@@ -86,28 +86,34 @@ async function isInnerStillPending(p: Promise<string | null>): Promise<boolean> 
   return winner === sentinel;
 }
 
-async function retrieveInner(
+/**
+ * Raw semantic search over the user's embeddings corpus. Shared by the
+ * automatic context injection (retrieveInner) and the coach agent's
+ * `search_memory` tool. Returns [] on any failure — vector search must
+ * never break a coach turn.
+ */
+export async function searchUserEmbeddings(
   req: Request,
   userId: number,
-  trimmed: string,
+  query: string,
   topK: number,
-): Promise<string | null> {
-  const t0 = Date.now();
+): Promise<RetrievedChunk[]> {
+  const trimmed = query.trim();
+  if (trimmed.length === 0) return [];
 
   let vector: number[] | null = null;
   try {
     vector = await embedOne(req, trimmed);
   } catch (err) {
     logger.warn({ err, userId }, "RAG retrieval: embed query failed");
-    return null;
+    return [];
   }
-  if (!vector || vector.length === 0) return null;
+  if (!vector || vector.length === 0) return [];
 
   // pgvector accepts the text literal `[1,2,3]::vector`. We send it as a
   // bound parameter and cast in SQL so node-postgres treats it as text.
   const vecLiteral = `[${vector.join(",")}]`;
 
-  let rows: RetrievedChunk[];
   try {
     const result = await db.execute<{
       source_text: string;
@@ -140,7 +146,7 @@ async function retrieveInner(
           goal_id: string | null;
           distance: number;
         }>;
-    rows = list.map((r) => ({
+    return list.map((r) => ({
       sourceText: r.source_text,
       contentType: r.content_type,
       goalId: r.goal_id,
@@ -148,8 +154,20 @@ async function retrieveInner(
     }));
   } catch (err) {
     logger.warn({ err, userId }, "RAG retrieval: vector query failed");
-    return null;
+    return [];
   }
+}
+
+async function retrieveInner(
+  req: Request,
+  userId: number,
+  trimmed: string,
+  topK: number,
+): Promise<string | null> {
+  const t0 = Date.now();
+
+  const rows = await searchUserEmbeddings(req, userId, trimmed, topK);
+  if (rows.length === 0) return null;
 
   const filtered = rows.filter(
     (r) =>

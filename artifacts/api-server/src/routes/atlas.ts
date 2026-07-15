@@ -32,6 +32,13 @@ import {
 } from "../lib/aiConfig";
 import { ReplyTextExtractor } from "../lib/replyTextExtractor";
 import {
+  COACH_AGENT_TOOLS,
+  COACH_AGENT_TOOLS_PROMPT,
+  MAX_TOOL_ROUNDS,
+  coachAgentCompletion,
+  executeCoachTool,
+} from "../lib/coachAgent";
+import {
   hashKey as cacheHashKey,
   getCached,
   setCached,
@@ -39,6 +46,7 @@ import {
 import { sendPushTo } from "../lib/pushScheduler";
 import { retrieveRelevantContext } from "../lib/ragRetrieval";
 import { requireAiQuota } from "../middlewares/requireAiQuota";
+import { coachRateLimiter } from "../middlewares/rateLimit";
 import {
   AtlasOnboardingChatBody as atlasOnboardingChatBody,
   AtlasGenerateRoadmapBody as atlasGenerateRoadmapBody,
@@ -894,7 +902,7 @@ const roadmapEvolutionValidator = z.object({
   rationale: z.string(),
 });
 
-router.post("/coach", requireAiQuota, async (req, res) => {
+router.post("/coach", coachRateLimiter, requireAiQuota, async (req, res) => {
   const parsed = atlasCoachBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -1124,11 +1132,15 @@ Hard rules:
 ${PROPOSED_ACTION_RULES}${tier === "premium" ? `\n${ROADMAP_EDIT_RULES}` : ""}
 - "memoryUpdate": include ONLY when the user revealed something durable in THIS message (a constraint, preference, life event, identity statement). Otherwise null. The summary you write replaces the prior summary; keep it ≤ 3 sentences. newFacts must not duplicate existing facts.
 - COACH MODE: You ONLY discuss topics directly related to the user's goal, tasks, plan, reflections, and progress. If the user asks about anything unrelated (health advice, general knowledge, news, other life topics not connected to this goal), decline in ONE sentence and redirect: e.g. "I'm here as your goal coach — let's stay focused on [relevant topic]."
-
+${COACH_AGENT_TOOLS_PROMPT}
 CONTEXT:
 ${contextBlock}${roadmapStructureBlock}${calendarSection}${ragSection}${behavioralSection}`;
 
-    const parsedJson = await strictJsonCompletion(
+    // Agent loop: the model may call read-only tools (search_memory,
+    // get_task_history) before answering. Vision turns skip tools — the
+    // vision model round-trips are expensive and the tools add little to
+    // an image-grounded reply.
+    const parsedJson = await coachAgentCompletion(
       req,
       {
         // Vision turns always use the vision model regardless of tier.
@@ -1146,6 +1158,7 @@ ${contextBlock}${roadmapStructureBlock}${calendarSection}${ragSection}${behavior
         ],
       },
       coachResponseValidator,
+      { enableTools: !hasImage },
     );
     const normalized = normalizeCoachOutput(
       parsedJson as CoachRawOutput,
@@ -1457,7 +1470,7 @@ function normalizeCoachOutput(
 // compatibility and as a fallback when the client cannot consume SSE
 // (e.g. older RN runtimes without fetch streaming).
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/coach/stream", requireAiQuota, async (req, res) => {
+router.post("/coach/stream", coachRateLimiter, requireAiQuota, async (req, res) => {
   const parsed = atlasCoachBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -1670,7 +1683,7 @@ Hard rules:
 - "actionSuggestion" / "memoryUpdate": same rules as the non-streaming /coach endpoint.
 - COACH MODE: You ONLY discuss topics directly related to the user's goal, tasks, plan, reflections, and progress. If the user asks about anything unrelated (health advice, general knowledge, news, other life topics not connected to this goal), decline in ONE sentence and redirect: e.g. "I'm here as your goal coach — let's stay focused on [relevant topic]."
 ${PROPOSED_ACTION_RULES}${tierStream === "premium" ? `\n${ROADMAP_EDIT_RULES}` : ""}
-
+${COACH_AGENT_TOOLS_PROMPT}
 CONTEXT:
 ${contextBlock}${roadmapStructureBlockStream}${calendarSectionStream}${ragSectionStream}${behavioralSectionStream}`;
 
@@ -1696,7 +1709,7 @@ ${contextBlock}${roadmapStructureBlockStream}${calendarSectionStream}${ragSectio
     if (!res.writableEnded) aborted = true;
   });
 
-  const extractor = new ReplyTextExtractor();
+  let extractor = new ReplyTextExtractor();
   let accumulated = "";
   // Mirror of every reply token actually emitted to the client. If end-of-
   // stream parse/validation fails (more likely now that Phase 3 strict Zod
@@ -1716,42 +1729,151 @@ ${contextBlock}${roadmapStructureBlockStream}${calendarSectionStream}${ragSectio
   }
 
   try {
-    const stream = trackedStream(req, {
-      stream: true,
-      model: hasImage ? MODEL_VISION : orchConfigStream.model,
-      max_completion_tokens: 1200,
-      response_format: zodResponseFormat(coachResponseValidator, "coach_reply"),
-      messages: [
-        { role: "system", content: systemContext },
-        ...history.map((m: { role: string; content: string }) => ({
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        })),
-        { role: "user", content: userMessageContent },
-      ],
-    });
+    // ── Agent loop over SSE ────────────────────────────────────────────
+    // The model may spend up to MAX_TOOL_ROUNDS rounds calling read-only
+    // tools (search_memory, get_task_history) before its final reply.
+    // Tool rounds produce tool_call deltas instead of content; we execute
+    // the calls, append the results, and open a fresh stream. Only the
+    // final (content) round streams reply text to the client. Vision
+    // turns skip tools entirely.
+    const toolsAllowed = !hasImage && typeof req.userId === "number";
+    let agentMessages: Array<
+      | { role: "system" | "user" | "assistant"; content: unknown }
+      | { role: "assistant"; content: null; tool_calls: unknown }
+      | { role: "tool"; tool_call_id: string; content: string }
+    > = [
+      { role: "system", content: systemContext },
+      ...history.map((m: { role: string; content: string }) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
+      { role: "user", content: userMessageContent },
+    ];
 
-    for await (const chunk of stream) {
+    for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       if (aborted) break;
-      const choice = chunk.choices[0];
-      const delta = choice?.delta?.content;
-      // OpenAI streams safety refusals in delta.refusal. Accumulate so we
-      // can surface them as a typed refusal at end-of-stream instead of
-      // silently degrading to an empty fallback reply.
-      const refusalDelta = (
-        choice?.delta as { refusal?: string | null } | undefined
-      )?.refusal;
-      if (typeof refusalDelta === "string" && refusalDelta.length > 0) {
-        refusalAccumulated += refusalDelta;
-      }
-      if (typeof delta === "string" && delta.length > 0) {
-        accumulated += delta;
-        const replyDelta = extractor.feed(delta);
-        if (replyDelta.length > 0) {
-          streamedReply += replyDelta;
-          writeEvent({ type: "delta", text: replyDelta });
+      const toolsEnabled = toolsAllowed && round < MAX_TOOL_ROUNDS;
+
+      const stream = trackedStream(
+        req,
+        {
+          stream: true,
+          model: hasImage ? MODEL_VISION : orchConfigStream.model,
+          max_completion_tokens: 1200,
+          response_format: zodResponseFormat(
+            coachResponseValidator,
+            "coach_reply",
+          ),
+          messages:
+            agentMessages as unknown as import("openai/resources/chat/completions").ChatCompletionMessageParam[],
+          ...(toolsEnabled
+            ? { tools: COACH_AGENT_TOOLS, tool_choice: "auto" as const }
+            : {}),
+        },
+        { routeTag: round > 0 ? "#tool" : undefined },
+      );
+
+      // Accumulate streamed tool calls by index (OpenAI splits the id /
+      // name / arguments across many deltas).
+      const toolCallParts = new Map<
+        number,
+        { id: string; name: string; arguments: string }
+      >();
+
+      for await (const chunk of stream) {
+        if (aborted) break;
+        const choice = chunk.choices[0];
+        const delta = choice?.delta;
+
+        const toolDeltas = delta?.tool_calls;
+        if (Array.isArray(toolDeltas)) {
+          for (const t of toolDeltas) {
+            const slot = toolCallParts.get(t.index) ?? {
+              id: "",
+              name: "",
+              arguments: "",
+            };
+            if (t.id) slot.id = t.id;
+            if (t.function?.name) slot.name += t.function.name;
+            if (t.function?.arguments) slot.arguments += t.function.arguments;
+            toolCallParts.set(t.index, slot);
+          }
+        }
+
+        // OpenAI streams safety refusals in delta.refusal. Accumulate so we
+        // can surface them as a typed refusal at end-of-stream instead of
+        // silently degrading to an empty fallback reply.
+        const refusalDelta = (
+          delta as { refusal?: string | null } | undefined
+        )?.refusal;
+        if (typeof refusalDelta === "string" && refusalDelta.length > 0) {
+          refusalAccumulated += refusalDelta;
+        }
+
+        const contentDelta = delta?.content;
+        if (
+          typeof contentDelta === "string" &&
+          contentDelta.length > 0 &&
+          toolCallParts.size === 0
+        ) {
+          accumulated += contentDelta;
+          const replyDelta = extractor.feed(contentDelta);
+          if (replyDelta.length > 0) {
+            streamedReply += replyDelta;
+            writeEvent({ type: "delta", text: replyDelta });
+          }
         }
       }
+
+      if (aborted) break;
+
+      // Tool round: execute every call, append results, loop again.
+      if (toolCallParts.size > 0 && toolsEnabled) {
+        const calls = [...toolCallParts.entries()]
+          .sort(([a], [b]) => a - b)
+          .map(([, c]) => c)
+          .filter((c) => c.id && c.name);
+        req.log.info(
+          { tools: calls.map((c) => c.name), round },
+          "coach stream: executing tool round",
+        );
+        // Progress hint for the client. Current mobile builds ignore
+        // unknown event types; future UI can show "checking your
+        // history…" instead of a bare thinking dot.
+        writeEvent({ type: "status", stage: "tools" });
+        agentMessages = [
+          ...agentMessages,
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: calls.map((c) => ({
+              id: c.id,
+              type: "function" as const,
+              function: { name: c.name, arguments: c.arguments || "{}" },
+            })),
+          },
+        ];
+        for (const call of calls) {
+          const result = await executeCoachTool(
+            req,
+            req.userId!,
+            call.name,
+            call.arguments || "{}",
+          );
+          agentMessages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: result,
+          });
+        }
+        // Reset per-round accumulators — a tool round carries no reply.
+        accumulated = "";
+        extractor = new ReplyTextExtractor();
+        continue;
+      }
+
+      // Content round — this is the final reply; stop looping.
+      break;
     }
 
     if (aborted) {

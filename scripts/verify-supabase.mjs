@@ -32,9 +32,15 @@ if (!anon || anon.startsWith("eyJ...") || anon.length < 20) {
     "Missing EXPO_PUBLIC_SUPABASE_ANON_KEY — paste Settings → API → anon public key",
   );
 }
-if (!jwtSecret || jwtSecret.includes("your-jwt-secret")) {
-  fail(
-    "Missing SUPABASE_JWT_SECRET — paste Settings → API → JWT Settings → JWT Secret (API server needs this)",
+// JWT secret is optional when the project uses asymmetric signing keys
+// (JWT Keys → ECC/RSA). The API verifies via JWKS in that case.
+const jwtOptional =
+  !jwtSecret ||
+  jwtSecret.includes("your-jwt-secret") ||
+  jwtSecret.trim().length === 0;
+if (jwtOptional) {
+  console.log(
+    "[rubai] SUPABASE_JWT_SECRET not set — API will verify tokens via JWKS (ECC/RSA)",
   );
 }
 

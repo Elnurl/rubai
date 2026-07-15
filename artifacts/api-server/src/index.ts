@@ -10,9 +10,17 @@ import { runMigrations } from "@workspace/db";
 const REQUIRED_ENV: string[] = [
   "PORT",
   "DATABASE_URL",
-  "SUPABASE_JWT_SECRET",
   "SESSION_SECRET",
 ];
+
+// Auth: either legacy HS256 secret OR project URL (JWKS / ECC signing keys).
+if (
+  !process.env["SUPABASE_JWT_SECRET"] &&
+  !process.env["SUPABASE_URL"] &&
+  !process.env["EXPO_PUBLIC_SUPABASE_URL"]
+) {
+  REQUIRED_ENV.push("SUPABASE_URL");
+}
 
 // Billing sync is optional in local development — tier defaults to "free".
 if (process.env["NODE_ENV"] === "production") {

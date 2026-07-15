@@ -49,7 +49,8 @@ pnpm dev:mobile
 ```
 
 Full setup guide: **[docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md)**  
-**Android dev build (recommended):** **[docs/DEV_BUILD_ANDROID.md](docs/DEV_BUILD_ANDROID.md)**  
+**Android dev build (coding):** **[docs/DEV_BUILD_ANDROID.md](docs/DEV_BUILD_ANDROID.md)**  
+**MVP / real APK (no daily Metro):** **[docs/MVP_ANDROID.md](docs/MVP_ANDROID.md)**  
 Launch checklist: **[docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md)**
 
 ## Environment variables
@@ -71,7 +72,8 @@ Key vars:
 | `pnpm dev:api` | Build + run API server |
 | `pnpm dev:mobile` | Start Expo Go dev server (legacy — use `dev:android` instead) |
 | `pnpm dev:android` | Metro for **development build** on phone |
-| `pnpm build:android:dev` | Build dev APK on EAS (one-time setup) |
+| `pnpm build:android:dev` | Build **dev** APK on EAS (needs Metro daily) |
+| `pnpm build:android:preview` | Build **standalone MVP** APK (no Metro) |
 | `pnpm db:up` | Start local Postgres (Docker) |
 | `pnpm db:down` | Stop Postgres |
 | `pnpm build` | Typecheck + build all packages |

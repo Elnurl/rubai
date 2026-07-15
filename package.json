@@ -13,6 +13,7 @@
     "verify:supabase": "node scripts/verify-supabase.mjs",
     "verify:clerk": "node scripts/verify-supabase.mjs",
     "build:android:dev": "node scripts/build-android-dev.mjs",
+    "build:android:preview": "node scripts/build-android-preview.mjs",
     "run:android:local": "node scripts/run-android-local.mjs",
     "db:up": "node scripts/db-up.mjs",
     "db:down": "node scripts/db-down.mjs",
@@ -20,6 +21,7 @@
   },
   "private": true,
   "devDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "4.59.0",
     "prettier": "^3.8.1",
     "typescript": "~5.9.2"
   },
