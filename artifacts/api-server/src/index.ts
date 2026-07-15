@@ -22,16 +22,20 @@ if (
   REQUIRED_ENV.push("SUPABASE_URL");
 }
 
-// Billing sync is optional in local development — tier defaults to "free".
+// Billing sync is optional until RevenueCat is fully wired for production.
+// Warn loudly but do not block boot — MVP hosts often start without store keys.
 if (process.env["NODE_ENV"] === "production") {
-  REQUIRED_ENV.push("REVENUECAT_V2_SECRET_KEY");
-}
-
-// In production, REVENUECAT_WEBHOOK_SECRET must be set so the webhook
-// handler can authenticate incoming events.  Without it, any caller could
-// send fake subscription events and change a user's tier.
-if (process.env["NODE_ENV"] === "production") {
-  REQUIRED_ENV.push("REVENUECAT_WEBHOOK_SECRET");
+  for (const key of [
+    "REVENUECAT_V2_SECRET_KEY",
+    "REVENUECAT_WEBHOOK_SECRET",
+  ] as const) {
+    if (!process.env[key]) {
+      logger.warn(
+        { missing: key },
+        "Production env missing optional RevenueCat key — billing sync disabled",
+      );
+    }
+  }
 }
 
 const missingEnv = REQUIRED_ENV.filter((k) => !process.env[k]);
@@ -61,13 +65,15 @@ if (Number.isNaN(port) || port <= 0) {
     process.exit(1);
   }
 
-  app.listen(port, (err) => {
+  // Railway (and most PaaS) require binding to 0.0.0.0, not just localhost.
+  const host = process.env["HOST"] ?? "0.0.0.0";
+  app.listen(port, host, (err) => {
     if (err) {
       logger.error({ err }, "Error listening on port");
       process.exit(1);
     }
 
-    logger.info({ port }, "Server listening");
+    logger.info({ port, host }, "Server listening");
     startPushScheduler();
     startWebhookRetryWorker();
   });
