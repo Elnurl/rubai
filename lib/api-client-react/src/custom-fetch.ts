@@ -113,6 +113,19 @@ function mergeHeaders(...sources: Array<HeadersInit | undefined>): Headers {
   return headers;
 }
 
+/**
+ * React Native Android's networking stack is unreliable with the WHATWG
+ * `Headers` class — pass a plain object instead to avoid opaque
+ * "Network request failed" errors.
+ */
+function headersToRecord(headers: Headers): Record<string, string> {
+  const out: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    out[key] = value;
+  });
+  return out;
+}
+
 function getMediaType(headers: Headers): string | null {
   const value = headers.get("content-type");
   return value ? value.split(";", 1)[0].trim().toLowerCase() : null;
@@ -357,7 +370,9 @@ export async function customFetch<T = unknown>(
     throw new TypeError(`customFetch: ${method} requests cannot have a body.`);
   }
 
-  const headers = mergeHeaders(isRequest(input) ? input.headers : undefined, headersInit);
+  // Build a *minimal* header set. Merging Request/cookie bags on React Native
+  // Android has produced HTTP 431 (Request Header Fields Too Large) on Railway.
+  const headers = mergeHeaders(headersInit);
 
   if (
     typeof init.body === "string" &&
@@ -367,8 +382,13 @@ export async function customFetch<T = unknown>(
     headers.set("content-type", "application/json");
   }
 
-  if (responseType === "json" && !headers.has("accept")) {
-    headers.set("accept", DEFAULT_JSON_ACCEPT);
+  if (!headers.has("accept")) {
+    headers.set(
+      "accept",
+      responseType === "json" || responseType === "auto"
+        ? "application/json"
+        : "*/*",
+    );
   }
 
   // Attach bearer token when an auth getter is configured and no
@@ -376,13 +396,29 @@ export async function customFetch<T = unknown>(
   if (_authTokenGetter && !headers.has("authorization")) {
     const token = await _authTokenGetter();
     if (token) {
+      // Guard against accidentally stuffing a huge blob into Authorization.
+      if (token.length > 8_000) {
+        throw new TypeError(
+          `Auth token too large (${token.length} chars) — sign out and sign in again.`,
+        );
+      }
       headers.set("authorization", `Bearer ${token}`);
     }
   }
 
   const requestInfo = { method, url: resolveUrl(input) };
+  const urlString = resolveUrl(input);
 
-  const response = await fetch(input, { ...init, method, headers });
+  // Drop any leftover init.headers — we already normalized into `headers`.
+  const { headers: _ignoredHeaders, ...restInit } = init;
+
+  const response = await fetch(urlString, {
+    ...restInit,
+    method,
+    headers: headersToRecord(headers),
+    // Never attach browser/RN cookie jars to API calls (can trigger 431).
+    credentials: "omit",
+  });
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

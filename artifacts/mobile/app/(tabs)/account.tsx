@@ -18,7 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
-import { getBaseUrl } from "@workspace/api-client-react";
+import { getBaseUrl, getMeState } from "@workspace/api-client-react";
 
 import { AskCoachPill } from "@/components/AskCoachPill";
 import { useColors } from "@/hooks/useColors";
@@ -69,6 +69,44 @@ export default function AccountScreen() {
   } = useAtlas();
 
   const cloudApiLabel = getBaseUrl() || "(no API URL baked into this APK)";
+
+  const testCloudConnection = async () => {
+    const base = getBaseUrl();
+    if (!base) {
+      Alert.alert("Cloud test", "No API URL is baked into this APK.");
+      return;
+    }
+    try {
+      const health = await fetch(`${base}/api/healthz`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      });
+      const healthText = await health.text();
+      if (!health.ok) {
+        Alert.alert(
+          "Cloud test",
+          `healthz HTTP ${health.status}\n${healthText.slice(0, 120)}\n\n${base}`,
+        );
+        return;
+      }
+      try {
+        await getMeState();
+        Alert.alert("Cloud test", `OK — healthz + /me/state\n${base}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        Alert.alert(
+          "Cloud test",
+          `healthz OK, but /me/state failed:\n${msg}\n\n${base}`,
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      Alert.alert(
+        "Cloud test",
+        `healthz failed (phone cannot reach API):\n${msg}\n\nOpen this in Chrome:\n${base}/api/healthz`,
+      );
+    }
+  };
 
   const systemScheme = useColorScheme();
   const effectiveScheme =
@@ -193,7 +231,14 @@ export default function AccountScreen() {
 
         {syncMessage ? (
           <Pressable
-            onPress={dismissSyncMessage}
+            onPress={() => {
+              if (syncStatus === "error") {
+                void testCloudConnection();
+              } else {
+                dismissSyncMessage();
+              }
+            }}
+            onLongPress={dismissSyncMessage}
             style={[
               styles.syncBanner,
               {

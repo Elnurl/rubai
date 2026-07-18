@@ -52,6 +52,9 @@ function formatSyncFailure(err: unknown, offlineFallback: string): string {
   if (status === 401 || status === 403) {
     return "Session rejected by the server. Sign out and sign in again.";
   }
+  if (status === 431) {
+    return "Request headers too large (431). Sign out and sign in again.";
+  }
   if (status != null && status >= 500) {
     return `Cloud server error (${status}). Try again shortly.`;
   }

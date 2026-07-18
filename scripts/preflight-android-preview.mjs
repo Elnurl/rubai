@@ -118,7 +118,9 @@ if (process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY?.trim()) {
   ]);
 }
 
-console.log("[preflight] Syncing EAS preview environment variables...");
+// Best-effort sync. Preview also bakes these into eas.json `env`, so a
+ // failed eas env:create must not block the APK build.
+console.log("[preflight] Syncing EAS preview environment variables (best-effort)...");
 for (const [name, value] of syncVars) {
   const result = spawnSync(
     "pnpm",
@@ -139,11 +141,11 @@ for (const [name, value] of syncVars) {
     { cwd: mobileDir, encoding: "utf8", shell: true },
   );
   if (result.status !== 0) {
-    console.error(result.stdout || "");
-    console.error(result.stderr || "");
-    fail(`eas env:create failed for ${name}`);
+    console.warn(`[preflight] WARN: eas env:create failed for ${name} — continuing (eas.json env is source of truth)`);
+    if (result.stderr) console.warn(String(result.stderr).slice(0, 400));
+  } else {
+    console.log(`[preflight]   synced ${name}`);
   }
-  console.log(`[preflight]   synced ${name}`);
 }
 
 console.log("\n[preflight] All checks passed. Safe to build preview APK.\n");

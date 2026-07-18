@@ -88,6 +88,7 @@ export async function streamCoachReply(
     headers,
     body: JSON.stringify(payload.data),
     signal,
+    credentials: "omit",
   });
 
   if (!res.ok) {

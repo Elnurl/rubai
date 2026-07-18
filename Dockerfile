@@ -17,6 +17,8 @@ RUN pnpm --filter @workspace/api-server build
 
 ENV NODE_ENV=production
 ENV PORT=5000
+# Raise Node's HTTP header limit (default 16KB) to avoid HTTP 431 from mobile JWTs.
+ENV NODE_OPTIONS=--max-http-header-size=131072
 EXPOSE 5000
 
 CMD ["pnpm", "--filter", "@workspace/api-server", "start"]

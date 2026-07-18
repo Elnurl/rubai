@@ -1,8 +1,13 @@
+import http from "node:http";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startPushScheduler } from "./lib/pushScheduler";
 import { startWebhookRetryWorker } from "./lib/webhookRetryWorker";
 import { runMigrations } from "@workspace/db";
+
+// Default Node limit is 16KB; Supabase JWTs + proxy hop headers can exceed
+// that and surface as HTTP 431 to mobile clients.
+const MAX_HEADER_SIZE = 128 * 1024;
 
 // ── Required env-var guard ─────────────────────────────────────────────────
 // Fail fast at startup with a clear message rather than a cryptic runtime
@@ -67,14 +72,14 @@ if (Number.isNaN(port) || port <= 0) {
 
   // Railway (and most PaaS) require binding to 0.0.0.0, not just localhost.
   const host = process.env["HOST"] ?? "0.0.0.0";
-  app.listen(port, host, (err) => {
-    if (err) {
-      logger.error({ err }, "Error listening on port");
-      process.exit(1);
-    }
-
-    logger.info({ port, host }, "Server listening");
+  const server = http.createServer({ maxHeaderSize: MAX_HEADER_SIZE }, app);
+  server.listen(port, host, () => {
+    logger.info({ port, host, maxHeaderSize: MAX_HEADER_SIZE }, "Server listening");
     startPushScheduler();
     startWebhookRetryWorker();
+  });
+  server.on("error", (err) => {
+    logger.error({ err }, "Error listening on port");
+    process.exit(1);
   });
 })();
