@@ -1,4 +1,5 @@
 import { useAuth } from "@/providers/AuthProvider";
+import { supabase } from "@/lib/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import React, {
@@ -39,20 +40,32 @@ import {
   useLegalMyAcceptances,
 } from "@workspace/api-client-react";
 
+function httpStatusOf(err: unknown): number | null {
+  if (!err || typeof err !== "object") return null;
+  // Duck-type: `instanceof ApiError` can fail across duplicate bundle copies.
+  const status = (err as { status?: unknown }).status;
+  return typeof status === "number" ? status : null;
+}
+
 function formatSyncFailure(err: unknown, offlineFallback: string): string {
-  if (err instanceof ApiError) {
-    if (err.status === 401 || err.status === 403) {
-      return "Session rejected by the server. Sign out and sign in again.";
-    }
-    if (err.status >= 500) {
-      return `Cloud server error (${err.status}). Try again shortly.`;
-    }
-    return `Couldn't sync (HTTP ${err.status}).`;
+  const status = httpStatusOf(err);
+  if (status === 401 || status === 403) {
+    return "Session rejected by the server. Sign out and sign in again.";
   }
-  const base = getBaseUrl();
-  if (base) {
-    return `${offlineFallback} (${base.replace(/^https?:\/\//, "")})`;
+  if (status != null && status >= 500) {
+    return `Cloud server error (${status}). Try again shortly.`;
   }
+  if (status != null) {
+    return `Couldn't sync (HTTP ${status}).`;
+  }
+  const detail =
+    err instanceof Error && err.message
+      ? err.message.replace(/\s+/g, " ").slice(0, 80)
+      : null;
+  const base = getBaseUrl()?.replace(/^https?:\/\//, "") ?? null;
+  if (detail && base) return `${offlineFallback} [${detail}] (${base})`;
+  if (detail) return `${offlineFallback} [${detail}]`;
+  if (base) return `${offlineFallback} (${base})`;
   return offlineFallback;
 }
 import { registerForPushAsync } from "@/lib/push";
@@ -804,6 +817,28 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
 
       // 2. GET /me/state to refresh against the server.
       try {
+        // Ensure we have a fresh access token before the first cloud call.
+        let token = await getToken();
+        if (!token) {
+          try {
+            const { data, error } = await supabase.auth.refreshSession();
+            if (!error && data.session?.access_token) {
+              token = data.session.access_token;
+            }
+          } catch {
+            // fall through — getMeState will fail with a clear status
+          }
+        }
+        if (!token) {
+          if (!stillBooting()) return;
+          setSyncStatus("error");
+          setSyncMessage(
+            "No auth token for cloud sync. Sign out and sign in again.",
+          );
+          setLoaded(true);
+          return;
+        }
+
         const server = await getMeState();
         if (!stillBooting()) return;
 
@@ -813,19 +848,16 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
         // whatever we already painted from cache. Without this guard, the
         // user is stuck on the index screen spinner forever.
         if (server == null) {
-          if (__DEV__) {
-            // eslint-disable-next-line no-console
-            console.warn(
-              "[atlas] /me/state returned an empty body; staying on cached state",
-            );
-          }
+          // eslint-disable-next-line no-console
+          console.warn(
+            "[atlas] /me/state returned an empty body; staying on cached state",
+          );
           setSyncStatus("error");
           setSyncMessage(
-            `Couldn't reach the cloud. Showing your last sync.${
-              getBaseUrl()
-                ? ` (${getBaseUrl()!.replace(/^https?:\/\//, "")})`
-                : ""
-            }`,
+            formatSyncFailure(
+              new Error("Empty /me/state body"),
+              "Couldn't reach the cloud. Showing your last sync.",
+            ),
           );
           setLoaded(true);
           return;
@@ -962,7 +994,14 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
       clearTimeout(safetyTimer);
     };
-  }, [authLoaded, isSignedIn, userId, adoptServerState, writeCacheSnapshot]);
+  }, [
+    authLoaded,
+    isSignedIn,
+    userId,
+    getToken,
+    adoptServerState,
+    writeCacheSnapshot,
+  ]);
 
   // Register the device's Expo push token once per signed-in session.
   // Bootstrapped after Clerk is ready so requireAuth sees the token. Web
