@@ -72,6 +72,7 @@ import { registerForPushAsync } from "@/lib/push";
 import { getNotifications } from "@/lib/notifications";
 import { supportsRemotePush } from "@/lib/expoGo";
 import {
+  cacheSessionToken,
   clearCachedSessionToken,
   clearLastActiveUserId,
   registerPeriodicTierSyncTask,
