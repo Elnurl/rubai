@@ -18,6 +18,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
+import { getBaseUrl } from "@workspace/api-client-react";
+
 import { AskCoachPill } from "@/components/AskCoachPill";
 import { useColors } from "@/hooks/useColors";
 import { useAtlas } from "@/providers/AtlasProvider";
@@ -65,6 +67,8 @@ export default function AccountScreen() {
     syncMessage,
     dismissSyncMessage,
   } = useAtlas();
+
+  const cloudApiLabel = getBaseUrl() || "(no API URL baked into this APK)";
 
   const systemScheme = useColorScheme();
   const effectiveScheme =
@@ -208,18 +212,38 @@ export default function AccountScreen() {
               size={14}
               color={syncStatus === "error" ? colors.destructive : colors.primary}
             />
-            <Text
-              style={[
-                styles.syncBannerText,
-                {
-                  color:
-                    syncStatus === "error" ? colors.destructive : colors.primary,
-                  fontFamily: "Inter_500Medium",
-                },
-              ]}
-            >
-              {syncMessage}
-            </Text>
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text
+                style={[
+                  styles.syncBannerText,
+                  {
+                    color:
+                      syncStatus === "error"
+                        ? colors.destructive
+                        : colors.primary,
+                    fontFamily: "Inter_500Medium",
+                  },
+                ]}
+              >
+                {syncMessage}
+              </Text>
+              {syncStatus === "error" ? (
+                <Text
+                  style={[
+                    styles.syncBannerText,
+                    {
+                      color: colors.destructive,
+                      fontFamily: "Inter_400Regular",
+                      fontSize: 11,
+                      opacity: 0.85,
+                    },
+                  ]}
+                  numberOfLines={2}
+                >
+                  {`API: ${cloudApiLabel}`}
+                </Text>
+              ) : null}
+            </View>
           </Pressable>
         ) : null}
 

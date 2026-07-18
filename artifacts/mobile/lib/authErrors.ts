@@ -67,6 +67,13 @@ export function friendlyAuthError(input: unknown): string {
   if (message.includes("phone") && message.includes("provider")) {
     return "Phone verification isn't enabled yet. Use email for now.";
   }
+  if (
+    code === "validation_failed" ||
+    message.includes("unsupported provider") ||
+    message.includes("provider is not enabled")
+  ) {
+    return "Google sign-in isn't enabled yet. Use email/password, or turn on Google in Supabase → Authentication → Providers.";
+  }
 
   return err.message || "Something went wrong.";
 }

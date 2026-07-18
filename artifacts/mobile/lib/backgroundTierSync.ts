@@ -45,6 +45,7 @@ import * as BackgroundFetch from "expo-background-fetch";
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
+import { preferPublicApiBase } from "./apiBaseUrl";
 import { loadUserCache, saveUserCache } from "./storage";
 import { getNotifications } from "./notifications";
 import { supportsRemotePush } from "./expoGo";
@@ -152,16 +153,19 @@ async function runTierSync(): Promise<boolean> {
       return false;
     }
 
-    // Resolve the API base URL: try the AsyncStorage-cached value first
-    // (written by _layout.tsx at boot), then fall back to the env var baked
-    // into the bundle.
+    // Prefer the HTTPS URL baked into the bundle over a stale LAN cache
+    // from an older Metro/dev install (same Android package name).
     const storedBase = await AsyncStorage.getItem(API_BASE_URL_KEY);
     const envBase =
       process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") ??
       (process.env.EXPO_PUBLIC_DOMAIN
         ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
         : null);
-    const baseUrl = storedBase ?? envBase ?? "";
+    const baseUrl = preferPublicApiBase(envBase, storedBase);
+
+    if (baseUrl && baseUrl !== storedBase) {
+      await AsyncStorage.setItem(API_BASE_URL_KEY, baseUrl);
+    }
 
     if (!baseUrl) {
       if (__DEV__)

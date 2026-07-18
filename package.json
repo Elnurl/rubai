@@ -13,6 +13,7 @@
     "verify:supabase": "node scripts/verify-supabase.mjs",
     "verify:clerk": "node scripts/verify-supabase.mjs",
     "build:android:dev": "node scripts/build-android-dev.mjs",
+    "verify:mvp": "node scripts/preflight-android-preview.mjs",
     "build:android:preview": "node scripts/build-android-preview.mjs",
     "run:android:local": "node scripts/run-android-local.mjs",
     "db:up": "node scripts/db-up.mjs",

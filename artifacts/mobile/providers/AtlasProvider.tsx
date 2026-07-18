@@ -31,12 +31,30 @@ import {
   ApiError,
   atlasRegisterPushToken,
   customFetch,
+  getBaseUrl,
   getGetMeStateQueryKey,
   getMeState,
   putMeState,
   setAuthTokenGetter,
   useLegalMyAcceptances,
 } from "@workspace/api-client-react";
+
+function formatSyncFailure(err: unknown, offlineFallback: string): string {
+  if (err instanceof ApiError) {
+    if (err.status === 401 || err.status === 403) {
+      return "Session rejected by the server. Sign out and sign in again.";
+    }
+    if (err.status >= 500) {
+      return `Cloud server error (${err.status}). Try again shortly.`;
+    }
+    return `Couldn't sync (HTTP ${err.status}).`;
+  }
+  const base = getBaseUrl();
+  if (base) {
+    return `${offlineFallback} (${base.replace(/^https?:\/\//, "")})`;
+  }
+  return offlineFallback;
+}
 import { registerForPushAsync } from "@/lib/push";
 import { getNotifications } from "@/lib/notifications";
 import { supportsRemotePush } from "@/lib/expoGo";
@@ -405,8 +423,28 @@ function pickCalendarSync(blob: unknown): AccountPrefs["calendarSync"] {
 }
 
 export function AtlasProvider({ children }: { children: React.ReactNode }) {
-  const { isLoaded: authLoaded, isSignedIn, userId, signOut: authSignOut } =
-    useAuth();
+  const {
+    isLoaded: authLoaded,
+    isSignedIn,
+    userId,
+    signOut: authSignOut,
+    getToken,
+  } = useAuth();
+
+  // Attach bearer token BEFORE any /me/state calls. AuthGate also sets this,
+  // but it mounts as a child — parent effects would otherwise race ahead.
+  useEffect(() => {
+    setAuthTokenGetter(async () => {
+      const token = await getToken();
+      if (token) {
+        void cacheSessionToken(token);
+      }
+      return token;
+    });
+    return () => {
+      setAuthTokenGetter(null);
+    };
+  }, [getToken]);
 
   const [loaded, setLoaded] = useState(false);
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -630,9 +668,14 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
       // Network / 5xx / auth errors: leave local state in place; surface a
       // soft message and let the next mutation retry.
       setSyncStatus("error");
-      setSyncMessage("Couldn't reach the cloud. Changes will sync when you're back online.");
+      setSyncMessage(
+        formatSyncFailure(
+          err,
+          "Couldn't reach the cloud. Changes will sync when you're back online.",
+        ),
+      );
       // eslint-disable-next-line no-console
-      if (__DEV__) console.warn("[atlas] push failed", err);
+      console.warn("[atlas] push failed", err);
     }
   }, [adoptServerState, writeCacheSnapshot]);
 
@@ -777,7 +820,13 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
             );
           }
           setSyncStatus("error");
-          setSyncMessage("Couldn't reach the cloud. Showing your last sync.");
+          setSyncMessage(
+            `Couldn't reach the cloud. Showing your last sync.${
+              getBaseUrl()
+                ? ` (${getBaseUrl()!.replace(/^https?:\/\//, "")})`
+                : ""
+            }`,
+          );
           setLoaded(true);
           return;
         }
@@ -885,10 +934,15 @@ export function AtlasProvider({ children }: { children: React.ReactNode }) {
         // error. Otherwise we have nothing to show, so flip loaded=true
         // anyway so the UI exits its splash state.
         setSyncStatus("error");
-        setSyncMessage("Couldn't reach the cloud. Showing your last sync.");
+        setSyncMessage(
+          formatSyncFailure(
+            err,
+            "Couldn't reach the cloud. Showing your last sync.",
+          ),
+        );
         setLoaded(true);
         // eslint-disable-next-line no-console
-        if (__DEV__) console.warn("[atlas] hydrate failed", err);
+        console.warn("[atlas] hydrate failed", err);
       } finally {
         // Boot reached a terminal state (success or handled error) — the
         // safety net is no longer needed.

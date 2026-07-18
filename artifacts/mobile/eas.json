@@ -19,6 +19,13 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_NATIVE_BUILD": "true",
+        "EXPO_PUBLIC_API_URL": "https://workspaceapi-server-production-d044.up.railway.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://gpviliheclxqgdzfjgan.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwdmlsaWhlY2x4cWdkemZqZ2FuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwNDAwMTgsImV4cCI6MjA5OTYxNjAxOH0.vCP7l9P5HxfB2sLzYPSxmZVyb-KoYvtQUEvqq_8HqaU",
+        "EXPO_PUBLIC_REVENUECAT_TEST_API_KEY": "test_JMnMMQAkphOeQYKRNQyppTgilcW"
       }
     },
     "production": {
