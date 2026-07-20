@@ -70,6 +70,10 @@ const API_BASE_URL_KEY = "atlas:bg:apiBaseUrl";
  * Call this every time the auth token getter is invoked (see _layout.tsx).
  */
 export async function cacheSessionToken(token: string): Promise<void> {
+  // Never persist corrupt/oversized tokens (seen ~480KB blobs from bad auth storage).
+  if (!token || token.length > 8_000 || token.split(".").length !== 3) {
+    return;
+  }
   try {
     await SecureStore.setItemAsync(SESSION_TOKEN_KEY, token);
   } catch {

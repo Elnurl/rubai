@@ -94,9 +94,12 @@ export default function AccountScreen() {
         Alert.alert("Cloud test", `OK — healthz + /me/state\n${base}`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        const hint = /token too large|431|sign out/i.test(msg)
+          ? "\n\nFix: Sign out → Sign in again (clears corrupt session)."
+          : "";
         Alert.alert(
           "Cloud test",
-          `healthz OK, but /me/state failed:\n${msg}\n\n${base}`,
+          `healthz OK, but /me/state failed:\n${msg}${hint}\n\n${base}`,
         );
       }
     } catch (err) {
@@ -127,6 +130,10 @@ export default function AccountScreen() {
       ]);
     }
   };
+
+  const tokenCorrupt =
+    typeof syncMessage === "string" &&
+    /token too large|sign out and sign in again/i.test(syncMessage);
 
   const openSubscriptionManagement = () => {
     if (Platform.OS === "ios") {

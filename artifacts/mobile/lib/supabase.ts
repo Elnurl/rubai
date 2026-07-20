@@ -12,44 +12,54 @@ const supabaseAnonKey =
   "";
 
 /**
- * SecureStore has a ~2KB value size limit on some platforms. Large auth
- * session JSON can exceed that — fall back to AsyncStorage when needed.
+ * Auth sessions must live in AsyncStorage only.
+ *
+ * The previous SecureStore→AsyncStorage hybrid corrupted sessions: when a
+ * session grew past SecureStore's ~2KB limit it was written to AsyncStorage,
+ * but getItem still preferred a stale SecureStore value. That produced a
+ * fake "access_token" hundreds of KB long and HTTP 431 on Railway.
  */
-const ExpoSecureStoreAdapter = {
-  getItem: async (key: string) => {
-    if (Platform.OS === "web") {
-      return AsyncStorage.getItem(key);
-    }
-    try {
-      return await SecureStore.getItemAsync(key);
-    } catch {
-      return AsyncStorage.getItem(key);
-    }
-  },
-  setItem: async (key: string, value: string) => {
-    if (Platform.OS === "web") {
-      await AsyncStorage.setItem(key, value);
-      return;
-    }
-    try {
-      await SecureStore.setItemAsync(key, value);
-    } catch {
-      await AsyncStorage.setItem(key, value);
-    }
-  },
-  removeItem: async (key: string) => {
-    if (Platform.OS === "web") {
-      await AsyncStorage.removeItem(key);
-      return;
-    }
-    try {
-      await SecureStore.deleteItemAsync(key);
-    } catch {
-      // ignore
-    }
-    await AsyncStorage.removeItem(key);
-  },
+const AuthStorageAdapter = {
+  getItem: (key: string) => AsyncStorage.getItem(key),
+  setItem: (key: string, value: string) => AsyncStorage.setItem(key, value),
+  removeItem: (key: string) => AsyncStorage.removeItem(key),
 };
+
+/**
+ * Wipe every Supabase auth key from AsyncStorage + SecureStore.
+ * Needed when a corrupt ~hundreds-of-KB "access_token" is stuck on device.
+ */
+export async function purgeCorruptAuthStorage(): Promise<void> {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const authKeys = keys.filter(
+      (k) =>
+        k.includes("supabase") ||
+        k.includes("auth-token") ||
+        k.startsWith("sb-") ||
+        k.includes("@supabase"),
+    );
+    if (authKeys.length > 0) {
+      await AsyncStorage.multiRemove(authKeys);
+    }
+  } catch {
+    // ignore
+  }
+  await clearLegacySecureAuthKeys();
+  try {
+    await SecureStore.deleteItemAsync("atlas:bg:session_token");
+  } catch {
+    // ignore
+  }
+}
+
+/** A real JWT is 3 base64 segments and small enough for HTTP headers. */
+export function isPlausibleAccessToken(token: string | null | undefined): boolean {
+  if (!token || typeof token !== "string") return false;
+  if (token.length < 40 || token.length > 8_000) return false;
+  const parts = token.split(".");
+  return parts.length === 3 && parts.every((p) => p.length > 0);
+}
 
 if (__DEV__ && (!supabaseUrl || !supabaseAnonKey)) {
   // eslint-disable-next-line no-console
@@ -63,7 +73,7 @@ export const supabase = createClient(
   supabaseAnonKey || "placeholder",
   {
     auth: {
-      storage: ExpoSecureStoreAdapter,
+      storage: AuthStorageAdapter,
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,

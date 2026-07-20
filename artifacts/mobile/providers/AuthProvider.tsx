@@ -10,7 +10,12 @@ import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
 
-import { supabase } from "@/lib/supabase";
+import {
+  clearLegacySecureAuthKeys,
+  isPlausibleAccessToken,
+  purgeCorruptAuthStorage,
+  supabase,
+} from "@/lib/supabase";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -231,14 +236,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    void supabase.auth.getSession().then(({ data }) => {
+    void (async () => {
+      await clearLegacySecureAuthKeys();
+      const { data } = await supabase.auth.getSession();
       if (!mounted) return;
+      const token = data.session?.access_token ?? null;
+      if (data.session && !isPlausibleAccessToken(token)) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[auth] Corrupt access_token length=",
+          token?.length ?? 0,
+          "— purging auth storage",
+        );
+        await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+        await purgeCorruptAuthStorage();
+        setSession(null);
+        setRawUser(null);
+        setIsLoaded(true);
+        return;
+      }
       setSession(data.session);
       setRawUser(data.session?.user ?? null);
       setIsLoaded(true);
-    });
+    })();
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
+      const token = next?.access_token ?? null;
+      if (next && !isPlausibleAccessToken(token)) {
+        void (async () => {
+          await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+          await purgeCorruptAuthStorage();
+        })();
+        setSession(null);
+        setRawUser(null);
+        setIsLoaded(true);
+        return;
+      }
       setSession(next);
       setRawUser(next?.user ?? null);
       setIsLoaded(true);
@@ -252,7 +285,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const getToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
-    return data.session?.access_token ?? null;
+    const token = data.session?.access_token ?? null;
+    if (!isPlausibleAccessToken(token)) {
+      if (token) {
+        // eslint-disable-next-line no-console
+        console.warn("[auth] Rejecting oversized/invalid access_token", token.length);
+        await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+        await purgeCorruptAuthStorage();
+      }
+      return null;
+    }
+    return token;
+  }, []);
+
+  const signOut = useCallback(async () => {
+    const { error } = await supabase.auth.signOut();
+    await purgeCorruptAuthStorage();
+    if (error) throw error;
   }, []);
 
   const signInWithPassword = useCallback(async (email: string, password: string) => {
@@ -314,11 +363,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       if (setError) throw setError;
     }
-  }, []);
-
-  const signOut = useCallback(async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
   }, []);
 
   const requestPasswordReset = useCallback(async (email: string) => {
