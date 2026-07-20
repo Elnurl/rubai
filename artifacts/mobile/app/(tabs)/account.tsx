@@ -239,6 +239,21 @@ export default function AccountScreen() {
         {syncMessage ? (
           <Pressable
             onPress={() => {
+              if (tokenCorrupt) {
+                Alert.alert(
+                  "Fix cloud login",
+                  "Saved login token is corrupted (~480KB). Sign out, then sign in again.",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Sign out now",
+                      style: "destructive",
+                      onPress: () => void signOut(),
+                    },
+                  ],
+                );
+                return;
+              }
               if (syncStatus === "error") {
                 void testCloudConnection();
               } else {
