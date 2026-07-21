@@ -221,6 +221,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [rawUser, setRawUser] = useState<SupabaseUser | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  /** Bumps when a valid session lands so deferred corrupt-token purges don't wipe a fresh login. */
+  const authEpochRef = React.useRef(0);
 
   const refreshUser = useCallback(async () => {
     const { data, error } = await supabase.auth.getUser();
@@ -234,44 +236,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setRawUser(data.user);
   }, []);
 
+  const dropCorruptSession = useCallback((reason: string, tokenLen: number) => {
+    // Never call supabase.auth.signOut inside onAuthStateChange — it deadlocks
+    // the auth mutex and makes the next sign-in hang with no error.
+    authEpochRef.current += 1;
+    const epoch = authEpochRef.current;
+    // eslint-disable-next-line no-console
+    console.warn(`[auth] ${reason} length=`, tokenLen, "— scheduling storage purge");
+    setSession(null);
+    setRawUser(null);
+    setIsLoaded(true);
+    setTimeout(() => {
+      if (epoch !== authEpochRef.current) return;
+      void purgeCorruptAuthStorage().catch(() => {});
+    }, 0);
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     void (async () => {
-      await clearLegacySecureAuthKeys();
-      const { data } = await supabase.auth.getSession();
-      if (!mounted) return;
-      const token = data.session?.access_token ?? null;
-      if (data.session && !isPlausibleAccessToken(token)) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          "[auth] Corrupt access_token length=",
-          token?.length ?? 0,
-          "— purging auth storage",
-        );
-        await supabase.auth.signOut({ scope: "local" }).catch(() => {});
-        await purgeCorruptAuthStorage();
+      try {
+        await clearLegacySecureAuthKeys();
+      } catch {
+        // ignore
+      }
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!mounted) return;
+        const token = data.session?.access_token ?? null;
+        if (data.session && !isPlausibleAccessToken(token)) {
+          dropCorruptSession(
+            "Corrupt access_token on boot",
+            token?.length ?? 0,
+          );
+          return;
+        }
+        if (data.session) authEpochRef.current += 1;
+        setSession(data.session);
+        setRawUser(data.session?.user ?? null);
+      } catch (err) {
+        if (__DEV__) {
+          // eslint-disable-next-line no-console
+          console.warn("[auth] getSession failed", err);
+        }
+        if (!mounted) return;
         setSession(null);
         setRawUser(null);
-        setIsLoaded(true);
-        return;
+      } finally {
+        if (mounted) setIsLoaded(true);
       }
-      setSession(data.session);
-      setRawUser(data.session?.user ?? null);
-      setIsLoaded(true);
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
       const token = next?.access_token ?? null;
       if (next && !isPlausibleAccessToken(token)) {
-        void (async () => {
-          await supabase.auth.signOut({ scope: "local" }).catch(() => {});
-          await purgeCorruptAuthStorage();
-        })();
-        setSession(null);
-        setRawUser(null);
-        setIsLoaded(true);
+        dropCorruptSession(
+          "Corrupt access_token from auth event",
+          token?.length ?? 0,
+        );
         return;
       }
+      if (next) authEpochRef.current += 1;
       setSession(next);
       setRawUser(next?.user ?? null);
       setIsLoaded(true);
@@ -281,32 +306,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [dropCorruptSession]);
 
   const getToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token ?? null;
     if (!isPlausibleAccessToken(token)) {
       if (token) {
-        // eslint-disable-next-line no-console
-        console.warn("[auth] Rejecting oversized/invalid access_token", token.length);
-        await supabase.auth.signOut({ scope: "local" }).catch(() => {});
-        await purgeCorruptAuthStorage();
+        dropCorruptSession("Rejecting oversized/invalid access_token", token.length);
       }
       return null;
     }
     return token;
-  }, []);
+  }, [dropCorruptSession]);
 
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
     await purgeCorruptAuthStorage();
+    setSession(null);
+    setRawUser(null);
     if (error) throw error;
   }, []);
 
   const signInWithPassword = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
     if (error) throw error;
+    const token = data.session?.access_token ?? null;
+    if (!data.session || !isPlausibleAccessToken(token)) {
+      await purgeCorruptAuthStorage().catch(() => {});
+      throw new Error(
+        "Sign-in succeeded but the session token looks invalid. Try again.",
+      );
+    }
+    authEpochRef.current += 1;
+    setSession(data.session);
+    setRawUser(data.session.user);
+    setIsLoaded(true);
   }, []);
 
   const signUpWithPassword = useCallback(async (email: string, password: string) => {

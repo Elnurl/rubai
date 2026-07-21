@@ -25,6 +25,31 @@ const AuthStorageAdapter = {
   removeItem: (key: string) => AsyncStorage.removeItem(key),
 };
 
+/** Delete legacy SecureStore auth keys left by the old hybrid adapter. */
+export async function clearLegacySecureAuthKeys(): Promise<void> {
+  if (Platform.OS === "web") return;
+  const keys = new Set<string>(["atlas:bg:session_token"]);
+  try {
+    const host = new URL(
+      supabaseUrl || "https://placeholder.supabase.co",
+    ).hostname;
+    const ref = host.split(".")[0];
+    if (ref && ref !== "placeholder") {
+      keys.add(`sb-${ref}-auth-token`);
+      keys.add(`sb-${ref}-auth-token-code-verifier`);
+    }
+  } catch {
+    // ignore bad URL
+  }
+  for (const key of keys) {
+    try {
+      await SecureStore.deleteItemAsync(key);
+    } catch {
+      // ignore missing keys
+    }
+  }
+}
+
 /**
  * Wipe every Supabase auth key from AsyncStorage + SecureStore.
  * Needed when a corrupt ~hundreds-of-KB "access_token" is stuck on device.
@@ -46,11 +71,6 @@ export async function purgeCorruptAuthStorage(): Promise<void> {
     // ignore
   }
   await clearLegacySecureAuthKeys();
-  try {
-    await SecureStore.deleteItemAsync("atlas:bg:session_token");
-  } catch {
-    // ignore
-  }
 }
 
 /** A real JWT is 3 base64 segments and small enough for HTTP headers. */
