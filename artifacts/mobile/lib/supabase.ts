@@ -73,12 +73,62 @@ export async function purgeCorruptAuthStorage(): Promise<void> {
   await clearLegacySecureAuthKeys();
 }
 
-/** A real JWT is 3 base64 segments and small enough for HTTP headers. */
-export function isPlausibleAccessToken(token: string | null | undefined): boolean {
-  if (!token || typeof token !== "string") return false;
-  if (token.length < 40 || token.length > 8_000) return false;
-  const parts = token.split(".");
-  return parts.length === 3 && parts.every((p) => p.length > 0);
+/**
+ * Corrupt blob threshold — the SecureStore hybrid bug produced ~480KB
+ * "access_token" values. Real JWTs never approach this size.
+ */
+export const CORRUPT_TOKEN_CHARS = 50_000;
+
+/**
+ * Max size we will put in an Authorization header (Railway/Node ~16KB
+ * default header limit; leave room for other headers).
+ */
+export const MAX_USABLE_TOKEN_CHARS = 16_000;
+
+export type AuthTokenDescription = {
+  length: number;
+  parts: number;
+  corrupt: boolean;
+  usable: boolean;
+};
+
+export function describeAuthToken(
+  token: string | null | undefined,
+): AuthTokenDescription {
+  if (!token || typeof token !== "string") {
+    return { length: 0, parts: 0, corrupt: false, usable: false };
+  }
+  const segments = token.split(".");
+  const parts = segments.filter((p) => p.length > 0).length;
+  const corrupt = token.length > CORRUPT_TOKEN_CHARS;
+  // Regression expectations:
+  // - length 480844 → corrupt, not usable
+  // - typical JWT ~800–2000, 3 segments → usable
+  // - ~10k JWT, 3 segments → usable (custom-fetch caps Authorization at 16k)
+  const usable =
+    !corrupt &&
+    token.length >= 40 &&
+    token.length <= MAX_USABLE_TOKEN_CHARS &&
+    segments.length === 3 &&
+    segments.every((p) => p.length > 0);
+  return { length: token.length, parts, corrupt, usable };
+}
+
+/** True only for the hundreds-of-KB storage corruption case. */
+export function isCorruptAccessToken(
+  token: string | null | undefined,
+): boolean {
+  return describeAuthToken(token).corrupt;
+}
+
+/**
+ * True when the token is safe to send as Bearer on our API
+ * (JWT shape + within header size budget).
+ */
+export function isPlausibleAccessToken(
+  token: string | null | undefined,
+): boolean {
+  return describeAuthToken(token).usable;
 }
 
 if (__DEV__ && (!supabaseUrl || !supabaseAnonKey)) {

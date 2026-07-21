@@ -396,8 +396,10 @@ export async function customFetch<T = unknown>(
   if (_authTokenGetter && !headers.has("authorization")) {
     const token = await _authTokenGetter();
     if (token) {
-      // Guard against accidentally stuffing a huge blob into Authorization.
-      if (token.length > 8_000) {
+      // Guard against stuffing a corrupt storage blob into Authorization.
+      // Real JWTs are << 16KB; the old SecureStore hybrid bug produced ~480KB.
+      const MAX_AUTH_HEADER_TOKEN = 16_000;
+      if (token.length > MAX_AUTH_HEADER_TOKEN) {
         throw new TypeError(
           `Auth token too large (${token.length} chars) — sign out and sign in again.`,
         );

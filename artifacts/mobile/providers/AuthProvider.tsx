@@ -12,6 +12,8 @@ import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
 
 import {
   clearLegacySecureAuthKeys,
+  describeAuthToken,
+  isCorruptAccessToken,
   isPlausibleAccessToken,
   purgeCorruptAuthStorage,
   supabase,
@@ -264,7 +266,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data } = await supabase.auth.getSession();
         if (!mounted) return;
         const token = data.session?.access_token ?? null;
-        if (data.session && !isPlausibleAccessToken(token)) {
+        // Only purge the ~480KB storage-corruption case — never a normal JWT.
+        if (data.session && isCorruptAccessToken(token)) {
           dropCorruptSession(
             "Corrupt access_token on boot",
             token?.length ?? 0,
@@ -289,7 +292,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
       const token = next?.access_token ?? null;
-      if (next && !isPlausibleAccessToken(token)) {
+      if (next && isCorruptAccessToken(token)) {
         dropCorruptSession(
           "Corrupt access_token from auth event",
           token?.length ?? 0,
@@ -311,10 +314,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const getToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token ?? null;
+    if (!token) return null;
+    if (isCorruptAccessToken(token)) {
+      dropCorruptSession("Rejecting corrupt access_token", token.length);
+      return null;
+    }
+    // Usable for HTTP Authorization; oversized-but-not-corrupt stays local-only.
     if (!isPlausibleAccessToken(token)) {
-      if (token) {
-        dropCorruptSession("Rejecting oversized/invalid access_token", token.length);
-      }
+      const info = describeAuthToken(token);
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[auth] Token not usable for API headers",
+        `length=${info.length} parts=${info.parts}`,
+      );
       return null;
     }
     return token;
@@ -334,13 +346,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password,
     });
     if (error) throw error;
-    const token = data.session?.access_token ?? null;
-    if (!data.session || !isPlausibleAccessToken(token)) {
-      await purgeCorruptAuthStorage().catch(() => {});
+    if (!data.session) {
       throw new Error(
-        "Sign-in succeeded but the session token looks invalid. Try again.",
+        "No session returned after sign-in. Confirm your email, then try again.",
       );
     }
+    const token = data.session.access_token ?? null;
+    const info = describeAuthToken(token);
+    if (info.corrupt) {
+      await purgeCorruptAuthStorage().catch(() => {});
+      throw new Error(
+        `Sign-in returned a corrupt token (length=${info.length}, parts=${info.parts}). Try again.`,
+      );
+    }
+    // Accept the Supabase session. Do not purge on strict JWT/shape mismatch —
+    // that previously blocked valid logins after a successful password grant.
     authEpochRef.current += 1;
     setSession(data.session);
     setRawUser(data.session.user);
