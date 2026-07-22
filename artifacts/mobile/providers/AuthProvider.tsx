@@ -16,6 +16,7 @@ import {
   isCorruptAccessToken,
   isPlausibleAccessToken,
   purgeCorruptAuthStorage,
+  sanitizeOversizedAuthStorage,
   supabase,
 } from "@/lib/supabase";
 
@@ -257,7 +258,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
     void (async () => {
+      // Orphan old corrupt blobs + wipe any oversized auth values before
+      // Supabase reads a session. storageKey is rubai-auth-v3; this also
+      // cleans leftover sb-*-auth-token keys from earlier builds.
       try {
+        await sanitizeOversizedAuthStorage();
         await clearLegacySecureAuthKeys();
       } catch {
         // ignore
@@ -319,9 +324,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       dropCorruptSession("Rejecting corrupt access_token", token.length);
       return null;
     }
-    // Usable for HTTP Authorization; oversized-but-not-corrupt stays local-only.
+    // Prefer JWT-shaped tokens for API headers; if shape check fails but
+    // size is fine, still return it — do not sign the user out.
     if (!isPlausibleAccessToken(token)) {
       const info = describeAuthToken(token);
+      if (info.length > 0 && info.length <= 16_000) {
+        return token;
+      }
       // eslint-disable-next-line no-console
       console.warn(
         "[auth] Token not usable for API headers",

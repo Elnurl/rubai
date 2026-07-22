@@ -3,7 +3,7 @@
     "name": "rubai",
     "slug": "rubai",
     "owner": "elnur11",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mobile",
@@ -89,6 +89,7 @@
     "android": {
       "icon": "./assets/images/icon.png",
       "package": "com.rubai.mobile",
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#15140F"

@@ -12,6 +12,13 @@ const supabaseAnonKey =
   "";
 
 /**
+ * Bump this whenever auth storage format / corruption recovery changes.
+ * Orphans the old default `sb-<ref>-auth-token` key so a stuck ~480KB blob
+ * can never be read again — even if the user doesn't uninstall the app.
+ */
+export const AUTH_STORAGE_KEY = "rubai-auth-v3";
+
+/**
  * Auth sessions must live in AsyncStorage only.
  *
  * The previous SecureStore→AsyncStorage hybrid corrupted sessions: when a
@@ -51,7 +58,7 @@ export async function clearLegacySecureAuthKeys(): Promise<void> {
 }
 
 /**
- * Wipe every Supabase auth key from AsyncStorage + SecureStore.
+ * Wipe every Supabase / legacy auth key from AsyncStorage + SecureStore.
  * Needed when a corrupt ~hundreds-of-KB "access_token" is stuck on device.
  */
 export async function purgeCorruptAuthStorage(): Promise<void> {
@@ -59,13 +66,61 @@ export async function purgeCorruptAuthStorage(): Promise<void> {
     const keys = await AsyncStorage.getAllKeys();
     const authKeys = keys.filter(
       (k) =>
+        k === AUTH_STORAGE_KEY ||
         k.includes("supabase") ||
         k.includes("auth-token") ||
         k.startsWith("sb-") ||
-        k.includes("@supabase"),
+        k.includes("@supabase") ||
+        k.startsWith("rubai-auth"),
     );
     if (authKeys.length > 0) {
       await AsyncStorage.multiRemove(authKeys);
+    }
+  } catch {
+    // ignore
+  }
+  await clearLegacySecureAuthKeys();
+}
+
+/**
+ * Delete any auth-related AsyncStorage values that are absurdly large
+ * (the ~480KB corruption case) without wiping a healthy small session.
+ */
+export async function sanitizeOversizedAuthStorage(): Promise<void> {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const candidates = keys.filter(
+      (k) =>
+        k === AUTH_STORAGE_KEY ||
+        k.includes("supabase") ||
+        k.includes("auth-token") ||
+        k.startsWith("sb-") ||
+        k.includes("@supabase") ||
+        k.startsWith("rubai-auth"),
+    );
+    if (candidates.length === 0) return;
+    const pairs = await AsyncStorage.multiGet(candidates);
+    const doomed: string[] = [];
+    for (const [key, value] of pairs) {
+      if (value && value.length > CORRUPT_TOKEN_CHARS) {
+        doomed.push(key);
+        continue;
+      }
+      if (!value || value.length < 40) continue;
+      try {
+        const parsed = JSON.parse(value) as { access_token?: unknown };
+        if (
+          typeof parsed?.access_token === "string" &&
+          parsed.access_token.length > CORRUPT_TOKEN_CHARS
+        ) {
+          doomed.push(key);
+        }
+      } catch {
+        // not JSON — ignore
+      }
+    }
+    if (doomed.length > 0) {
+      await AsyncStorage.multiRemove(doomed);
     }
   } catch {
     // ignore
@@ -144,6 +199,7 @@ export const supabase = createClient(
   {
     auth: {
       storage: AuthStorageAdapter,
+      storageKey: AUTH_STORAGE_KEY,
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
